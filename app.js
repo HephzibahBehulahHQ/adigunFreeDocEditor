@@ -1145,7 +1145,7 @@
     const unsupported = new Set();
     const exportableFontFamilies = new Set(["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"]);
     const exportableTextColors = new Set(["#000000", "#404040", "#C00000", "#ED7D31", "#FFC000", "#548235", "#4472C4", "#7030A0", "#00B0F0", "#FFFFFF"]);
-    const exportableHighlightColors = new Map([["#FFFF00", "yellow"], ["#00FF00", "brightGreen"], ["#00FFFF", "cyan"], ["#FF00FF", "magenta"], ["#0000FF", "blue"], ["#FF0000", "red"], ["#000080", "darkBlue"], ["#008080", "darkCyan"], ["#008000", "darkGreen"], ["#800080", "darkMagenta"], ["#800000", "darkRed"], ["#808000", "darkYellow"], ["#808080", "darkGray"], ["#C0C0C0", "lightGray"], ["#000000", "black"], ["#FFFFFF", "white"]]);
+    const exportableHighlightColors = new Map([["#FFFF00", "yellow"], ["#00FF00", "green"], ["#00FFFF", "cyan"], ["#FF00FF", "magenta"], ["#0000FF", "blue"], ["#FF0000", "red"], ["#000080", "darkBlue"], ["#008080", "darkCyan"], ["#008000", "darkGreen"], ["#800080", "darkMagenta"], ["#800000", "darkRed"], ["#808000", "darkYellow"], ["#808080", "darkGray"], ["#C0C0C0", "lightGray"], ["#000000", "black"], ["#FFFFFF", "white"]]);
     function normalizeExportColor(value, palette) {
       const source = String(value || "").trim();
       const match = source.match(/^#?([\\da-f]{6})$/i);
