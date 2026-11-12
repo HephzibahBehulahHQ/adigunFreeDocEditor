@@ -1568,6 +1568,7 @@
       const layouts = [];
       let activeVertical = [];
       let columnCount = 0;
+      let invalidWidth = false;
 
       rows.forEach((row, rowIndex) => {
         const occupied = new Set();
@@ -1591,7 +1592,7 @@
             if (conflictOffset < 0) break;
             start += conflictOffset;
           }
-          if (start + span > 50) { unsupported.add("tables over 50 columns"); return; }
+          if (start + span > 50) { unsupported.add("tables over 50 columns"); invalidWidth = true; return; }
           for (let column = start; column < start + span; column++) occupied.add(column);
 
           const requestedRowSpan = Math.max(1, Math.min(50, cell.rowSpan || 1));
@@ -1606,6 +1607,7 @@
         layouts.push({ row, placements });
       });
 
+      if (invalidWidth) return "";
       if (!columnCount || columnCount > 50 || rows.length > 1000) {
         unsupported.add("tables over 1,000 rows or 50 columns");
         return "";
