@@ -22,6 +22,8 @@
   let tableInsertionRange;
   let imageInsertionRange;
   let autosave = localStorage.getItem("adigun-autosave") !== "false";
+  let theme = localStorage.getItem("adigun-theme") === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = theme;
 
   const toolsets = {
     home: [
@@ -68,6 +70,16 @@
     saveState.lastChild.textContent = label;
     saveState.querySelector(".save-dot").style.background = saving ? "#d4af37" : "#38b778";
   }
+
+  function setTheme(value) {
+    theme = value === "dark" ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("adigun-theme", theme);
+    const themeColor = $("meta[name=theme-color]");
+    if (themeColor) themeColor.content = theme === "dark" ? "#0e1623" : "#0b1220";
+  }
+
+  setTheme(theme);
 
   function title() {
     return titleInput.value.trim() || "Untitled document";
@@ -895,7 +907,7 @@
     const button = event.target.closest("[data-view]"); if (!button) return;
     setMobileMenu(false);
     document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item === button));
-    if (button.dataset.view === "settings") { $("#autosave-toggle").checked = autosave; $("#settings-dialog").showModal(); }
+    if (button.dataset.view === "settings") { $("#autosave-toggle").checked = autosave; $("#theme-toggle").checked = theme === "dark"; $("#settings-dialog").showModal(); }
     else showDocumentList(button.dataset.view);
   });
   editor.addEventListener("click", (event) => {
@@ -950,6 +962,7 @@
   });
   $("#cancel-table").addEventListener("click", () => $("#table-dialog").close());
   $("#autosave-toggle").addEventListener("change", (event) => { autosave = event.target.checked; localStorage.setItem("adigun-autosave", String(autosave)); if (autosave) saveDocument(); else setSaveStatus("Autosave off"); });
+  $("#theme-toggle").addEventListener("change", (event) => setTheme(event.target.checked ? "dark" : "light"));
   document.addEventListener("keydown", (event) => {
     const mod = event.ctrlKey || event.metaKey;
     if (mod && event.key.toLowerCase() === "s") { event.preventDefault(); saveDocument(true); notify("Saved in this browser."); }
