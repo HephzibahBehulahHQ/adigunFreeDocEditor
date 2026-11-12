@@ -50,10 +50,17 @@
   })();
   document.documentElement.dataset.theme = theme;
 
+  const supportedFontFamilies = ["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"];
+
+  function supportedFontFamily(value) {
+    const name = String(value || "").split(",")[0].trim().replace(/^["\']|["\']$/g, "");
+    return supportedFontFamilies.find((family) => family.toLowerCase() === name.toLowerCase()) || "";
+  }
+
   const toolsets = {
     home: [
       [{ label: "Undo", action: "undo", icon: "↶" }, { label: "Redo", action: "redo", icon: "↷" }],
-      [{ label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Title"], ["h2", "Heading 1"], ["h3", "Heading 2"]] }, { label: "Font size", select: "size", options: [["3", "11"], ["4", "14"], ["5", "18"], ["6", "24"]] }],
+      [{ label: "Font family", select: "font", options: [["", "Font"], ...supportedFontFamilies.map((family) => [family, family])] }, { label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Title"], ["h2", "Heading 1"], ["h3", "Heading 2"]] }, { label: "Font size", select: "size", options: [["3", "11"], ["4", "14"], ["5", "18"], ["6", "24"]] }],
       [{ label: "Bold", action: "bold", icon: "B", pressed: true }, { label: "Italic", action: "italic", icon: "I", pressed: true }, { label: "Underline", action: "underline", icon: "U", pressed: true }, { label: "Strikethrough", action: "strikeThrough", icon: "S̶ Strike", pressed: true }, { label: "Clear character formatting", action: "removeFormat", icon: "T× Clear" }],
       [{ label: "Bulleted list", action: "insertUnorderedList", icon: "• List", pressed: true }, { label: "Numbered list", action: "insertOrderedList", icon: "1. List", pressed: true }],
       [{ label: "Align left", action: "justifyLeft", icon: "☰", pressed: true }, { label: "Center", action: "justifyCenter", icon: "≡", pressed: true }, { label: "Align right", action: "justifyRight", icon: "☷", pressed: true }, { label: "Justify", action: "justifyFull", icon: "▤", pressed: true }],
@@ -931,6 +938,7 @@
           if (tool.select === "paper") control.value = paperSize;
           if (tool.select === "margins") control.value = pageMargins;
           control.addEventListener("change", () => {
+            if (tool.select === "font" && control.value) runCommand("fontName", control.value);
             if (tool.select === "block") runCommand("formatBlock", `<${control.value}>`);
             if (tool.select === "size") runCommand("fontSize", control.value);
             if (tool.select === "paper") setPaper(control.value);
@@ -963,6 +971,10 @@
       const tag = block?.tagName.toLowerCase();
       blockSelect.value = ["h1", "h2", "h3"].includes(tag) ? tag : "p";
     }
+    const familySelect = ribbon.querySelector("[data-tool=font]");
+    const fontNode = focusElement?.closest("span[data-font-family],font[face]");
+    const fontFamily = supportedFontFamily(fontNode?.getAttribute("data-font-family") || fontNode?.getAttribute("face") || document.queryCommandValue("fontName"));
+    if (familySelect) familySelect.value = fontFamily;
     const fontSelect = ribbon.querySelector("[data-tool=size]");
     const fontSize = document.queryCommandValue("fontSize");
     if (fontSelect && [...fontSelect.options].some((option) => option.value === fontSize)) fontSelect.value = fontSize;
@@ -1103,6 +1115,7 @@
     const imageIds = new Map();
     const images = [];
     const unsupported = new Set();
+    const exportableFontFamilies = new Set(["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"]);
     let nextRelationship = 3;
     let nextDrawing = 1;
 
@@ -1111,7 +1124,8 @@
         const text = node.nodeValue.replace(/\s+/g, " ");
         if (!text) return "";
         const preserve = /^\s|\s$/.test(node.nodeValue) ? ' xml:space="preserve"' : "";
-        const properties = [marks.bold && "<w:b/>", marks.italic && "<w:i/>", marks.underline && '<w:u w:val="single"/>', marks.strike && "<w:strike/>"].filter(Boolean).join("");
+        const fontFamily = marks.fontFamily;
+        const properties = [fontFamily && `<w:rFonts w:ascii="${wordXmlText(fontFamily)}" w:hAnsi="${wordXmlText(fontFamily)}"/>`, marks.bold && "<w:b/>", marks.italic && "<w:i/>", marks.underline && '<w:u w:val="single"/>', marks.strike && "<w:strike/>"].filter(Boolean).join("");
         return `<w:r>${properties ? `<w:rPr>${properties}</w:rPr>` : ""}<w:t${preserve}>${wordXmlText(text)}</w:t></w:r>`;
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return "";
@@ -1167,6 +1181,9 @@
       if (["i", "em"].includes(tag)) next.italic = true;
       if (tag === "u") next.underline = true;
       if (["s", "strike", "del"].includes(tag)) next.strike = true;
+      const requestedFont = String(node.getAttribute("data-font-family") || node.getAttribute("face") || node.style?.fontFamily || "").split(",")[0].trim().replace(/^["\']|["\']$/g, "");
+      const fontFamily = [...exportableFontFamilies].find((family) => family.toLowerCase() === requestedFont.toLowerCase());
+      if (fontFamily) next.fontFamily = fontFamily;
       const children = [...node.childNodes].map((child) => serializeInline(child, next)).join("");
       if (tag === "a") {
         const href = node.getAttribute("href") || "";

@@ -3,10 +3,16 @@
   const version = 1;
   const allowedTags = new Set([
     "p", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "em", "i", "u", "s", "strike", "del",
-    "ul", "ol", "li", "a", "br", "hr", "blockquote", "pre", "code", "table", "thead", "tbody",
+    "ul", "ol", "li", "span", "a", "br", "hr", "blockquote", "pre", "code", "table", "thead", "tbody",
     "tfoot", "tr", "th", "td", "img",
   ]);
   const voidTags = new Set(["br", "hr", "img"]);
+  const fontFamilies = new Set(["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"]);
+
+  function supportedFontFamily(value) {
+    const name = String(value || "").split(",")[0].trim().replace(/^["\']|["\']$/g, "");
+    return [...fontFamilies].find((family) => family.toLowerCase() === name.toLowerCase()) || "";
+  }
   const imageSource = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/]+={0,2}$/i;
 
   function escapeHtml(value) {
@@ -28,6 +34,10 @@
         const value = Number(attributes[dimension]);
         if (Number.isInteger(value) && value > 0 && value <= 4096) result[dimension] = value;
       }
+    }
+    if (tag === "span") {
+      const fontFamily = supportedFontFamily(attributes["data-font-family"]);
+      if (fontFamily) result["data-font-family"] = fontFamily;
     }
     if (["th", "td"].includes(tag)) {
       for (const dimension of ["colspan", "rowspan"]) {
@@ -70,11 +80,16 @@
   function copyDomNode(node) {
     if (node.nodeType === Node.TEXT_NODE) return { type: "text", text: node.nodeValue };
     if (node.nodeType !== Node.ELEMENT_NODE) return null;
-    const tag = node.tagName.toLowerCase();
+    const sourceTag = node.tagName.toLowerCase();
+    const tag = sourceTag === "font" ? "span" : sourceTag;
     const attrs = {};
-    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break"]) {
+    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-font-family"]) {
       const value = node.getAttribute(name);
       if (value !== null) attrs[name] = value;
+    }
+    if (tag === "span") {
+      const family = supportedFontFamily(sourceTag === "font" ? node.getAttribute("face") : node.getAttribute("data-font-family") || node.style?.fontFamily);
+      if (family) attrs["data-font-family"] = family;
     }
     if (["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "th", "td"].includes(tag)) attrs.align = node.style?.textAlign || "";
     if (!allowedTags.has(tag)) return [...node.childNodes].map(copyDomNode).filter(Boolean);
@@ -95,6 +110,7 @@
     if (input.type === "text") return escapeHtml(input.text);
     const attributes = { ...input.attrs };
     if (attributes.align) { attributes.style = `text-align:${attributes.align}`; delete attributes.align; }
+    if (input.tag === "span" && attributes["data-font-family"]) attributes.style = `font-family:${attributes["data-font-family"]}`;
     const serializedAttributes = Object.entries(attributes).map(([name, value]) => ` ${name}="${escapeHtml(value)}"`).join("");
     if (voidTags.has(input.tag)) return `<${input.tag}${serializedAttributes}>`;
     return `<${input.tag}${serializedAttributes}>${input.children.map(renderNode).join("")}</${input.tag}>`;
