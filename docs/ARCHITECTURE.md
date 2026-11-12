@@ -15,7 +15,7 @@ The repository initially contained the product specification, mockup, custom-dom
 - Review comments are local document sidecar metadata with text quotes and surrounding context for re-anchoring; they are not exported as DOCX comments. Tracked insertions, deletions and revision history remain unsupported.
 - Inserted PNG, JPEG and GIF images are verified by file signature, limited to 8 MB and stored as embedded data URLs in the local editable document.
 
-The schema-backed model now governs persistence and exports. Interactive editing still uses the browser's `contenteditable` surface; replacing it with a transaction-based document engine remains Phase 2 work. The editor canvas scrolls continuously and does not calculate printed page breaks.
+The schema-backed model now governs persistence and exports. Interactive editing still uses the browser's `contenteditable` surface; replacing it with a transaction-based document engine remains Phase 2 work. The editor canvas scrolls continuously and does not calculate printed page breaks. Page size, orientation and margin presets are stored per document and applied to the editor canvas and DOCX section properties; this is not paginated print preview.
 
 The editor currently supports a bounded set of browser editing commands. This is not a DOCX document model or an OOXML parser. Before DOCX compatibility, complex revisions, or conversion work, replace or wrap the editing surface with a structured document engine and verify round-trip behavior against representative files.
 
