@@ -1295,8 +1295,8 @@
       else if (["h4", "h5", "h6"].includes(tag)) { paragraphProperties.push('<w:pStyle w:val="Heading3"/>'); unsupported.add("heading levels 4–6"); }
       const align = ["left", "center", "right", "justify"].includes(element.style.textAlign) ? element.style.textAlign : "";
       if (align) paragraphProperties.push('<w:jc w:val="' + align + '"/>');
-      const lineSpacing = { "1": 240, "1.15": 276, "1.5": 360, "2": 480 }[element.getAttribute("data-line-spacing") || ""];
-      const paragraphSpacing = { "0": 0, "6": 120, "12": 240 }[element.getAttribute("data-paragraph-spacing") || ""];
+      const lineSpacing = { "1": 240, "1.15": 276, "1.5": 360, "2": 480 }[element.getAttribute?.("data-line-spacing") || ""];
+      const paragraphSpacing = { "0": 0, "6": 120, "12": 240 }[element.getAttribute?.("data-paragraph-spacing") || ""];
       const spacing = [];
       if (lineSpacing) spacing.push(`w:line="${lineSpacing}" w:lineRule="auto"`);
       if (paragraphSpacing !== undefined) spacing.push(`w:after="${paragraphSpacing}"`);
