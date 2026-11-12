@@ -7,6 +7,9 @@
     "tfoot", "tr", "th", "td", "img",
   ]);
   const voidTags = new Set(["br", "hr", "img"]);
+  const paragraphTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "th", "td"]);
+  const lineSpacingValues = new Set(["1", "1.15", "1.5", "2"]);
+  const paragraphSpacingValues = new Set(["0", "6", "12"]);
   const fontFamilies = new Set(["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"]);
   const supportedColors = new Set(["#000000", "#404040", "#C00000", "#ED7D31", "#FFC000", "#548235", "#4472C4", "#7030A0", "#00B0F0", "#FFFFFF", "#FFFF00", "#00FF00", "#00FFFF", "#FF00FF", "#0000FF", "#FF0000", "#000080", "#008080", "#008000", "#800080", "#800000", "#808000", "#808080", "#C0C0C0"]);
 
@@ -68,7 +71,11 @@
       const start = Number(attributes.start);
       if (Number.isInteger(start) && start > 1 && start <= 100000) result.start = start;
     }
-    if (["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "th", "td"].includes(tag) && ["left", "center", "right", "justify"].includes(attributes.align)) result.align = attributes.align;
+    if (paragraphTags.has(tag)) {
+      if (lineSpacingValues.has(String(attributes["data-line-spacing"]))) result["data-line-spacing"] = String(attributes["data-line-spacing"]);
+      if (paragraphSpacingValues.has(String(attributes["data-paragraph-spacing"]))) result["data-paragraph-spacing"] = String(attributes["data-paragraph-spacing"]);
+      if (["left", "center", "right", "justify"].includes(attributes.align)) result.align = attributes.align;
+    }
     return result;
   }
 
@@ -101,7 +108,7 @@
     const sourceTag = node.tagName.toLowerCase();
     const tag = sourceTag === "font" ? "span" : sourceTag;
     const attrs = {};
-    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-font-family", "data-text-color", "data-highlight-color"]) {
+    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-font-family", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing"]) {
       const value = node.getAttribute(name);
       if (value !== null) attrs[name] = value;
     }
@@ -113,7 +120,7 @@
       const highlightColor = supportedColor(node.getAttribute("data-highlight-color") || node.style?.backgroundColor || node.style?.background);
       if (highlightColor) attrs["data-highlight-color"] = highlightColor;
     }
-    if (["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "th", "td"].includes(tag)) attrs.align = node.style?.textAlign || "";
+    if (paragraphTags.has(tag)) attrs.align = node.style?.textAlign || "";
     if (!allowedTags.has(tag)) return [...node.childNodes].map(copyDomNode).filter(Boolean);
     const normalized = normalizeNode({ type: "element", tag, attrs, children: [...node.childNodes].map(copyDomNode).flat().filter(Boolean) });
     return normalized;
@@ -133,6 +140,10 @@
     const attributes = { ...input.attrs };
     const styles = [];
     if (attributes.align) { styles.push(`text-align:${attributes.align}`); delete attributes.align; }
+    if (paragraphTags.has(input.tag)) {
+      if (attributes["data-line-spacing"]) styles.push(`line-height:${attributes["data-line-spacing"]}`);
+      if (attributes["data-paragraph-spacing"]) styles.push(`margin-bottom:${attributes["data-paragraph-spacing"]}pt`);
+    }
     if (input.tag === "span") {
       if (attributes["data-font-family"]) styles.push(`font-family:${attributes["data-font-family"]}`);
       if (attributes["data-text-color"]) styles.push(`color:${attributes["data-text-color"]}`);
