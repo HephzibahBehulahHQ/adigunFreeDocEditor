@@ -20,6 +20,8 @@
   let pdfUrl;
   let activePdfFile;
   let pageOrientation = "portrait";
+  let paperSize = "a4";
+  let pageMargins = "normal";
   let tableInsertionRange;
   let imageInsertionRange;
   let reviewComments = [];
@@ -47,7 +49,7 @@
       [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }, { label: "Insert image from this device", action: "image", icon: "▧ Image" }],
     ],
     layout: [
-      [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }],
+      [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }],
     ],
     review: [
       [{ label: "Add comment", action: "add-comment", icon: "▧ Comment" }, { label: "Review comments", action: "show-comments", icon: "☷ Comments" }],
@@ -440,7 +442,7 @@
     const content = documentModel.fromDOM(editor);
     saveTimer = setTimeout(() => {
       const tx = database.transaction("documents", "readwrite");
-      tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, updatedAt: Date.now(), kind: "document" });
+      tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, layout: { paper: paperSize, orientation: pageOrientation, margins: pageMargins }, updatedAt: Date.now(), kind: "document" });
       tx.oncomplete = () => { if (activeId === documentId) { setSaveStatus("Saved"); countWords(); } };
       tx.onerror = () => { if (activeId === documentId) { setSaveStatus("Save failed"); notify("Could not save this document on your device."); } };
     }, 280);
@@ -489,6 +491,7 @@
     if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
     $("#pdf-frame")?.remove();
     activeId = crypto.randomUUID();
+    applyPageLayout();
     reviewComments = [];
     showReviewPanel(false);
     renderReviewComments();
@@ -663,6 +666,7 @@
       const doc = event.target.result;
       if (!doc) return;
       activeId = doc.id;
+      applyPageLayout(doc.layout);
       reviewComments = normalizeReviewComments(doc.reviewComments);
       showReviewPanel(false);
       setTitle(doc.title);
@@ -698,6 +702,7 @@
         $("#pdf-frame")?.remove();
         activePdfFile = undefined;
         activeId = crypto.randomUUID();
+        applyPageLayout();
         reviewComments = [];
         showReviewPanel(false);
         setTitle(file.name.replace(/\.docx$/i, "") || file.name);
@@ -721,6 +726,7 @@
     $("#pdf-frame")?.remove();
     activePdfFile = undefined;
     activeId = crypto.randomUUID();
+    applyPageLayout();
     reviewComments = [];
     showReviewPanel(false);
     setTitle(file.name.replace(/\.[^.]+$/, "") || file.name);
@@ -783,14 +789,17 @@
           for (const [value, label] of tool.options) {
             const option = document.createElement("option"); option.value = value; option.textContent = label; control.append(option);
           }
+          if (tool.select === "paper") control.value = paperSize;
+          if (tool.select === "margins") control.value = pageMargins;
           control.addEventListener("change", () => {
             if (tool.select === "block") runCommand("formatBlock", `<${control.value}>`);
             if (tool.select === "size") runCommand("fontSize", control.value);
             if (tool.select === "paper") setPaper(control.value);
+            if (tool.select === "margins") setPageMargins(control.value);
           });
         } else {
           control = document.createElement("button");
-          control.type = "button"; control.className = "tool-button"; control.dataset.action = tool.action; control.textContent = tool.icon; control.title = tool.label; control.setAttribute("aria-label", tool.label);
+          control.type = "button"; control.className = "tool-button"; control.dataset.action = tool.action; control.textContent = tool.action === "orientation" && pageOrientation === "landscape" ? "▭ Landscape" : tool.icon; control.title = tool.label; control.setAttribute("aria-label", tool.label);
           if (tool.pressed) control.setAttribute("aria-pressed", "false");
           control.addEventListener("click", () => runTool(tool.action, control));
         }
@@ -856,7 +865,7 @@
         imagePicker.click();
         break;
       }
-      case "orientation": pageOrientation = pageOrientation === "portrait" ? "landscape" : "portrait"; $("#editor-card").classList.toggle("landscape", pageOrientation === "landscape"); button.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape"; break;
+      case "orientation": pageOrientation = pageOrientation === "portrait" ? "landscape" : "portrait"; $("#editor-card").classList.toggle("landscape", pageOrientation === "landscape"); button.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape"; saveDocument(); break;
       case "add-comment": openCommentDialog(); break;
       case "show-comments": showReviewPanel(true); break;
       case "spellcheck": editor.spellcheck = !editor.spellcheck; button.setAttribute("aria-pressed", String(editor.spellcheck)); notify(`Browser spellcheck ${editor.spellcheck ? "on" : "off"}.`); break;
@@ -869,8 +878,34 @@
     }
   }
 
+  function applyPageLayout(layout = {}) {
+    paperSize = layout.paper === "letter" ? "letter" : "a4";
+    pageOrientation = layout.orientation === "landscape" ? "landscape" : "portrait";
+    pageMargins = ["narrow", "wide"].includes(layout.margins) ? layout.margins : "normal";
+    const card = $("#editor-card");
+    card.classList.toggle("paper-letter", paperSize === "letter");
+    card.classList.toggle("landscape", pageOrientation === "landscape");
+    card.classList.toggle("margin-narrow", pageMargins === "narrow");
+    card.classList.toggle("margin-wide", pageMargins === "wide");
+    const paperSelect = ribbon.querySelector('[data-tool="paper"]');
+    const marginsSelect = ribbon.querySelector('[data-tool="margins"]');
+    if (paperSelect) paperSelect.value = paperSize;
+    if (marginsSelect) marginsSelect.value = pageMargins;
+    const orientationButton = ribbon.querySelector('[data-action="orientation"]');
+    if (orientationButton) orientationButton.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape";
+  }
+
   function setPaper(size) {
-    $("#editor-card").classList.toggle("paper-letter", size === "letter");
+    paperSize = size === "letter" ? "letter" : "a4";
+    $("#editor-card").classList.toggle("paper-letter", paperSize === "letter");
+    saveDocument();
+  }
+
+  function setPageMargins(value) {
+    pageMargins = ["narrow", "wide"].includes(value) ? value : "normal";
+    $("#editor-card").classList.toggle("margin-narrow", pageMargins === "narrow");
+    $("#editor-card").classList.toggle("margin-wide", pageMargins === "wide");
+    saveDocument();
   }
 
   function wordXmlText(value) {
@@ -967,7 +1002,8 @@
     const landscapePaper = $("#editor-card").classList.contains("landscape");
     let tablePageWidth = letterPaper ? 12240 : 11906;
     if (landscapePaper) tablePageWidth = letterPaper ? 15840 : 16838;
-    const tableContentWidth = tablePageWidth - 2268;
+    const tableMarginTwips = $("#editor-card").classList.contains("margin-narrow") ? 720 : $("#editor-card").classList.contains("margin-wide") ? 2880 : 1440;
+    const tableContentWidth = tablePageWidth - tableMarginTwips * 2;
 
     function addParagraph(element, listKind = "", listLevel = 0, output = body) {
       const tag = element.tagName.toLowerCase();
@@ -1046,7 +1082,9 @@
     let width = isLetter ? 12240 : 11906;
     let height = isLetter ? 15840 : 16838;
     if (landscape) [width, height] = [height, width];
-    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join("")}<w:sectPr><w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+    const verticalMarginTwips = $("#editor-card").classList.contains("margin-narrow") ? 720 : 1440;
+    const horizontalMarginTwips = $("#editor-card").classList.contains("margin-narrow") ? 720 : $("#editor-card").classList.contains("margin-wide") ? 2880 : 1440;
+    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join("")}<w:sectPr><w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="${verticalMarginTwips}" w:right="${horizontalMarginTwips}" w:bottom="${verticalMarginTwips}" w:left="${horizontalMarginTwips}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
     const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style></w:styles>';
     const numberingXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="multilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="multilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>';
     const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>';
