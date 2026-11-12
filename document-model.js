@@ -74,6 +74,8 @@
     if (paragraphTags.has(tag)) {
       const indentLevel = Number(attributes["data-indent-level"]);
       if (Number.isInteger(indentLevel) && indentLevel >= 1 && indentLevel <= 4) result["data-indent-level"] = String(indentLevel);
+      const indentLevel = Number(attributes["data-indent-level"]);
+      if (Number.isInteger(indentLevel) && indentLevel >= 1 && indentLevel <= 4) result["data-indent-level"] = String(indentLevel);
       if (lineSpacingValues.has(String(attributes["data-line-spacing"]))) result["data-line-spacing"] = String(attributes["data-line-spacing"]);
       if (paragraphSpacingValues.has(String(attributes["data-paragraph-spacing"]))) result["data-paragraph-spacing"] = String(attributes["data-paragraph-spacing"]);
       if (["left", "center", "right", "justify"].includes(attributes.align)) result.align = attributes.align;
