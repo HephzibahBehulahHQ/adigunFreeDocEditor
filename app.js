@@ -79,6 +79,7 @@
       [{ label: "Undo", action: "undo", icon: "↶" }, { label: "Redo", action: "redo", icon: "↷" }],
       [{ label: "Font family", select: "font", options: [["", "Font"], ...supportedFontFamilies.map((family) => [family, family])] }, { label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Title"], ["h2", "Heading 1"], ["h3", "Heading 2"]] }, { label: "Font size", select: "size", options: [["3", "11"], ["4", "14"], ["5", "18"], ["6", "24"]] }],
       [{ label: "Text color", select: "text-color", options: [["", "Text color"], ...textColorOptions] }, { label: "Highlight color", select: "highlight-color", options: [["", "Highlight"], ...highlightColorOptions] }],
+      [{ label: "Line spacing", select: "line-spacing", options: [["", "Default"], ["1", "Single"], ["1.15", "1.15"], ["1.5", "1.5"], ["2", "Double"]] }, { label: "Paragraph spacing after", select: "paragraph-spacing", options: [["", "Default"], ["0", "None"], ["6", "Compact"], ["12", "Relaxed"]] }],
       [{ label: "Bold", action: "bold", icon: "B", pressed: true }, { label: "Italic", action: "italic", icon: "I", pressed: true }, { label: "Underline", action: "underline", icon: "U", pressed: true }, { label: "Strikethrough", action: "strikeThrough", icon: "S̶ Strike", pressed: true }, { label: "Clear character formatting", action: "removeFormat", icon: "T× Clear" }],
       [{ label: "Bulleted list", action: "insertUnorderedList", icon: "• List", pressed: true }, { label: "Numbered list", action: "insertOrderedList", icon: "1. List", pressed: true }],
       [{ label: "Align left", action: "justifyLeft", icon: "☰", pressed: true }, { label: "Center", action: "justifyCenter", icon: "≡", pressed: true }, { label: "Align right", action: "justifyRight", icon: "☷", pressed: true }, { label: "Justify", action: "justifyFull", icon: "▤", pressed: true }],
@@ -959,6 +960,8 @@
             if (tool.select === "font" && control.value) runCommand("fontName", control.value);
             if (tool.select === "text-color" && control.value) runCommand("foreColor", control.value);
             if (tool.select === "highlight-color" && control.value) runCommand("hiliteColor", control.value);
+            if (tool.select === "line-spacing") applyParagraphSpacing("line", control.value);
+            if (tool.select === "paragraph-spacing") applyParagraphSpacing("paragraph", control.value);
             if (tool.select === "block") runCommand("formatBlock", `<${control.value}>`);
             if (tool.select === "size") runCommand("fontSize", control.value);
             if (tool.select === "paper") setPaper(control.value);
@@ -985,7 +988,7 @@
     if (!inEditor(focusNode) && !inEditor(anchorNode)) return;
     const contextNode = inEditor(focusNode) ? focusNode : anchorNode;
     const focusElement = contextNode.nodeType === Node.ELEMENT_NODE ? contextNode : contextNode.parentElement;
-    const block = focusElement?.closest("h1,h2,h3,p,li,blockquote,pre");
+    const block = focusElement?.closest("h1,h2,h3,h4,h5,h6,p,li,th,td,blockquote,pre");
     const blockSelect = ribbon.querySelector("[data-tool=block]");
     if (blockSelect) {
       const tag = block?.tagName.toLowerCase();
@@ -1003,6 +1006,10 @@
     const highlightNode = focusElement?.closest("[data-highlight-color],span[style*='background-color']");
     const currentHighlight = supportedColor(highlightNode?.getAttribute("data-highlight-color") || highlightNode?.style?.backgroundColor || document.queryCommandValue("hiliteColor"));
     if (highlightColorSelect) highlightColorSelect.value = currentHighlight;
+    const lineSpacingSelect = ribbon.querySelector("[data-tool=line-spacing]");
+    if (lineSpacingSelect) lineSpacingSelect.value = block?.getAttribute("data-line-spacing") || "";
+    const paragraphSpacingSelect = ribbon.querySelector("[data-tool=paragraph-spacing]");
+    if (paragraphSpacingSelect) paragraphSpacingSelect.value = block?.getAttribute("data-paragraph-spacing") || "";
     const fontSelect = ribbon.querySelector("[data-tool=size]");
     const fontSize = document.queryCommandValue("fontSize");
     if (fontSelect && [...fontSelect.options].some((option) => option.value === fontSize)) fontSelect.value = fontSize;
@@ -1027,6 +1034,38 @@
       const button = ribbon.querySelector('.tool-button[data-action=' + action + ']');
       if (button) button.setAttribute("aria-pressed", String(pressed));
     }
+  }
+
+  function applyParagraphSpacing(kind, value) {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) {
+      notify("Place the cursor in a paragraph or select paragraph text first.");
+      return;
+    }
+    const range = selection.getRangeAt(0).cloneRange();
+    const focusNode = selection.focusNode || selection.anchorNode;
+    const selector = "p,h1,h2,h3,h4,h5,h6,li,th,td";
+    const blocks = [...editor.querySelectorAll(selector)].filter((block) => range.collapsed ? block.contains(focusNode) : range.intersectsNode(block));
+    if (!blocks.length) {
+      notify("Place the cursor in a paragraph or select paragraph text first.");
+      return;
+    }
+    for (const block of blocks) {
+      if (kind === "line") {
+        if (value === "") { block.removeAttribute("data-line-spacing"); block.style.lineHeight = ""; }
+        else { block.setAttribute("data-line-spacing", value); block.style.lineHeight = value; }
+      } else if (value === "") {
+        block.removeAttribute("data-paragraph-spacing"); block.style.marginBottom = "";
+      } else {
+        block.setAttribute("data-paragraph-spacing", value); block.style.marginBottom = `${value}pt`;
+      }
+    }
+    editor.focus();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    updateRibbonSelection();
+    countWords();
+    saveDocument();
   }
 
   function runCommand(command, value) {
@@ -1256,6 +1295,12 @@
       else if (["h4", "h5", "h6"].includes(tag)) { paragraphProperties.push('<w:pStyle w:val="Heading3"/>'); unsupported.add("heading levels 4–6"); }
       const align = ["left", "center", "right", "justify"].includes(element.style.textAlign) ? element.style.textAlign : "";
       if (align) paragraphProperties.push('<w:jc w:val="' + align + '"/>');
+      const lineSpacing = { "1": 240, "1.15": 276, "1.5": 360, "2": 480 }[element.getAttribute("data-line-spacing") || ""];
+      const paragraphSpacing = { "0": 0, "6": 120, "12": 240 }[element.getAttribute("data-paragraph-spacing") || ""];
+      const spacing = [];
+      if (lineSpacing) spacing.push(`w:line="${lineSpacing}" w:lineRule="auto"`);
+      if (paragraphSpacing !== undefined) spacing.push(`w:after="${paragraphSpacing}"`);
+      if (spacing.length) paragraphProperties.push(`<w:spacing ${spacing.join(" ")}/>`);
       if (listKind) paragraphProperties.push('<w:numPr><w:ilvl w:val="' + Math.min(listLevel, 8) + '"/><w:numId w:val="' + (listKind === "ol" ? 2 : 1) + '"/></w:numPr>');
       const marks = tag === "th" || element.closest("th") ? { bold: true } : {};
       const runs = [...element.childNodes].map((node) => serializeInline(node, marks)).join("") || "<w:r><w:t></w:t></w:r>";
