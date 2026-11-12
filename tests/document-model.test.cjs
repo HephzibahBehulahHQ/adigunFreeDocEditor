@@ -19,6 +19,7 @@ const source = element("div", {}, [
   element("p", {}, [element("strong", {}, [text("A <useful> & safe" )])], "center"),
   element("table", {}, [element("tbody", {}, [element("tr", {}, [element("td", { colspan: 2 }, [element("p", {}, [text("Cell")])])])])]),
   element("a", { href: "javascript:alert(1)" }, [text("unsafe link")]),
+  element("hr", { "data-page-break": "true" }),
   element("script", {}, [text("plain text")]),
   element("img", { src: "data:image/png;base64,aGVsbG8=", alt: "Diagram" }),
   element("img", { src: "https://invalid.example/image.png" }),
@@ -29,6 +30,7 @@ assert.equal(model.version, 1);
 const html = modelApi.toHTML(model);
 assert.match(html, /<p style="text-align:center"><strong>A &lt;useful&gt; &amp; safe<\/strong><\/p>/);
 assert.match(html, /colspan="2"/);
+assert.match(html, /<hr data-page-break="true">/);
 assert.match(html, /unsafe link/);
 assert.doesNotMatch(html, /javascript:|<script|https:\/\/invalid\.example/);
 assert.match(html, /<img src="data:image\/png;base64,aGVsbG8=" alt="Diagram">/);
