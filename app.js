@@ -173,13 +173,18 @@
     const flush = () => { if (page.length) pages.push(page); page = []; used = 0; };
     for (const node of nodes) {
       const isBreak = node.nodeType === Node.ELEMENT_NODE && node.matches('hr[data-page-break="true"]');
+      if (isBreak) {
+        if (!page.length) page = [];
+        page.push(node);
+        flush();
+        continue;
+      }
       const rectHeight = node.nodeType === Node.ELEMENT_NODE ? node.getBoundingClientRect().height : 0;
       const nodeStyle = node.nodeType === Node.ELEMENT_NODE ? getComputedStyle(node) : null;
       const blockHeight = rectHeight + (nodeStyle ? parseFloat(nodeStyle.marginTop || 0) + parseFloat(nodeStyle.marginBottom || 0) : 0);
       if (!isBreak && page.length && used + blockHeight > capacity) flush();
       page.push(node);
       used += blockHeight;
-      if (isBreak) flush();
     }
     flush();
     if (!pages.length) pages.push([]);
@@ -988,6 +993,7 @@
     if (orientationButton) orientationButton.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape";
     pageCanvasDimensions = "";
     applyPaperCanvasMinimumHeight();
+    scheduleEditorPagination();
   }
 
   function setPaper(size) {
@@ -995,6 +1001,7 @@
     $("#editor-card").classList.toggle("paper-letter", paperSize === "letter");
     pageCanvasDimensions = "";
     applyPaperCanvasMinimumHeight();
+    scheduleEditorPagination();
     saveDocument();
   }
 
@@ -1002,6 +1009,7 @@
     pageMargins = ["narrow", "wide"].includes(value) ? value : "normal";
     $("#editor-card").classList.toggle("margin-narrow", pageMargins === "narrow");
     $("#editor-card").classList.toggle("margin-wide", pageMargins === "wide");
+    scheduleEditorPagination();
     saveDocument();
   }
 
@@ -1576,6 +1584,7 @@
 
   document.addEventListener("selectionchange", updateRibbonSelection);
   for (const event of ["click", "keyup", "mouseup", "input", "focus"]) editor.addEventListener(event, updateRibbonSelection);
+  window.addEventListener("resize", scheduleEditorPagination, { passive: true });
   renderRibbon(); setupAssistantDrag(); countWords();
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
   openDatabase().then(() => { setSaveStatus("Saved"); showLanding(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
