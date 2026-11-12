@@ -8,6 +8,7 @@
   const assistant = $("#adigun-window");
   const filePicker = $("#file-picker");
   const imagePicker = $("#image-picker");
+  const documentModel = window.AdigunDocumentModel;
   const DB_NAME = "adigunFreeDocEditor";
   let database;
   let activeId = crypto.randomUUID();
@@ -88,9 +89,10 @@
     if (!autosave && !force) { setSaveStatus("Autosave off"); return; }
     if (!database) { setSaveStatus("Local save unavailable"); return; }
     setSaveStatus("Saving…", true);
+    const content = documentModel.fromDOM(editor);
     saveTimer = setTimeout(() => {
       const tx = database.transaction("documents", "readwrite");
-      tx.objectStore("documents").put({ id: activeId, title: title(), content: editor.innerHTML, updatedAt: Date.now(), kind: "document" });
+      tx.objectStore("documents").put({ id: activeId, title: title(), content, contentFormat: documentModel.format, updatedAt: Date.now(), kind: "document" });
       tx.oncomplete = () => { setSaveStatus("Saved"); countWords(); };
       tx.onerror = () => { setSaveStatus("Save failed"); notify("Could not save this document on your device."); };
     }, 280);
@@ -281,7 +283,8 @@
       setWorkspaceMode("document");
       $("#editor-card").classList.remove("landing");
       $("#file-kind").textContent = "Saved on this device";
-      editor.innerHTML = doc.content;
+      const content = typeof doc.content === "string" ? documentModel.fromHTML(doc.content) : documentModel.normalize(doc.content);
+      editor.innerHTML = documentModel.toHTML(content) || "<p><br></p>";
       editor.hidden = false;
       countWords();
       notify("Document opened.");
@@ -455,7 +458,7 @@
     return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
   }
 
-  function makeWordPackage() {
+  function makeWordPackage(source = editor) {
     const relationships = [];
     const hyperlinkIds = new Map();
     const imageIds = new Map();
@@ -616,7 +619,7 @@
         else if (child.textContent.trim()) addParagraph(child, listKind, listLevel, output);
       }
     }
-    walkBlocks(editor);
+    walkBlocks(source);
     if (!body.length) body.push("<w:p><w:r><w:t></w:t></w:r></w:p>");
 
     const isLetter = $("#editor-card").classList.contains("paper-letter");
@@ -664,10 +667,12 @@
 
   async function exportDocx() {
     if (activePdfFile) { notify("Open an editable document before exporting a Word file."); return; }
+    const source = document.createElement("div");
+    source.innerHTML = documentModel.toHTML(documentModel.fromDOM(editor));
     try {
-      for (const image of editor.querySelectorAll("img")) if (typeof image.decode === "function") await image.decode();
+      for (const image of source.querySelectorAll("img")) if (typeof image.decode === "function") await image.decode();
     } catch { notify("Wait for the document images to finish loading, then export again."); return; }
-    const wordPackage = makeWordPackage();
+    const wordPackage = makeWordPackage(source);
     if (wordPackage.unsupported.length && !window.confirm(`This export cannot preserve: ${wordPackage.unsupported.join(", ")}. It will create a reduced Word copy and leave the browser-saved document unchanged. Continue?`)) return;
     download(makeStoredZip(wordPackage.files), `${safeFilename(title())}.docx`);
     notify(wordPackage.unsupported.length ? `Word file saved. Check unsupported content: ${wordPackage.unsupported.join(", ")}.` : "Word document downloaded with supported tables, images and page setup.");
@@ -675,7 +680,7 @@
 
   function exportHTML() {
     if (activePdfFile) { download(activePdfFile, activePdfFile.name); return; }
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHTML(title())}</title></head><body>${editor.innerHTML}</body></html>`;
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHTML(title())}</title></head><body>${documentModel.toHTML(documentModel.fromDOM(editor))}</body></html>`;
     download(new Blob([html], { type: "text/html;charset=utf-8" }), `${safeFilename(title())}.html`);
     notify("HTML document exported.");
   }

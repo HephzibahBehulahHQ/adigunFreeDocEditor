@@ -2,7 +2,7 @@
 
 ## Current behavior
 
-- Editable document content and local settings are stored in this browser's IndexedDB and localStorage.
+- Versioned editable document trees and local settings are stored in this browser's IndexedDB and localStorage. The model allow-lists nodes, links, images, table spans and presentation attributes before persistence or export.
 - Images inserted from the device are signature-checked and embedded in the local document; they are not uploaded. PNG, JPEG and GIF files are limited to 8 MB each.
 - TXT, Markdown and HTML are read in the browser. HTML import is reduced to plain text before display.
 - DOCX export is generated entirely in the browser from the open document; there is no upload or external conversion service.

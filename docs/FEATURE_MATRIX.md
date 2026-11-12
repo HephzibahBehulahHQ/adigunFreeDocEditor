@@ -6,6 +6,7 @@ Status is specific to the current first workspace slice.
 |---|---|---|
 | Responsive workspace shell and entry screen | Implemented | `index.html` and responsive rules in `styles.css`. |
 | Create blank document and basic editing | Implemented | Browser editing surface and Home/Insert/Layout/Review/View controls. |
+| Structured document model | Partial | Versioned allow-listed node tree is now the source for local persistence and exports; the interactive editing surface still uses browser contenteditable. |
 | Insert and edit tables | Partial | Insert up to 50 rows × 20 columns; table cells are editable. No row/column merge tools. |
 | Insert local images | Implemented | PNG, JPEG and GIF up to 8 MB; stored in the browser document. |
 | Autosave and reopen | Implemented | IndexedDB; preference is stored locally; Ctrl+S is available. |
