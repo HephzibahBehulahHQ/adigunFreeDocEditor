@@ -161,7 +161,28 @@
     $("#editor-card").classList.remove("pdf-preview");
     $("#editor-card").classList.add("landing");
     editor.hidden = false;
-    editor.innerHTML = '<section class="landing-page"><span class="landing-kicker">ADIGUNFREEDOCEDITOR</span><h2>Your documents.<br>Your workspace.</h2><p>Create a document or open one of the file types supported in this first workspace.</p><div class="landing-actions"><button class="landing-primary" type="button" id="landing-create">Create blank document</button><button class="landing-secondary" type="button" id="landing-open">Open a file</button></div><div class="landing-details"><div><strong>Work stays here</strong><span>Editable document text is saved in this browser. No account or cloud sync is active.</span></div><div><strong>Supported in this build</strong><span>Import Word structure, edit TXT, Markdown and HTML, or view and download PDF</span></div></div></section>';
+    editor.innerHTML = '<section class="landing-page"><span class="landing-kicker">ADIGUNFREEDOCEDITOR</span><h2>Your documents.<br>Your workspace.</h2><p>Create a document or open one of the file types supported in this first workspace.</p><div class="landing-actions"><button class="landing-primary" type="button" id="landing-create">Create blank document</button><button class="landing-secondary" type="button" id="landing-open">Open a file</button></div><section class="landing-recents" id="landing-recents" aria-labelledby="landing-recents-title"><div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div><button class="landing-all" type="button" id="landing-all">View all</button></div><p class="landing-recents-empty">Loading saved documents…</p></section><div class="landing-details"><div><strong>Work stays here</strong><span>Editable document text is saved in this browser. No account or cloud sync is active.</span></div><div><strong>Supported in this build</strong><span>Import Word structure, edit TXT, Markdown and HTML, or view and download PDF</span></div></div></section>';
+    loadLandingRecentDocuments();
+  }
+
+  async function loadLandingRecentDocuments() {
+    const container = $("#landing-recents");
+    if (!container) return;
+    try {
+      const documents = (await getDocuments()).filter((doc) => !doc.deleted).slice(0, 4);
+      if (!documents.length) {
+        container.innerHTML = '<div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div></div><p class="landing-recents-empty">Your saved documents will appear here. Create a document or open a file to get started.</p>';
+        return;
+      }
+      const rows = documents.map((doc) => {
+        const updated = new Date(doc.updatedAt);
+        const updatedLabel = Number.isNaN(updated.getTime()) ? "Saved on this device" : `Edited ${updated.toLocaleDateString()}`;
+        return `<li><button class="landing-document" type="button" data-open-id="${escapeHTML(doc.id)}"><span class="landing-document-icon" aria-hidden="true">▤</span><span class="landing-document-copy"><strong>${escapeHTML(doc.title || "Untitled document")}</strong><time>${updatedLabel}</time></span><span class="landing-document-open" aria-hidden="true">Open&nbsp;→</span></button></li>`;
+      }).join("");
+      container.innerHTML = `<div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div><button class="landing-all" type="button" id="landing-all">View all</button></div><ul class="landing-document-list">${rows}</ul>`;
+    } catch {
+      container.innerHTML = '<div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div></div><p class="landing-recents-empty">Saved documents could not be loaded in this browser.</p>';
+    }
   }
 
   async function showDocumentList(view) {
@@ -833,6 +854,7 @@
     if (event.target.closest("#empty-create")) createDocument();
     if (event.target.closest("#landing-create")) createDocument();
     if (event.target.closest("#landing-open")) filePicker.click();
+    if (event.target.closest("#landing-all")) document.querySelector('[data-view="recent"]')?.click();
     const trashButton = event.target.closest("[data-trash-id]"); if (trashButton) markDeleted(trashButton.dataset.trashId, true);
     const restoreButton = event.target.closest("[data-restore-id]"); if (restoreButton) markDeleted(restoreButton.dataset.restoreId, false);
   });
@@ -888,6 +910,6 @@
 
   renderRibbon(); setupAssistantDrag(); countWords();
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
-  openDatabase().then(async () => { setSaveStatus("Saved"); if ((await getDocuments()).length) await showDocumentList("recent"); else showLanding(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
+  openDatabase().then(() => { setSaveStatus("Saved"); showLanding(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
 })();
 
