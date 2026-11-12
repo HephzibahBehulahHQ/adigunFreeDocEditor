@@ -22,6 +22,7 @@ const source = element("div", {}, [
   element("span", { "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" }, [text("colored text")]),
   element("span", { "data-text-color": "#ABCDEF", "data-highlight-color": "url(javascript:alert(1))" }, [text("untrusted color")]),
   element("span", { "style-color": "rgb(192, 0, 0)", "style-background-color": "rgb(255, 255, 0)" }, [text("rgb colors")]),
+  element("span", { "style-color": "rgba(192, 0, 0, 0.5)" }, [text("translucent color")]),
   element("span", { "data-font-family": "Arial; color: red" }, [text("untrusted family")]),
   element("font", { face: "Calibri" }, [text("legacy font")]),
   element("a", { href: "javascript:alert(1)" }, [text("unsafe link")]),
@@ -41,6 +42,8 @@ assert.match(html, /<span data-font-family="Georgia" style="font-family:Georgia"
 assert.match(html, /<span data-text-color="#C00000" data-highlight-color="#FFFF00" style="color:#C00000;background-color:#FFFF00">colored text<\/span>/);
 assert.match(html, /<span data-text-color="#C00000" data-highlight-color="#FFFF00" style="color:#C00000;background-color:#FFFF00">rgb colors<\/span>/);
 assert.match(html, /untrusted color/);
+assert.match(html, /translucent color/);
+assert.doesNotMatch(html, /data-text-color="#C00000" style="color:#C00000">translucent color/);
 assert.doesNotMatch(html, /data-text-color="#ABCDEF"|javascript:alert/);
 assert.match(html, /<span data-font-family="Calibri" style="font-family:Calibri">legacy font<\/span>/);
 assert.match(html, /untrusted family/);
