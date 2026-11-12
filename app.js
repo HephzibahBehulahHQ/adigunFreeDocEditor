@@ -481,9 +481,12 @@
 
   function updateRibbonSelection() {
     const selection = window.getSelection();
-    const focusNode = selection?.focusNode;
-    if (!focusNode || (focusNode !== editor && !editor.contains(focusNode))) return;
-    const focusElement = focusNode.nodeType === Node.ELEMENT_NODE ? focusNode : focusNode.parentElement;
+    const focusNode = selection?.focusNode || selection?.anchorNode;
+    const anchorNode = selection?.anchorNode;
+    const inEditor = (node) => node && (node === editor || editor.contains(node));
+    if (!inEditor(focusNode) && !inEditor(anchorNode)) return;
+    const contextNode = inEditor(focusNode) ? focusNode : anchorNode;
+    const focusElement = contextNode.nodeType === Node.ELEMENT_NODE ? contextNode : contextNode.parentElement;
     const block = focusElement?.closest("h1,h2,h3,p,li,blockquote,pre");
     const blockSelect = ribbon.querySelector("[data-tool=block]");
     if (blockSelect) {
@@ -1003,6 +1006,7 @@
   for (const type of ["dragleave", "drop"]) $("#document-stage").addEventListener(type, (event) => { event.preventDefault(); $("#editor-card").classList.remove("drop-active"); if (type === "drop") importFile(event.dataTransfer.files[0]); });
 
   document.addEventListener("selectionchange", updateRibbonSelection);
+  for (const event of ["click", "keyup", "mouseup", "input", "focus"]) editor.addEventListener(event, updateRibbonSelection);
   renderRibbon(); setupAssistantDrag(); countWords();
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
   openDatabase().then(() => { setSaveStatus("Saved"); showLanding(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
