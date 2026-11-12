@@ -589,6 +589,7 @@
     ribbon.hidden = !isDocument;
     $("#undo").hidden = !isDocument;
     $("#redo").hidden = !isDocument;
+    $("#save-document").hidden = !isDocument;
     $("#export-html").hidden = mode === "list" || mode === "landing";
     $("#export-docx").hidden = !isDocument;
     $("#export-html").lastElementChild.textContent = mode === "pdf" ? "Download PDF" : "Export HTML";
@@ -1470,6 +1471,7 @@
   });
   $("#export-html").addEventListener("click", exportHTML);
   $("#export-docx").addEventListener("click", exportDocx);
+  $("#save-document").addEventListener("click", () => { saveDocument(true); notify("Saved in this browser."); });
   $("#undo").addEventListener("click", () => runCommand("undo"));
   $("#redo").addEventListener("click", () => runCommand("redo"));
   $("#zoom-out").addEventListener("click", () => setZoom(zoom - 10));
