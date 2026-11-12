@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
-const selectionStart = source.indexOf("  function tableGridRows()");
+const selectionStart = source.indexOf("  function tableGridRows(");
 const selectionEnd = source.indexOf("  function selectedParagraphBlocks()", selectionStart);
 const operationStart = source.indexOf("  function mergeTableCells()", selectionEnd);
 const operationEnd = source.indexOf("  function deleteTableRow()", operationStart);
