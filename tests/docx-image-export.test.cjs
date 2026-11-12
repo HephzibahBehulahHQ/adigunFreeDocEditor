@@ -20,7 +20,7 @@ const paragraph = (child) => ({
 });
 const pageBreak = { nodeType: 1, tagName: "HR", children: [], childNodes: [], textContent: "", getAttribute(name) { return name === "data-page-break" ? "true" : null; } };
 const fontText = { nodeType: Node.TEXT_NODE, nodeValue: "Georgia type" };
-const fontSpan = { nodeType: 1, tagName: "SPAN", children: [fontText], childNodes: [fontText], style: { fontFamily: "Georgia" }, getAttribute(name) { return name === "data-font-family" ? "Georgia" : null; } };
+const fontSpan = { nodeType: 1, tagName: "SPAN", children: [fontText], childNodes: [fontText], style: { fontFamily: "Georgia" }, getAttribute(name) { return ({ "data-font-family": "Georgia", "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" })[name] || null; } };
 const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan)] }] };
 const page = { classList: { contains() { return false; } } };
 const factory = new Function("Node", "editor", "title", "atob", "$", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip };`);
@@ -52,6 +52,8 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
   assert.match(documentXml, /cx="19050" cy="9525"/);
   assert.match(documentXml, /Diagram &amp; plan/);
   assert.match(documentXml, /<w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"\/>/);
+  assert.match(documentXml, /<w:color w:val="C00000"\/>/);
+  assert.match(documentXml, /<w:highlight w:val="yellow"\/>/);
   assert.equal((entries.get("word/_rels/document.xml.rels").toString("utf8").match(/relationships\/image/g) || []).length, 1);
   assert.match(entries.get("[Content_Types].xml").toString("utf8"), /Extension="png" ContentType="image\/png"/);
   process.stdout.write("DOCX image export tests passed: binary PNG, deduplication, DrawingML, dimensions, alt text and content types.\n");
