@@ -8,10 +8,24 @@
   ]);
   const voidTags = new Set(["br", "hr", "img"]);
   const fontFamilies = new Set(["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"]);
+  const supportedColors = new Set(["#000000", "#404040", "#C00000", "#ED7D31", "#FFC000", "#548235", "#4472C4", "#7030A0", "#00B0F0", "#FFFFFF", "#FFFF00", "#00FF00", "#00FFFF", "#FF00FF", "#0000FF", "#FF0000", "#000080", "#008080", "#008000", "#800080", "#800000", "#808000", "#808080", "#C0C0C0"]);
 
   function supportedFontFamily(value) {
     const name = String(value || "").split(",")[0].trim().replace(/^["\']|["\']$/g, "");
     return [...fontFamilies].find((family) => family.toLowerCase() === name.toLowerCase()) || "";
+  }
+
+  function supportedColor(value) {
+    const source = String(value || "").trim();
+    let match = source.match(/^#([\da-f]{3}|[\da-f]{6})$/i);
+    if (match && match[1].length === 3) return supportedColor("#" + [...match[1]].map((digit) => digit + digit).join(""));
+    if (!match) {
+      match = source.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i);
+      if (!match || match.slice(1, 4).some((channel) => Number(channel) > 255)) return "";
+      return supportedColor("#" + match.slice(1, 4).map((channel) => Number(channel).toString(16).padStart(2, "0")).join(""));
+    }
+    const color = source.toUpperCase();
+    return supportedColors.has(color) ? color : "";
   }
   const imageSource = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/]+={0,2}$/i;
 
@@ -38,6 +52,10 @@
     if (tag === "span") {
       const fontFamily = supportedFontFamily(attributes["data-font-family"]);
       if (fontFamily) result["data-font-family"] = fontFamily;
+      for (const name of ["data-text-color", "data-highlight-color"]) {
+        const color = supportedColor(attributes[name]);
+        if (color) result[name] = color;
+      }
     }
     if (["th", "td"].includes(tag)) {
       for (const dimension of ["colspan", "rowspan"]) {
@@ -83,13 +101,17 @@
     const sourceTag = node.tagName.toLowerCase();
     const tag = sourceTag === "font" ? "span" : sourceTag;
     const attrs = {};
-    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-font-family"]) {
+    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-font-family", "data-text-color", "data-highlight-color"]) {
       const value = node.getAttribute(name);
       if (value !== null) attrs[name] = value;
     }
     if (tag === "span") {
       const family = supportedFontFamily(sourceTag === "font" ? node.getAttribute("face") : node.getAttribute("data-font-family") || node.style?.fontFamily);
       if (family) attrs["data-font-family"] = family;
+      const textColor = supportedColor(sourceTag === "font" ? node.getAttribute("color") : node.getAttribute("data-text-color") || node.style?.color);
+      if (textColor) attrs["data-text-color"] = textColor;
+      const highlightColor = supportedColor(node.getAttribute("data-highlight-color") || node.style?.backgroundColor || node.style?.background);
+      if (highlightColor) attrs["data-highlight-color"] = highlightColor;
     }
     if (["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "th", "td"].includes(tag)) attrs.align = node.style?.textAlign || "";
     if (!allowedTags.has(tag)) return [...node.childNodes].map(copyDomNode).filter(Boolean);
@@ -109,8 +131,14 @@
   function renderNode(input) {
     if (input.type === "text") return escapeHtml(input.text);
     const attributes = { ...input.attrs };
-    if (attributes.align) { attributes.style = `text-align:${attributes.align}`; delete attributes.align; }
-    if (input.tag === "span" && attributes["data-font-family"]) attributes.style = `font-family:${attributes["data-font-family"]}`;
+    const styles = [];
+    if (attributes.align) { styles.push(`text-align:${attributes.align}`); delete attributes.align; }
+    if (input.tag === "span") {
+      if (attributes["data-font-family"]) styles.push(`font-family:${attributes["data-font-family"]}`);
+      if (attributes["data-text-color"]) styles.push(`color:${attributes["data-text-color"]}`);
+      if (attributes["data-highlight-color"]) styles.push(`background-color:${attributes["data-highlight-color"]}`);
+    }
+    if (styles.length) attributes.style = styles.join(";");
     const serializedAttributes = Object.entries(attributes).map(([name, value]) => ` ${name}="${escapeHtml(value)}"`).join("");
     if (voidTags.has(input.tag)) return `<${input.tag}${serializedAttributes}>`;
     return `<${input.tag}${serializedAttributes}>${input.children.map(renderNode).join("")}</${input.tag}>`;
