@@ -41,6 +41,17 @@ jobs:
           cp index.html styles.css app.js document-model.js CNAME _site/
           cp assets/hb-official.jpg _site/assets/
           cp assets/vendor/mammoth.browser.min.js assets/vendor/MAMMOTH-LICENSE _site/assets/vendor/
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          index = Path("_site/index.html")
+          html = index.read_text()
+          version = os.environ["GITHUB_SHA"]
+          for asset in ("styles.css", "document-model.js", "app.js"):
+              html = html.replace(f'./{asset}"', f'./{asset}?v={version}"')
+          index.write_text(html)
+          PY
           touch _site/.nojekyll
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
