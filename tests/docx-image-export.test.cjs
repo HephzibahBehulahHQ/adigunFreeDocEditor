@@ -14,14 +14,15 @@ const image = () => ({
   nodeType: 1, tagName: "IMG", children: [], childNodes: [], naturalWidth: 2, naturalHeight: 1,
   getAttribute(name) { return ({ src, alt: "Diagram & plan" })[name] || null; },
 });
-const paragraph = (child) => ({
+const paragraph = (child, attrs = {}) => ({
   nodeType: 1, tagName: "P", children: [child], childNodes: [child], style: { textAlign: "" }, textContent: "",
+  getAttribute(name) { return attrs[name] || null; },
   closest() { return null; },
 });
 const pageBreak = { nodeType: 1, tagName: "HR", children: [], childNodes: [], textContent: "", getAttribute(name) { return name === "data-page-break" ? "true" : null; } };
 const fontText = { nodeType: Node.TEXT_NODE, nodeValue: "Georgia type" };
 const fontSpan = { nodeType: 1, tagName: "SPAN", children: [fontText], childNodes: [fontText], style: { fontFamily: "Georgia" }, getAttribute(name) { return ({ "data-font-family": "Georgia", "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" })[name] || null; } };
-const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan)] }] };
+const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-line-spacing": "1.5", "data-paragraph-spacing": "12" })] }] };
 const page = { classList: { contains() { return false; } } };
 const factory = new Function("Node", "editor", "title", "atob", "$", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip };`);
 const { makeWordPackage, makeStoredZip } = factory(Node, root, () => "Image export QA", atob, () => page);
@@ -54,6 +55,7 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
   assert.match(documentXml, /<w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"\/>/);
   assert.match(documentXml, /<w:color w:val="C00000"\/>/);
   assert.match(documentXml, /<w:highlight w:val="yellow"\/>/);
+  assert.match(documentXml, /<w:spacing w:line="360" w:lineRule="auto" w:after="240"\/>/);
   assert.equal((entries.get("word/_rels/document.xml.rels").toString("utf8").match(/relationships\/image/g) || []).length, 1);
   assert.match(entries.get("[Content_Types].xml").toString("utf8"), /Extension="png" ContentType="image\/png"/);
   process.stdout.write("DOCX image export tests passed: binary PNG, deduplication, DrawingML, dimensions, alt text and content types.\n");
