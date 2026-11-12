@@ -114,6 +114,18 @@
         <div class="settings-foot"><span>Saved with this document in this browser.</span><div class="comment-form-actions"><button class="button button-outline" id="cancel-comment" type="button">Cancel</button><button class="button button-outline" type="submit">Post comment</button></div></div>
       </form>
     </dialog>
+    <dialog class="settings-dialog find-dialog" id="find-dialog" aria-labelledby="find-title">
+      <form id="find-form">
+        <div class="settings-head"><div><span class="eyebrow">DOCUMENT TOOLS</span><h2 id="find-title">Find and replace</h2></div><button class="window-control" id="close-find" type="button" aria-label="Close Find and replace">×</button></div>
+        <div class="find-fields">
+          <label for="find-query">Find<input id="find-query" type="search" maxlength="2000" autocomplete="off" /></label>
+          <div class="find-options"><label class="find-case" for="find-match-case"><input id="find-match-case" type="checkbox" /> Match case</label><output class="find-count" id="find-count" aria-live="polite">Enter text to find.</output></div>
+          <label for="replace-query">Replace with<input id="replace-query" type="text" maxlength="2000" autocomplete="off" /></label>
+          <div class="find-navigation"><button id="find-previous" type="button" class="button button-outline" disabled>Previous</button><button id="find-next" type="button" class="button button-outline" disabled>Next</button></div>
+          <div class="find-replacement-actions"><button id="replace-current" type="button" class="button button-outline" disabled>Replace</button><button id="replace-all" type="button" class="button button-primary" disabled>Replace all</button></div>
+        </div>
+      </form>
+    </dialog>
     <dialog class="settings-dialog table-dialog" id="table-dialog" aria-labelledby="table-title">
       <form id="table-form">
         <div class="settings-head"><div><span class="eyebrow">INSERT</span><h2 id="table-title">Create a table</h2></div><button class="window-control" id="cancel-table" type="button" aria-label="Cancel table insertion">×</button></div>
