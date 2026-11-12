@@ -12,6 +12,7 @@ The repository initially contained the product specification, mockup, custom-dom
 - DOCX import uses the locally vendored Mammoth 1.12.2 browser build, checks ZIP structure and expanded-size limits, then copies only allow-listed HTML elements and safe links/embedded raster images into the editor.
 - `assets/hb-official.jpg` is the unmodified corporate artwork from the shared design system.
 - IndexedDB stores editable document records in this browser. PDF files remain in memory while open and are not copied into the document store.
+- Review comments are local document sidecar metadata with text quotes and surrounding context for re-anchoring; they are not exported as DOCX comments. Tracked insertions, deletions and revision history remain unsupported.
 - Inserted PNG, JPEG and GIF images are verified by file signature, limited to 8 MB and stored as embedded data URLs in the local editable document.
 
 The schema-backed model now governs persistence and exports. Interactive editing still uses the browser's `contenteditable` surface; replacing it with a transaction-based document engine remains Phase 2 work.
