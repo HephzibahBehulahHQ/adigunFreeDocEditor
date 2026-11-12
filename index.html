@@ -74,6 +74,10 @@
             </aside>
             <div class="editor-card" id="editor-card">
               <div class="page-meta"><span id="file-kind">New document</span><span class="page-status" id="page-count">Continuous view</span></div>
+              <div class="document-ruler" id="document-ruler" hidden>
+                <div class="document-ruler-heading"><label for="paragraph-indent-ruler">Paragraph left indent</label><output id="paragraph-indent-value" for="paragraph-indent-ruler">0 in</output></div>
+                <div class="ruler-measure"><div class="ruler-values" aria-hidden="true"><span>0 in</span><span>1 in</span><span>2 in</span></div><input id="paragraph-indent-ruler" type="range" min="0" max="4" step="1" value="0" aria-label="Paragraph left indent, in half-inch steps" aria-valuetext="0 inches" disabled /></div>
+              </div>
               <article class="document-page" id="document" contenteditable="true" role="textbox" aria-label="Document content" aria-multiline="true" spellcheck="true"><p><br /></p></article>
               <footer class="page-footer"><span id="word-count">0 words</span><span class="page-footer-right"><span>English</span><span class="footer-divider"></span><button class="zoom-button zoom-fit" id="zoom-fit" type="button" aria-label="Fit document to width" title="Fit document to width">Fit</button><button class="zoom-button" id="zoom-out" type="button" aria-label="Zoom out">−</button><span id="zoom-value">100%</span><button class="zoom-button" id="zoom-in" type="button" aria-label="Zoom in">＋</button></span></footer>
             </div>

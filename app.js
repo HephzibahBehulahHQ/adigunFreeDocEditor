@@ -268,6 +268,7 @@
     const unchanged = oldSheets.length === pages.length && pages.every((items, index) =>
       items.length === oldSheets[index].childNodes.length && items.every((node, childIndex) => node === oldSheets[index].childNodes[childIndex]));
     if (unchanged) { renderPageNavigation(); return; }
+    $("#editor-card").classList.add("paper-layout");
     const fragment = document.createDocumentFragment();
     pages.forEach((items, index) => {
       const sheet = document.createElement("div");
@@ -605,6 +606,8 @@
 
   function setWorkspaceMode(mode) {
     const isDocument = mode === "document";
+    $("#document-ruler").hidden = !isDocument;
+    if (!isDocument) $("#editor-card").classList.remove("paper-layout");
     editor.contentEditable = String(isDocument);
     titleInput.readOnly = !isDocument;
     $("#editor-layout").classList.toggle("has-outline", isDocument);
@@ -621,6 +624,7 @@
     $("#export-html").hidden = mode === "list" || mode === "landing";
     $("#export-docx").hidden = !isDocument;
     $("#export-html").lastElementChild.textContent = mode === "pdf" ? "Download PDF" : "Export HTML";
+    updateParagraphRuler();
   }
 
   function setMobileMenu(open) {
@@ -1008,6 +1012,7 @@
       const splitButton = ribbon.querySelector('.tool-button[data-action="table-split"]');
       if (splitButton) splitButton.disabled = (Number(tableCell.getAttribute("colspan")) || 1) <= 1 && (Number(tableCell.getAttribute("rowspan")) || 1) <= 1;
     }
+    updateParagraphRuler();
     if (!inEditor(focusNode) && !inEditor(anchorNode)) return;
     const contextNode = inEditor(focusNode) ? focusNode : anchorNode;
     const focusElement = contextNode.nodeType === Node.ELEMENT_NODE ? contextNode : contextNode.parentElement;
@@ -1153,6 +1158,47 @@
     const range = selection.getRangeAt(0);
     const focusNode = selection.focusNode || selection.anchorNode;
     return [...editor.querySelectorAll("p,h1,h2,h3,h4,h5,h6,li,th,td")].filter((block) => range.collapsed ? block.contains(focusNode) : range.intersectsNode(block));
+  }
+
+  function setParagraphIndent(level) {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) {
+      notify("Place the cursor in a paragraph or select paragraph text first.");
+      return;
+    }
+    const range = selection.getRangeAt(0).cloneRange();
+    const blocks = selectedParagraphBlocks();
+    if (!blocks.length) { notify("Place the cursor in a paragraph or select paragraph text first."); return; }
+    const indentLevel = Math.max(0, Math.min(4, Math.round(Number(level) || 0)));
+    for (const block of blocks) {
+      if (indentLevel) {
+        block.setAttribute("data-indent-level", String(indentLevel));
+        block.style.marginLeft = `${indentLevel * 36}pt`;
+      } else {
+        block.removeAttribute("data-indent-level");
+        block.style.marginLeft = "";
+      }
+    }
+    editor.focus();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    updateRibbonSelection();
+    countWords();
+    saveDocument();
+  }
+
+  function updateParagraphRuler() {
+    const ruler = $("#paragraph-indent-ruler");
+    if (!ruler) return;
+    const blocks = editor.contentEditable === "true" ? selectedParagraphBlocks() : [];
+    const levels = blocks.map((block) => Number(block.getAttribute("data-indent-level")) || 0);
+    ruler.disabled = !levels.length;
+    const mixed = levels.some((level) => level !== levels[0]);
+    const level = levels.length ? Math.max(0, Math.min(4, Math.round(levels.reduce((sum, value) => sum + value, 0) / levels.length))) : 0;
+    ruler.value = String(level);
+    ruler.setAttribute("aria-valuetext", mixed ? "Mixed paragraph indents" : `${level * 0.5} inches`);
+    $("#paragraph-indent-value").textContent = mixed ? "Mixed" : `${level * 0.5} in`;
+    ruler.dataset.mixed = String(mixed);
   }
 
   function applyParagraphIndent(amount) {
@@ -2005,6 +2051,7 @@
   $("#zoom-out").addEventListener("click", () => setZoom(zoom - 10));
   $("#zoom-in").addEventListener("click", () => setZoom(zoom + 10));
   $("#zoom-fit").addEventListener("click", fitToWidth);
+  $("#paragraph-indent-ruler").addEventListener("input", (event) => setParagraphIndent(event.currentTarget.value));
   $("#assist-button").addEventListener("click", () => toggleAssistant(true));
   $("#assistant-launcher").addEventListener("click", () => toggleAssistant(true));
   $("#close-adigun").addEventListener("click", () => toggleAssistant(false));
