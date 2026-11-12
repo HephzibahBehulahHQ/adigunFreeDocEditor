@@ -15,4 +15,4 @@
 .document-page table{width:100%;border-collapse:collapse;table-layout:fixed;margin:16px 0;font-size:inherit}.document-page th,.document-page td{min-width:40px;border:1px solid #c6cdd8;padding:7px 8px;vertical-align:top;overflow-wrap:anywhere}.document-page th{background:#f3f5f8;font-weight:700}.document-page td p,.document-page th p{margin:.2em 0}
 .document-page img{max-width:100%;height:auto;vertical-align:middle}
 .table-dialog-note{color:#69758a;font-size:12px;line-height:1.5}.table-size-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0}.table-size-fields label{display:flex;flex-direction:column;gap:7px;color:#536078;font-size:12px;font-weight:650}.table-size-fields input{width:100%;padding:9px 10px;border:1px solid #dbe0e9;border-radius:7px;color:var(--ink)}.table-size-fields input:focus{outline:2px solid var(--purple);outline-offset:1px}
-
+:focus-visible{outline:3px solid var(--purple);outline-offset:2px}
