@@ -46,7 +46,7 @@
     ],
     insert: [
       [{ label: "Add link", action: "link", icon: "↗ Link" }, { label: "Remove link", action: "unlink", icon: "↗̸" }],
-      [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }, { label: "Insert image from this device", action: "image", icon: "▧ Image" }],
+      [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert page break", action: "page-break", icon: "↧ Page break" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }, { label: "Insert image from this device", action: "image", icon: "▧ Image" }],
     ],
     layout: [
       [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }],
@@ -638,6 +638,7 @@
         }
         return image;
       }
+      if (tag === "hr" && node.getAttribute("data-page-break") === "true") element.setAttribute("data-page-break", "true");
       if (!allowedTags.has(tag)) { removed++; const fragment = document.createDocumentFragment(); for (const child of [...node.childNodes]) { const safeChild = copy(child); if (safeChild) fragment.append(safeChild); } return fragment; }
       const element = document.createElement(tag);
       if (tag === "a") {
@@ -852,6 +853,7 @@
       }
       case "date": runCommand("insertText", new Intl.DateTimeFormat(undefined, { dateStyle: "long" }).format(new Date())); break;
       case "divider": runCommand("insertHTML", "<hr><p><br></p>"); break;
+      case "page-break": runCommand("insertHTML", '<hr data-page-break="true"><p><br></p>'); notify("Manual page break inserted."); break;
       case "table": {
         const selection = window.getSelection();
         tableInsertionRange = selection && selection.rangeCount && editor.contains(selection.anchorNode) ? selection.getRangeAt(0).cloneRange() : null;
@@ -1069,7 +1071,7 @@
           continue;
         }
         if (tag === "table") { output.push(tableXml(child)); continue; }
-        if (tag === "hr") { output.push('<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="808080"/></w:pBdr></w:pPr><w:r><w:t></w:t></w:r></w:p>'); continue; }
+        if (tag === "hr") { output.push(child.getAttribute("data-page-break") === "true" ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="808080"/></w:pBdr></w:pPr><w:r><w:t></w:t></w:r></w:p>'); continue; }
         if (child.children.length) walkBlocks(child, listKind, listLevel, output);
         else if (child.textContent.trim()) addParagraph(child, listKind, listLevel, output);
       }
