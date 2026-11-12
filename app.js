@@ -63,10 +63,10 @@
 
   function supportedColor(value) {
     const source = String(value || "").trim();
-    let match = source.match(/^#([\\da-f]{3}|[\\da-f]{6})$/i);
+    let match = source.match(/^#([\da-f]{3}|[\da-f]{6})$/i);
     if (match && match[1].length === 3) return supportedColor("#" + [...match[1]].map((digit) => digit + digit).join(""));
     if (!match) {
-      match = source.match(/^rgba?\\(\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})(?:\\s*,\\s*(?:0|1|0?\\.\\d+))?\\s*\\)$/i);
+      match = source.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i);
       if (!match || match.slice(1, 4).some((channel) => Number(channel) > 255) || match[4] && Number(match[4]) < 1) return "";
       return supportedColor("#" + match.slice(1, 4).map((channel) => Number(channel).toString(16).padStart(2, "0")).join(""));
     }
@@ -1148,7 +1148,7 @@
     const exportableHighlightColors = new Map([["#FFFF00", "yellow"], ["#00FF00", "green"], ["#00FFFF", "cyan"], ["#FF00FF", "magenta"], ["#0000FF", "blue"], ["#FF0000", "red"], ["#000080", "darkBlue"], ["#008080", "darkCyan"], ["#008000", "darkGreen"], ["#800080", "darkMagenta"], ["#800000", "darkRed"], ["#808000", "darkYellow"], ["#808080", "darkGray"], ["#C0C0C0", "lightGray"], ["#000000", "black"], ["#FFFFFF", "white"]]);
     function normalizeExportColor(value, palette) {
       const source = String(value || "").trim();
-      const match = source.match(/^#?([\\da-f]{6})$/i);
+      const match = source.match(/^#?([\da-f]{6})$/i);
       const color = match ? "#" + match[1].toUpperCase() : "";
       return palette.has(color) ? color : "";
     }
