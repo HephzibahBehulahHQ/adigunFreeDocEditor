@@ -7,7 +7,8 @@ The repository initially contained the product specification, mockup, custom-dom
 - `index.html` defines the accessible application shell, workspace, entry screen, editor surface, and Adigun panel.
 - `styles.css` defines responsive layout and maps the verified HB brand tokens.
 - `app.js` owns document state, toolbar actions, browser-local persistence, file import/export and the local extractive overview.
-- The built-in Word exporter packages a documented subset of the editable HTML as OOXML in an uncompressed ZIP container; it has no runtime dependencies and reports unsupported table, image, and block content rather than claiming full Word fidelity.
+- The built-in Word exporter packages a documented subset of the editable HTML as OOXML in an uncompressed ZIP container; it uses no external runtime service and reports unsupported table, image, and block content rather than claiming full Word fidelity.
+- DOCX import uses the locally vendored Mammoth 1.12.2 browser build, checks ZIP structure and expanded-size limits, then copies only allow-listed HTML elements and safe links/embedded raster images into the editor.
 - `assets/hb-official.jpg` is the unmodified corporate artwork from the shared design system.
 - IndexedDB stores editable document records in this browser. PDF files remain in memory while open and are not copied into the document store.
 
