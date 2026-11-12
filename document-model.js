@@ -21,7 +21,7 @@
     if (match && match[1].length === 3) return supportedColor("#" + [...match[1]].map((digit) => digit + digit).join(""));
     if (!match) {
       match = source.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(0|1|0?\.\d+))?\s*\)$/i);
-      if (!match || match.slice(1, 4).some((channel) => Number(channel) > 255)) return "";
+      if (!match || match.slice(1, 4).some((channel) => Number(channel) > 255) || match[4] && Number(match[4]) < 1) return "";
       return supportedColor("#" + match.slice(1, 4).map((channel) => Number(channel).toString(16).padStart(2, "0")).join(""));
     }
     const color = source.toUpperCase();
