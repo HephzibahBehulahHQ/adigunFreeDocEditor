@@ -5,6 +5,7 @@ Status is specific to the current first workspace slice.
 | Feature | Current status | Evidence / limit |
 |---|---|---|
 | Responsive workspace shell and entry screen | Implemented | `index.html` and responsive rules in `styles.css`. |
+| Document outline navigation | Implemented | Heading levels 1–3 are listed from the open editable document; heading filter and click-to-navigate use current document content. Collapsible panel on tablet and mobile. |
 | Create blank document and basic editing | Implemented | Browser editing surface and Home/Insert/Layout/Review/View controls. |
 | Structured document model | Partial | Versioned allow-listed node tree is now the source for local persistence and exports; the interactive editing surface still uses browser contenteditable. |
 | Insert and edit tables | Partial | Insert up to 50 rows × 20 columns; table cells are editable. No row/column merge tools. |
