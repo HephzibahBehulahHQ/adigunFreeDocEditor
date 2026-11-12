@@ -14,7 +14,7 @@ Open `http://localhost:4173`. The application has no build step. The DOCX conver
 
 ## Current support
 
-- Create and edit text with headings, emphasis, lists, alignment, links, tables and browser spellcheck.
+- Create and edit text with headings, emphasis, lists, alignment, links, tables, local PNG/JPEG/GIF images (up to 8 MB each) and browser spellcheck.
 - Export editable documents as `.docx`, preserving supported headings, basic text emphasis, hyperlinks, lists, tables, page size and orientation. Table cell spans are limited; images, revisions and advanced Word styling are not preserved.
 - Import `.docx` as editable semantic content, including supported headings, lists, tables and safe inline raster images. Mammoth converts Word structure to HTML; page layout and advanced Word styling are not preserved.
 - Save and reopen editable documents in this browser's IndexedDB. Autosave can be switched off; Ctrl+S remains available.
@@ -32,3 +32,4 @@ PDF editing, conversion pipelines, cloud accounts, sharing and hosted AI are not
 - [Feature matrix](docs/FEATURE_MATRIX.md)
 - [Security and privacy](docs/SECURITY_AND_PRIVACY.md)
 - [Master product development prompt](adigunFreeDocEditor%20%E2%80%94%20Master%20Product%20Development%20Prompt.md)
+
