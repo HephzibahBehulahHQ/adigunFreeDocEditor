@@ -88,7 +88,7 @@
     insert: [
       [{ label: "Add link", action: "link", icon: "↗ Link" }, { label: "Remove link", action: "unlink", icon: "↗̸" }],
       [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert page break", action: "page-break", icon: "↧ Page break" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }, { label: "Insert image from this device", action: "image", icon: "▧ Image" }],
-      [{ label: "Insert row above", action: "table-row-above", icon: "▤ Row ↑" }, { label: "Insert row below", action: "table-row-below", icon: "▤ Row ↓" }, { label: "Insert column left", action: "table-column-left", icon: "▥ Col ←" }, { label: "Insert column right", action: "table-column-right", icon: "▥ Col →" }, { label: "Delete row", action: "table-row-delete", icon: "⌫ Row" }, { label: "Delete column", action: "table-column-delete", icon: "⌫ Col" }, { label: "Delete table", action: "table-delete", icon: "⌫ Table" }, { label: "Merge adjacent cells", action: "table-merge", icon: "▦ Merge" }],
+      [{ label: "Insert row above", action: "table-row-above", icon: "▤ Row ↑" }, { label: "Insert row below", action: "table-row-below", icon: "▤ Row ↓" }, { label: "Insert column left", action: "table-column-left", icon: "▥ Col ←" }, { label: "Insert column right", action: "table-column-right", icon: "▥ Col →" }, { label: "Delete row", action: "table-row-delete", icon: "⌫ Row" }, { label: "Delete column", action: "table-column-delete", icon: "⌫ Col" }, { label: "Delete table", action: "table-delete", icon: "⌫ Table" }, { label: "Merge adjacent cells", action: "table-merge", icon: "▦ Merge" }, { label: "Split merged cell", action: "table-split", icon: "▦ Split" }],
     ],
     layout: [
       [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }],
@@ -998,6 +998,8 @@
       if (deleteColumnButton) deleteColumnButton.disabled = rows.some((row) => row.cells.length - (tableCell.cellIndex < row.cells.length ? 1 : 0) < 1);
       const mergeButton = ribbon.querySelector('.tool-button[data-action="table-merge"]');
       if (mergeButton) mergeButton.disabled = selectedTableCells().length < 2;
+      const splitButton = ribbon.querySelector('.tool-button[data-action="table-split"]');
+      if (splitButton) splitButton.disabled = (Number(tableCell.getAttribute("colspan")) || 1) <= 1;
     }
     if (!inEditor(focusNode) && !inEditor(anchorNode)) return;
     const contextNode = inEditor(focusNode) ? focusNode : anchorNode;
@@ -1218,6 +1220,24 @@
     notify("Merged " + cells.length + " adjacent cells.");
   }
 
+  function splitTableCell() {
+    const cell = selectedTableCell();
+    if (!cell) { notify("Place the cursor in a table cell first."); return; }
+    const span = Number(cell.getAttribute("colspan")) || 1;
+    if (span <= 1) { notify("Select a merged cell to split."); return; }
+    const firstSpan = Math.ceil(span / 2);
+    const secondSpan = span - firstSpan;
+    const newCell = document.createElement(cell.tagName.toLowerCase());
+    if (cell.hasAttribute("rowspan")) newCell.setAttribute("rowspan", cell.getAttribute("rowspan"));
+    if (firstSpan > 1) cell.setAttribute("colspan", String(firstSpan));
+    else cell.removeAttribute("colspan");
+    if (secondSpan > 1) newCell.setAttribute("colspan", String(secondSpan));
+    newCell.innerHTML = "<p><br></p>";
+    cell.after(newCell);
+    focusTableCell(newCell);
+    notify("Split the merged cell into two cells.");
+  }
+
   function deleteTableRow() {
     const activeCell = selectedTableCell();
     if (!activeCell) { notify("Place the cursor in a table cell first."); return; }
@@ -1308,6 +1328,7 @@
       case "table-column-delete": deleteTableColumn(); break;
       case "table-delete": deleteTable(); break;
       case "table-merge": mergeTableCells(); break;
+      case "table-split": splitTableCell(); break;
       case "undo": case "redo": case "bold": case "italic": case "underline": case "strikeThrough": case "insertUnorderedList": case "insertOrderedList": case "justifyLeft": case "justifyCenter": case "justifyRight": case "justifyFull": case "removeFormat": case "unlink":
         runCommand(action); break;
       case "link": {
