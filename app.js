@@ -15,6 +15,7 @@
   let activeId = crypto.randomUUID();
   let activeTab = "home";
   let saveTimer;
+  let editorPaginationTimer;
   let toastTimer;
   let zoom = 100;
   let pdfUrl;
@@ -102,16 +103,17 @@
     const isEditableDocument = editor.contentEditable === "true";
     const plainText = isEditableDocument ? editor.innerText.trim() : "";
     applyPaperCanvasMinimumHeight();
+    scheduleEditorPagination();
     const words = plainText.match(/[\p{L}\p{N}]+(?:['’_-][\p{L}\p{N}]+)*/gu) || [];
     $("#word-count").textContent = `${words.length} ${words.length === 1 ? "word" : "words"}`;
-    const manualBreakCount = editor.querySelectorAll('hr[data-page-break="true"]').length;
-    $("#page-count").textContent = manualBreakCount ? `Continuous view · ${manualBreakCount} manual ${manualBreakCount === 1 ? "break" : "breaks"}` : "Continuous view";
+    const pageCount = Math.max(1, editor.querySelectorAll(".document-sheet").length);
+    $("#page-count").textContent = `${pageCount} ${pageCount === 1 ? "page" : "pages"}`;
     $("#insight-words").textContent = isEditableDocument ? words.length.toLocaleString() : "—";
     $("#insight-characters").textContent = isEditableDocument ? plainText.length.toLocaleString() : "—";
     $("#insight-reading").textContent = isEditableDocument ? (words.length < 180 ? "<1 min" : `${Math.ceil(words.length / 180)} min`) : "—";
  
     renderOutline();
-    renderPageBreakNavigation();
+    renderPageNavigation();
   }
 
   function renderOutline() {
@@ -136,23 +138,73 @@
     empty.textContent = headings.length && query ? "No headings match this filter." : "Add a heading from the Home ribbon to build an outline.";
   }
 
-  function renderPageBreakNavigation() {
+  function renderPageNavigation() {
     const list = $("#break-navigation-list");
     if (!list) return;
-    const markers = [...editor.querySelectorAll('hr[data-page-break="true"]')];
-    $("#break-navigation-count").textContent = `${markers.length} ${markers.length === 1 ? "break" : "breaks"}`;
+    const sheets = [...editor.querySelectorAll(".document-sheet")];
+    $("#break-navigation-count").textContent = `${sheets.length} ${sheets.length === 1 ? "page" : "pages"}`;
     list.replaceChildren();
-    const locations = [{ label: "Document start", marker: null }, ...markers.map((marker, index) => ({ label: `After break ${index + 1}`, marker }))];
-    for (let index = 0; index < locations.length; index++) {
+    sheets.forEach((sheet, index) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "break-navigation-item";
-      button.dataset.breakLocation = String(index);
-      button.textContent = locations[index].label;
-      button.setAttribute("aria-label", index === 0 ? "Go to document start" : `Go to start after manual page break ${index}`);
+      button.dataset.pageIndex = String(index);
+      button.textContent = `Page ${index + 1}`;
+      button.setAttribute("aria-label", `Go to page ${index + 1}`);
       list.append(button);
+    });
+    $("#break-navigation-empty").hidden = sheets.length > 0;
+  }
+  function scheduleEditorPagination() {
+    clearTimeout(editorPaginationTimer);
+    editorPaginationTimer = setTimeout(paginateEditor, 120);
+  }
+  function paginateEditor() {
+    if (editor.contentEditable !== "true" || $("#editor-card").classList.contains("landing")) return;
+    const existing = [...editor.children];
+    const nodes = existing.flatMap((child) => child.classList?.contains("document-sheet") ? [...child.childNodes] : [child]);
+    const minHeight = parseFloat(getComputedStyle(editor).getPropertyValue("--paper-min-height")) || editor.clientHeight || 900;
+    const probe = existing.find((child) => child.classList?.contains("document-sheet"));
+    const style = probe ? getComputedStyle(probe) : getComputedStyle(editor);
+    const capacity = Math.max(120, minHeight - parseFloat(style.paddingTop || 0) - parseFloat(style.paddingBottom || 0));
+    const pages = [];
+    let page = [];
+    let used = 0;
+    const flush = () => { if (page.length) pages.push(page); page = []; used = 0; };
+    for (const node of nodes) {
+      const isBreak = node.nodeType === Node.ELEMENT_NODE && node.matches('hr[data-page-break="true"]');
+      if (isBreak) {
+        if (!page.length) page = [];
+        page.push(node);
+        flush();
+        continue;
+      }
+      const rectHeight = node.nodeType === Node.ELEMENT_NODE ? node.getBoundingClientRect().height : 0;
+      const nodeStyle = node.nodeType === Node.ELEMENT_NODE ? getComputedStyle(node) : null;
+      const blockHeight = rectHeight + (nodeStyle ? parseFloat(nodeStyle.marginTop || 0) + parseFloat(nodeStyle.marginBottom || 0) : 0);
+      if (!isBreak && page.length && used + blockHeight > capacity) flush();
+      page.push(node);
+      used += blockHeight;
     }
-    $("#break-navigation-empty").hidden = markers.length > 0;
+    flush();
+    if (!pages.length) pages.push([]);
+    const oldSheets = existing.filter((child) => child.classList?.contains("document-sheet"));
+    const unchanged = oldSheets.length === pages.length && pages.every((items, index) =>
+      items.length === oldSheets[index].childNodes.length && items.every((node, childIndex) => node === oldSheets[index].childNodes[childIndex]));
+    if (unchanged) { renderPageNavigation(); return; }
+    const fragment = document.createDocumentFragment();
+    pages.forEach((items, index) => {
+      const sheet = document.createElement("div");
+      sheet.className = "document-sheet";
+      sheet.dataset.editorPage = "true";
+      sheet.setAttribute("role", "group");
+      sheet.setAttribute("aria-label", `Page ${index + 1}`);
+      items.forEach((node) => sheet.append(node));
+      fragment.append(sheet);
+    });
+    editor.replaceChildren(fragment);
+    renderPageNavigation();
+    $("#page-count").textContent = `${pages.length} ${pages.length === 1 ? "page" : "pages"}`;
   }
   function normalizeReviewComments(value) {
     if (!Array.isArray(value)) return [];
@@ -908,6 +960,7 @@
     const card = $("#editor-card");
     if (card.classList.contains("landing") || editor.contentEditable !== "true") {
       editor.style.minHeight = "";
+      editor.style.removeProperty("--paper-min-height");
       pageCanvasDimensions = "";
       return;
     }
@@ -919,7 +972,8 @@
     const key = `${paperSize}:${pageOrientation}:${width}`;
     if (key === pageCanvasDimensions) return;
     pageCanvasDimensions = key;
-    editor.style.minHeight = `${Math.ceil(width / ratio)}px`;
+    editor.style.setProperty("--paper-min-height", `${Math.ceil(width / ratio)}px`);
+    editor.style.minHeight = "";
   }
 
   function applyPageLayout(layout = {}) {
@@ -939,6 +993,7 @@
     if (orientationButton) orientationButton.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape";
     pageCanvasDimensions = "";
     applyPaperCanvasMinimumHeight();
+    scheduleEditorPagination();
   }
 
   function setPaper(size) {
@@ -946,6 +1001,7 @@
     $("#editor-card").classList.toggle("paper-letter", paperSize === "letter");
     pageCanvasDimensions = "";
     applyPaperCanvasMinimumHeight();
+    scheduleEditorPagination();
     saveDocument();
   }
 
@@ -953,6 +1009,7 @@
     pageMargins = ["narrow", "wide"].includes(value) ? value : "normal";
     $("#editor-card").classList.toggle("margin-narrow", pageMargins === "narrow");
     $("#editor-card").classList.toggle("margin-wide", pageMargins === "wide");
+    scheduleEditorPagination();
     saveDocument();
   }
 
@@ -1321,22 +1378,19 @@
     $("#toggle-outline").setAttribute("aria-expanded", String(open));
   });
   $("#break-navigation-list").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-break-location]");
+    const button = event.target.closest("[data-page-index]");
     if (!button || editor.contentEditable !== "true") return;
-    const location = Number(button.dataset.breakLocation);
-    const markers = [...editor.querySelectorAll('hr[data-page-break="true"]')];
-    if (!Number.isInteger(location) || location < 0 || location > markers.length) return;
-    const marker = location === 0 ? null : markers[location - 1];
-    const target = marker ? (marker.nextElementSibling || marker) : (editor.firstElementChild || editor);
+    const sheet = editor.querySelectorAll(".document-sheet")[Number(button.dataset.pageIndex)];
+    if (!sheet) return;
+    const target = sheet.firstElementChild || sheet;
     editor.focus({ preventScroll: true });
     const range = document.createRange();
-    if (marker && !marker.nextSibling) range.setStartAfter(marker);
-    else range.selectNodeContents(target);
+    range.selectNodeContents(target);
     range.collapse(true);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
-    target.scrollIntoView({ block: "center", behavior: "auto" });
+    sheet.scrollIntoView({ block: "center", behavior: "auto" });
   });
   $("#outline-list").addEventListener("click", (event) => {
     const button = event.target.closest("[data-outline-index]");
@@ -1530,6 +1584,7 @@
 
   document.addEventListener("selectionchange", updateRibbonSelection);
   for (const event of ["click", "keyup", "mouseup", "input", "focus"]) editor.addEventListener(event, updateRibbonSelection);
+  window.addEventListener("resize", scheduleEditorPagination, { passive: true });
   renderRibbon(); setupAssistantDrag(); countWords();
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
   openDatabase().then(() => { setSaveStatus("Saved"); showLanding(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });

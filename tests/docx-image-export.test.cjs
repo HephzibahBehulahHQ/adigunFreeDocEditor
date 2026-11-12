@@ -19,7 +19,7 @@ const paragraph = (child) => ({
   closest() { return null; },
 });
 const pageBreak = { nodeType: 1, tagName: "HR", children: [], childNodes: [], textContent: "", getAttribute(name) { return name === "data-page-break" ? "true" : null; } };
-const root = { children: [paragraph(image()), pageBreak, paragraph(image())] };
+const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image())] }] };
 const page = { classList: { contains() { return false; } } };
 const factory = new Function("Node", "editor", "title", "atob", "$", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip };`);
 const { makeWordPackage, makeStoredZip } = factory(Node, root, () => "Image export QA", atob, () => page);

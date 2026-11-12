@@ -16,7 +16,7 @@ const element = (tag, attrs = {}, children = [], align = "") => ({
 });
 
 const source = element("div", {}, [
-  element("p", {}, [element("strong", {}, [text("A <useful> & safe" )])], "center"),
+  element("div", { "data-editor-page": "true" }, [element("p", {}, [element("strong", {}, [text("A <useful> & safe" )])], "center")]),
   element("table", {}, [element("tbody", {}, [element("tr", {}, [element("td", { colspan: 2 }, [element("p", {}, [text("Cell")])])])])]),
   element("a", { href: "javascript:alert(1)" }, [text("unsafe link")]),
   element("hr", { "data-page-break": "true" }),
