@@ -82,6 +82,7 @@
       [{ label: "Line spacing", select: "line-spacing", options: [["", "Default"], ["1", "Single"], ["1.15", "1.15"], ["1.5", "1.5"], ["2", "Double"]] }, { label: "Paragraph spacing after", select: "paragraph-spacing", options: [["", "Default"], ["0", "None"], ["6", "Compact"], ["12", "Relaxed"]] }],
       [{ label: "Bold", action: "bold", icon: "B", pressed: true }, { label: "Italic", action: "italic", icon: "I", pressed: true }, { label: "Underline", action: "underline", icon: "U", pressed: true }, { label: "Strikethrough", action: "strikeThrough", icon: "S̶ Strike", pressed: true }, { label: "Clear character formatting", action: "removeFormat", icon: "T× Clear" }],
       [{ label: "Bulleted list", action: "insertUnorderedList", icon: "• List", pressed: true }, { label: "Numbered list", action: "insertOrderedList", icon: "1. List", pressed: true }],
+      [{ label: "Decrease indent", action: "outdent", icon: "⇤ Outdent" }, { label: "Increase indent", action: "indent", icon: "⇥ Indent" }],
       [{ label: "Align left", action: "justifyLeft", icon: "☰", pressed: true }, { label: "Center", action: "justifyCenter", icon: "≡", pressed: true }, { label: "Align right", action: "justifyRight", icon: "☷", pressed: true }, { label: "Justify", action: "justifyFull", icon: "▤", pressed: true }],
     ],
     insert: [
@@ -1010,6 +1011,11 @@
     if (lineSpacingSelect) lineSpacingSelect.value = block?.getAttribute("data-line-spacing") || "";
     const paragraphSpacingSelect = ribbon.querySelector("[data-tool=paragraph-spacing]");
     if (paragraphSpacingSelect) paragraphSpacingSelect.value = block?.getAttribute("data-paragraph-spacing") || "";
+    const indentLevels = selectedParagraphBlocks().map((item) => Number(item.getAttribute("data-indent-level")) || 0);
+    const outdentButton = ribbon.querySelector('.tool-button[data-action="outdent"]');
+    const indentButton = ribbon.querySelector('.tool-button[data-action="indent"]');
+    if (outdentButton) outdentButton.disabled = !indentLevels.some((level) => level > 0);
+    if (indentButton) indentButton.disabled = !indentLevels.some((level) => level < 4);
     const fontSelect = ribbon.querySelector("[data-tool=size]");
     const fontSize = document.queryCommandValue("fontSize");
     if (fontSelect && [...fontSelect.options].some((option) => option.value === fontSize)) fontSelect.value = fontSize;
@@ -1034,6 +1040,40 @@
       const button = ribbon.querySelector('.tool-button[data-action=' + action + ']');
       if (button) button.setAttribute("aria-pressed", String(pressed));
     }
+  }
+
+  function selectedParagraphBlocks() {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return [];
+    const range = selection.getRangeAt(0);
+    const focusNode = selection.focusNode || selection.anchorNode;
+    return [...editor.querySelectorAll("p,h1,h2,h3,h4,h5,h6,li,th,td")].filter((block) => range.collapsed ? block.contains(focusNode) : range.intersectsNode(block));
+  }
+
+  function applyParagraphIndent(amount) {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) {
+      notify("Place the cursor in a paragraph or select paragraph text first.");
+      return;
+    }
+    const range = selection.getRangeAt(0).cloneRange();
+    const blocks = selectedParagraphBlocks();
+    if (!blocks.length) {
+      notify("Place the cursor in a paragraph or select paragraph text first.");
+      return;
+    }
+    for (const block of blocks) {
+      const current = Number(block.getAttribute("data-indent-level")) || 0;
+      const next = Math.max(0, Math.min(4, current + amount));
+      if (next) { block.setAttribute("data-indent-level", String(next)); block.style.marginLeft = `${next * 36}pt`; }
+      else { block.removeAttribute("data-indent-level"); block.style.marginLeft = ""; }
+    }
+    editor.focus();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    updateRibbonSelection();
+    countWords();
+    saveDocument();
   }
 
   function applyParagraphSpacing(kind, value) {
@@ -1077,6 +1117,8 @@
 
   function runTool(action, button) {
     switch (action) {
+      case "indent": applyParagraphIndent(1); break;
+      case "outdent": applyParagraphIndent(-1); break;
       case "undo": case "redo": case "bold": case "italic": case "underline": case "strikeThrough": case "insertUnorderedList": case "insertOrderedList": case "justifyLeft": case "justifyCenter": case "justifyRight": case "justifyFull": case "removeFormat": case "unlink":
         runCommand(action); break;
       case "link": {
@@ -1301,6 +1343,8 @@
       if (lineSpacing) spacing.push(`w:line="${lineSpacing}" w:lineRule="auto"`);
       if (paragraphSpacing !== undefined) spacing.push(`w:after="${paragraphSpacing}"`);
       if (spacing.length) paragraphProperties.push(`<w:spacing ${spacing.join(" ")}/>`);
+      const indentLevel = Number(element.getAttribute?.("data-indent-level")) || 0;
+      if (indentLevel >= 1 && indentLevel <= 4) paragraphProperties.push(`<w:ind w:left="${indentLevel * 720}"/>`);
       if (listKind) paragraphProperties.push('<w:numPr><w:ilvl w:val="' + Math.min(listLevel, 8) + '"/><w:numId w:val="' + (listKind === "ol" ? 2 : 1) + '"/></w:numPr>');
       const marks = tag === "th" || element.closest("th") ? { bold: true } : {};
       const runs = [...element.childNodes].map((node) => serializeInline(node, marks)).join("") || "<w:r><w:t></w:t></w:r>";
