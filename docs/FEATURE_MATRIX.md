@@ -5,6 +5,7 @@ Status is specific to the current first workspace slice.
 | Feature | Current status | Evidence / limit |
 |---|---|---|
 | Responsive workspace shell and entry screen | Implemented | `index.html` and responsive rules in `styles.css`. |
+| Page setup controls | Partial | A4/US Letter, portrait/landscape and Normal/Narrow/Wide margins apply to the editing canvas, persist per document and map to DOCX section properties. The editor does not yet paginate or show page breaks. |
 | Landing file drop | Implemented | Keyboard-accessible file picker and file drag-and-drop support DOCX, PDF, TXT, Markdown and HTML; unsupported extensions are rejected. |
 | Document outline navigation | Implemented | Heading levels 1–3 are listed from the open editable document; heading filter and click-to-navigate use current document content. Collapsible panel on tablet and mobile. |
 | Create blank document and basic editing | Implemented | Browser editing surface and Home/Insert/Layout/Review/View controls. |

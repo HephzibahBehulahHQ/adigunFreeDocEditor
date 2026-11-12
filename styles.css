@@ -70,3 +70,13 @@
 [data-theme="dark"] .landing-dropzone:hover,[data-theme="dark"] .editor-card.drop-active .landing-dropzone{border-color:var(--purple);background:#302747}
 [data-theme="dark"] .landing-dropzone-icon{background:#27233a;color:#d8c9ff}
 [data-theme="dark"] .landing-dropzone-copy small{color:#a8b3c4}
+
+.editor-card:not(.landing) .document-page{max-width:794px;padding:96px}
+.editor-card.paper-letter:not(.landscape) .document-page{max-width:816px}
+.editor-card.margin-narrow .document-page{padding:48px}
+.editor-card.margin-wide .document-page{padding:96px 192px}
+@media(max-width:700px){
+  .editor-card:not(.landing) .document-page{padding:38px 32px 55px}
+  .editor-card.margin-narrow .document-page{padding:28px 18px 44px}
+  .editor-card.margin-wide .document-page{padding:38px 48px 55px}
+}
