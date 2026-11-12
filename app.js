@@ -55,8 +55,8 @@
       [{ label: "Undo", action: "undo", icon: "↶" }, { label: "Redo", action: "redo", icon: "↷" }],
       [{ label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Title"], ["h2", "Heading 1"], ["h3", "Heading 2"]] }, { label: "Font size", select: "size", options: [["3", "11"], ["4", "14"], ["5", "18"], ["6", "24"]] }],
       [{ label: "Bold", action: "bold", icon: "B", pressed: true }, { label: "Italic", action: "italic", icon: "I", pressed: true }, { label: "Underline", action: "underline", icon: "U", pressed: true }, { label: "Strikethrough", action: "strikeThrough", icon: "S̶ Strike", pressed: true }],
-      [{ label: "Bulleted list", action: "insertUnorderedList", icon: "• List" }, { label: "Numbered list", action: "insertOrderedList", icon: "1. List" }],
-      [{ label: "Align left", action: "justifyLeft", icon: "☰" }, { label: "Center", action: "justifyCenter", icon: "≡" }, { label: "Align right", action: "justifyRight", icon: "☷" }],
+      [{ label: "Bulleted list", action: "insertUnorderedList", icon: "• List", pressed: true }, { label: "Numbered list", action: "insertOrderedList", icon: "1. List", pressed: true }],
+      [{ label: "Align left", action: "justifyLeft", icon: "☰", pressed: true }, { label: "Center", action: "justifyCenter", icon: "≡", pressed: true }, { label: "Align right", action: "justifyRight", icon: "☷", pressed: true }],
     ],
     insert: [
       [{ label: "Add link", action: "link", icon: "↗ Link" }, { label: "Remove link", action: "unlink", icon: "↗̸" }],
@@ -969,6 +969,22 @@
     for (const action of ["bold", "italic", "underline", "strikeThrough"]) {
       const button = ribbon.querySelector('.tool-button[data-action=' + action + ']');
       if (button) button.setAttribute("aria-pressed", String(document.queryCommandState(action)));
+    }
+    for (const [action, selector] of [["insertUnorderedList", "ul"], ["insertOrderedList", "ol"]]) {
+      const button = ribbon.querySelector('.tool-button[data-action=' + action + ']');
+      if (button) button.setAttribute("aria-pressed", String(Boolean(focusElement?.closest(selector))));
+    }
+    const alignmentTarget = block || editor;
+    const textAlign = getComputedStyle(alignmentTarget).textAlign;
+    const direction = getComputedStyle(alignmentTarget).direction;
+    const alignments = {
+      justifyLeft: textAlign === "left" || (textAlign === "start" && direction !== "rtl"),
+      justifyCenter: textAlign === "center",
+      justifyRight: textAlign === "right" || (textAlign === "start" && direction === "rtl"),
+    };
+    for (const [action, pressed] of Object.entries(alignments)) {
+      const button = ribbon.querySelector('.tool-button[data-action=' + action + ']');
+      if (button) button.setAttribute("aria-pressed", String(pressed));
     }
   }
 
