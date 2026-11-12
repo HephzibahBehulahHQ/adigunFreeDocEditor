@@ -113,3 +113,21 @@
 
 .zoom-button.zoom-fit{width:auto;min-width:30px;padding:2px 6px;border:1px solid var(--line);border-radius:5px;font-size:10px;line-height:1.3;color:var(--muted)}
 .zoom-button.zoom-fit:hover,.zoom-button.zoom-fit:focus-visible{background:var(--purple-soft);color:var(--navy)}
+
+
+/* The ruler mirrors the editor's supported half-inch paragraph indent steps. */
+.document-ruler{margin:0 0 0 70px;padding:10px 0 9px;color:#647187;border-bottom:1px solid #eef1f5;font:10px/1.2 Inter,ui-sans-serif,system-ui,sans-serif}
+.document-ruler-heading{display:flex;align-items:center;justify-content:space-between;width:min(192px,100%);margin-bottom:3px}
+.document-ruler-heading label{font-weight:650}
+.document-ruler-heading output{font-variant-numeric:tabular-nums;color:#344056}
+.ruler-measure{width:min(192px,100%)}
+.ruler-values{display:flex;justify-content:space-between;padding:0 2px 2px;color:#7d8798;font-size:9px}
+#paragraph-indent-ruler{display:block;width:100%;height:17px;margin:0;appearance:none;background:linear-gradient(to bottom,transparent 0 9px,#bbc4d2 9px 10px,transparent 10px),repeating-linear-gradient(to right,transparent 0 23px,#cbd2de 23px 24px,transparent 24px 47px,#9da9bb 47px 48px);cursor:pointer}
+#paragraph-indent-ruler::-webkit-slider-thumb{width:12px;height:12px;appearance:none;border:1px solid #5448b3;border-radius:2px;background:#766ad6;box-shadow:0 1px 3px #25304a55;transform:rotate(45deg);cursor:ew-resize}
+#paragraph-indent-ruler::-moz-range-thumb{width:10px;height:10px;border:1px solid #5448b3;border-radius:2px;background:#766ad6;box-shadow:0 1px 3px #25304a55;transform:rotate(45deg);cursor:ew-resize}
+#paragraph-indent-ruler:focus-visible{outline:2px solid #6557c2;outline-offset:2px}
+#paragraph-indent-ruler:disabled{cursor:not-allowed;opacity:.45}
+.editor-card.paper-layout #document-ruler{margin-left:100px}
+.editor-card.paper-layout.margin-narrow #document-ruler{margin-left:48px}
+.editor-card.paper-layout.margin-wide #document-ruler{margin-left:192px}
+@media(max-width:700px){.document-ruler{margin-left:28px}.editor-card.paper-layout #document-ruler{margin-left:28px}.editor-card.paper-layout.margin-wide #document-ruler{margin-left:30px}}
