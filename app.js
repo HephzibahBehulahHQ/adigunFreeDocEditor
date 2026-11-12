@@ -21,6 +21,7 @@
   let activePdfFile;
   let pageOrientation = "portrait";
   let paperSize = "a4";
+  let pageCanvasDimensions = "";
   let pageMargins = "normal";
   let tableInsertionRange;
   let imageInsertionRange;
@@ -100,6 +101,7 @@
   function countWords() {
     const isEditableDocument = editor.contentEditable === "true";
     const plainText = isEditableDocument ? editor.innerText.trim() : "";
+    applyPaperCanvasMinimumHeight();
     const words = plainText.match(/[\p{L}\p{N}]+(?:['’_-][\p{L}\p{N}]+)*/gu) || [];
     $("#word-count").textContent = `${words.length} ${words.length === 1 ? "word" : "words"}`;
     const manualBreakCount = editor.querySelectorAll('hr[data-page-break="true"]').length;
@@ -792,6 +794,8 @@
   function setZoom(next) {
     zoom = Math.max(70, Math.min(150, next));
     editor.style.zoom = `${zoom}%`;
+    pageCanvasDimensions = "";
+    applyPaperCanvasMinimumHeight();
     $("#zoom-value").textContent = `${zoom}%`;
   }
 
@@ -887,7 +891,7 @@
         imagePicker.click();
         break;
       }
-      case "orientation": pageOrientation = pageOrientation === "portrait" ? "landscape" : "portrait"; $("#editor-card").classList.toggle("landscape", pageOrientation === "landscape"); button.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape"; saveDocument(); break;
+      case "orientation": pageOrientation = pageOrientation === "portrait" ? "landscape" : "portrait"; $("#editor-card").classList.toggle("landscape", pageOrientation === "landscape"); button.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape"; pageCanvasDimensions = ""; applyPaperCanvasMinimumHeight(); saveDocument(); break;
       case "add-comment": openCommentDialog(); break;
       case "show-comments": showReviewPanel(true); break;
       case "spellcheck": editor.spellcheck = !editor.spellcheck; button.setAttribute("aria-pressed", String(editor.spellcheck)); notify(`Browser spellcheck ${editor.spellcheck ? "on" : "off"}.`); break;
@@ -898,6 +902,24 @@
       case "find": openFindDialog(); break;
       case "assistant": toggleAssistant(); break;
     }
+  }
+
+  function applyPaperCanvasMinimumHeight() {
+    const card = $("#editor-card");
+    if (card.classList.contains("landing") || editor.contentEditable !== "true") {
+      editor.style.minHeight = "";
+      pageCanvasDimensions = "";
+      return;
+    }
+    const width = editor.clientWidth;
+    if (!width) return;
+    const ratio = paperSize === "letter"
+      ? (pageOrientation === "landscape" ? 11 / 8.5 : 8.5 / 11)
+      : (pageOrientation === "landscape" ? 297 / 210 : 210 / 297);
+    const key = `${paperSize}:${pageOrientation}:${width}`;
+    if (key === pageCanvasDimensions) return;
+    pageCanvasDimensions = key;
+    editor.style.minHeight = `${Math.ceil(width / ratio)}px`;
   }
 
   function applyPageLayout(layout = {}) {
@@ -915,11 +937,15 @@
     if (marginsSelect) marginsSelect.value = pageMargins;
     const orientationButton = ribbon.querySelector('[data-action="orientation"]');
     if (orientationButton) orientationButton.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape";
+    pageCanvasDimensions = "";
+    applyPaperCanvasMinimumHeight();
   }
 
   function setPaper(size) {
     paperSize = size === "letter" ? "letter" : "a4";
     $("#editor-card").classList.toggle("paper-letter", paperSize === "letter");
+    pageCanvasDimensions = "";
+    applyPaperCanvasMinimumHeight();
     saveDocument();
   }
 
@@ -1284,6 +1310,8 @@
   filePicker.addEventListener("cancel", () => { filePicker.accept = acceptedFileTypes; });
   imagePicker.addEventListener("change", () => { insertLocalImage(imagePicker.files[0]); imagePicker.value = ""; });
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
+  window.addEventListener("resize", applyPaperCanvasMinimumHeight);
+  if (window.ResizeObserver) new ResizeObserver(applyPaperCanvasMinimumHeight).observe(editor);
   editor.addEventListener("input", () => { countWords(); clearTimeout(reviewHighlightTimer); reviewHighlightTimer = setTimeout(updateReviewHighlights, 350); saveDocument(); if (!replacingAllMatches && $("#find-dialog").open) refreshFindMatches(false); });
   $("#outline-search").addEventListener("input", renderOutline);
   $("#toggle-outline").addEventListener("click", () => {
