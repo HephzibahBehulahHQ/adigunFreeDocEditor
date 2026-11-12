@@ -5,11 +5,11 @@ Status is specific to the current first workspace slice.
 | Feature | Current status | Evidence / limit |
 |---|---|---|
 | Responsive workspace shell and entry screen | Implemented | `index.html` and responsive rules in `styles.css`. |
-| Page setup controls | Partial | A4/US Letter, portrait/landscape and Normal/Narrow/Wide margins persist per document and map to DOCX section properties. The editing surface groups top-level blocks into paper-sized sheets, shows live page thumbnails, and navigates by page. Explicit page breaks persist and export as OOXML breaks. Oversized blocks grow beyond a sheet; content does not split within paragraphs and layout does not reproduce Word pagination. |
+| Page setup controls | Partial | A4/US Letter, portrait/landscape and Normal/Narrow/Wide margins persist per document and map to DOCX section properties. New-document paper, orientation and margin defaults are stored in browser preferences. The editing surface groups top-level blocks into paper-sized sheets, shows live page thumbnails, and navigates by page. Explicit page breaks persist and export as OOXML breaks. Oversized blocks grow beyond a sheet; content does not split within paragraphs and layout does not reproduce Word pagination. |
 | Landing file drop | Implemented | Keyboard-accessible file picker and file drag-and-drop support DOCX, PDF, TXT, Markdown and HTML; unsupported extensions are rejected. |
 | Document outline navigation | Implemented | Heading levels 1–3 are listed from the open editable document; heading filter and click-to-navigate use current document content. Collapsible panel on tablet and mobile. |
 | Create blank document and basic editing | Implemented | Browser editing surface and Home/Insert/Layout/Review/View controls. |
-| Structured document model | Partial | Versioned allow-listed node tree is now the source for local persistence and exports; the interactive editing surface still uses browser contenteditable. The canvas uses continuous scrolling and does not calculate printed page breaks. |
+| Structured document model | Partial | Versioned allow-listed node tree is now the source for local persistence and exports; the interactive editing surface still uses browser contenteditable. The editor groups top-level blocks into paper-sized sheets; oversized blocks grow beyond a sheet, and paragraphs are not split across pages. |
 | Insert and edit tables | Partial | Insert up to 50 rows × 20 columns; table cells are editable. No row/column merge tools. |
 | Insert local images | Implemented | PNG, JPEG and GIF up to 8 MB; stored in the browser document. |
 | Autosave and reopen | Implemented | IndexedDB; preference is stored locally; Ctrl+S is available. |

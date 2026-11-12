@@ -18,6 +18,7 @@ Open `http://localhost:4173`. The application has no build step. The DOCX conver
 - Export editable documents as `.docx`, preserving supported headings, basic text emphasis, hyperlinks, lists, tables, PNG/JPEG/GIF images, page size and orientation. Table cell spans are limited; revisions and advanced Word styling are not preserved.
 - Import `.docx` as editable semantic content, including supported headings, lists, tables and safe inline raster images. Mammoth converts Word structure to HTML; page layout and advanced Word styling are not preserved.
 - Save and reopen editable documents in this browser's IndexedDB. Autosave can be switched off; Ctrl+S remains available.
+- Set default paper size, orientation and margins for newly created documents in Settings.
 - New and migrated documents are stored as versioned, allow-listed JSON trees; HTML and Word export serialize from that model.
 - Import TXT, Markdown and HTML as editable text.
 - View a PDF using the browser's PDF viewer and download the original PDF.

@@ -8,7 +8,7 @@ The repository initially contained the product specification, mockup, custom-dom
 - `styles.css` defines responsive layout and maps the verified HB brand tokens.
 - `app.js` owns document state, toolbar actions, browser-local persistence, file import/export and the local extractive overview.
 - `document-model.js` normalizes editable content to a versioned JSON tree with an allow-list for nodes and attributes. IndexedDB stores this model; older HTML records are migrated on open, and HTML/DOCX exports serialize through the model.
-- The editor groups top-level blocks into paper-sized sheets, renders visual page previews, and provides page navigation. Explicit page breaks persist; oversized blocks expand beyond a sheet, and paragraphs are not split across pages.
+- The editor groups top-level blocks into paper-sized sheets, renders visual page previews, and provides page navigation. New-document page defaults are stored in local preferences and applied to blank documents and imports that lack page setup. Explicit page breaks persist; oversized blocks expand beyond a sheet, and paragraphs are not split across pages.
 - The built-in Word exporter packages a documented subset of the editable HTML as OOXML in an uncompressed ZIP container; it preserves basic tables, header rows, column spans and embedded PNG/JPEG/GIF files, and confirms before exporting content it cannot retain. It uses no external runtime service and does not claim full Word fidelity.
 - DOCX import uses the locally vendored Mammoth 1.12.2 browser build, checks ZIP structure and expanded-size limits, then copies only allow-listed HTML elements and safe links/embedded raster images into the editor.
 - `assets/hb-official.jpg` is the unmodified corporate artwork from the shared design system.
