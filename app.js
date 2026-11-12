@@ -102,12 +102,14 @@
     const plainText = isEditableDocument ? editor.innerText.trim() : "";
     const words = plainText.match(/[\p{L}\p{N}]+(?:['’_-][\p{L}\p{N}]+)*/gu) || [];
     $("#word-count").textContent = `${words.length} ${words.length === 1 ? "word" : "words"}`;
-    $("#page-count").textContent = "Continuous view";
+    const manualBreakCount = editor.querySelectorAll('hr[data-page-break="true"]').length;
+    $("#page-count").textContent = manualBreakCount ? `Continuous view · ${manualBreakCount} manual ${manualBreakCount === 1 ? "break" : "breaks"}` : "Continuous view";
     $("#insight-words").textContent = isEditableDocument ? words.length.toLocaleString() : "—";
     $("#insight-characters").textContent = isEditableDocument ? plainText.length.toLocaleString() : "—";
     $("#insight-reading").textContent = isEditableDocument ? (words.length < 180 ? "<1 min" : `${Math.ceil(words.length / 180)} min`) : "—";
  
     renderOutline();
+    renderPageBreakNavigation();
   }
 
   function renderOutline() {
@@ -132,6 +134,24 @@
     empty.textContent = headings.length && query ? "No headings match this filter." : "Add a heading from the Home ribbon to build an outline.";
   }
 
+  function renderPageBreakNavigation() {
+    const list = $("#break-navigation-list");
+    if (!list) return;
+    const markers = [...editor.querySelectorAll('hr[data-page-break="true"]')];
+    $("#break-navigation-count").textContent = `${markers.length} ${markers.length === 1 ? "break" : "breaks"}`;
+    list.replaceChildren();
+    const locations = [{ label: "Document start", marker: null }, ...markers.map((marker, index) => ({ label: `After break ${index + 1}`, marker }))];
+    for (let index = 0; index < locations.length; index++) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "break-navigation-item";
+      button.dataset.breakLocation = String(index);
+      button.textContent = locations[index].label;
+      button.setAttribute("aria-label", index === 0 ? "Go to document start" : `Go to start after manual page break ${index}`);
+      list.append(button);
+    }
+    $("#break-navigation-empty").hidden = markers.length > 0;
+  }
   function normalizeReviewComments(value) {
     if (!Array.isArray(value)) return [];
     return value.filter((item) => item && typeof item.quote === "string" && typeof item.body === "string")
@@ -1271,6 +1291,24 @@
     const open = panel.classList.toggle("mobile-open");
     if (open) showReviewPanel(false);
     $("#toggle-outline").setAttribute("aria-expanded", String(open));
+  });
+  $("#break-navigation-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-break-location]");
+    if (!button || editor.contentEditable !== "true") return;
+    const location = Number(button.dataset.breakLocation);
+    const markers = [...editor.querySelectorAll('hr[data-page-break="true"]')];
+    if (!Number.isInteger(location) || location < 0 || location > markers.length) return;
+    const marker = location === 0 ? null : markers[location - 1];
+    const target = marker ? (marker.nextElementSibling || marker) : (editor.firstElementChild || editor);
+    editor.focus({ preventScroll: true });
+    const range = document.createRange();
+    if (marker && !marker.nextSibling) range.setStartAfter(marker);
+    else range.selectNodeContents(target);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    target.scrollIntoView({ block: "center", behavior: "auto" });
   });
   $("#outline-list").addEventListener("click", (event) => {
     const button = event.target.closest("[data-outline-index]");
