@@ -18,7 +18,8 @@ const paragraph = (child) => ({
   nodeType: 1, tagName: "P", children: [child], childNodes: [child], style: { textAlign: "" }, textContent: "",
   closest() { return null; },
 });
-const root = { children: [paragraph(image()), paragraph(image())] };
+const pageBreak = { nodeType: 1, tagName: "HR", children: [], childNodes: [], textContent: "", getAttribute(name) { return name === "data-page-break" ? "true" : null; } };
+const root = { children: [paragraph(image()), pageBreak, paragraph(image())] };
 const page = { classList: { contains() { return false; } } };
 const factory = new Function("Node", "editor", "title", "atob", "$", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip };`);
 const { makeWordPackage, makeStoredZip } = factory(Node, root, () => "Image export QA", atob, () => page);
@@ -45,6 +46,7 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
   assert.deepEqual(entries.get("word/media/image1.png"), Buffer.from(png, "base64"));
   const documentXml = entries.get("word/document.xml").toString("utf8");
   assert.equal((documentXml.match(/<wp:inline/g) || []).length, 2);
+  assert.match(documentXml, /<w:br w:type="page"\/>/);
   assert.match(documentXml, /cx="19050" cy="9525"/);
   assert.match(documentXml, /Diagram &amp; plan/);
   assert.equal((entries.get("word/_rels/document.xml.rels").toString("utf8").match(/relationships\/image/g) || []).length, 1);

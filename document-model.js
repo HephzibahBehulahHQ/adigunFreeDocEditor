@@ -35,6 +35,7 @@
         if (Number.isInteger(value) && value > 1 && value <= 50) result[dimension] = value;
       }
     }
+    if (tag === "hr" && attributes["data-page-break"] === "true") result["data-page-break"] = "true";
     if (tag === "ol") {
       const start = Number(attributes.start);
       if (Number.isInteger(start) && start > 1 && start <= 100000) result.start = start;
@@ -71,7 +72,7 @@
     if (node.nodeType !== Node.ELEMENT_NODE) return null;
     const tag = node.tagName.toLowerCase();
     const attrs = {};
-    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start"]) {
+    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break"]) {
       const value = node.getAttribute(name);
       if (value !== null) attrs[name] = value;
     }
