@@ -88,7 +88,7 @@
     insert: [
       [{ label: "Add link", action: "link", icon: "↗ Link" }, { label: "Remove link", action: "unlink", icon: "↗̸" }],
       [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert page break", action: "page-break", icon: "↧ Page break" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }, { label: "Insert image from this device", action: "image", icon: "▧ Image" }],
-      [{ label: "Insert row above", action: "table-row-above", icon: "▤ Row ↑" }, { label: "Insert row below", action: "table-row-below", icon: "▤ Row ↓" }, { label: "Insert column left", action: "table-column-left", icon: "▥ Col ←" }, { label: "Insert column right", action: "table-column-right", icon: "▥ Col →" }, { label: "Delete row", action: "table-row-delete", icon: "⌫ Row" }, { label: "Delete column", action: "table-column-delete", icon: "⌫ Col" }, { label: "Delete table", action: "table-delete", icon: "⌫ Table" }, { label: "Merge adjacent cells", action: "table-merge", icon: "▦ Merge" }, { label: "Split merged cell", action: "table-split", icon: "▦ Split" }],
+      [{ label: "Insert row above", action: "table-row-above", icon: "▤ Row ↑" }, { label: "Insert row below", action: "table-row-below", icon: "▤ Row ↓" }, { label: "Insert column left", action: "table-column-left", icon: "▥ Col ←" }, { label: "Insert column right", action: "table-column-right", icon: "▥ Col →" }, { label: "Delete row", action: "table-row-delete", icon: "⌫ Row" }, { label: "Delete column", action: "table-column-delete", icon: "⌫ Col" }, { label: "Delete table", action: "table-delete", icon: "⌫ Table" }, { label: "Merge adjacent cells", action: "table-merge", icon: "▦ Merge" }, { label: "Merge cells vertically", action: "table-merge-vertical", icon: "▤ Merge ↓" }, { label: "Split merged cell", action: "table-split", icon: "▦ Split" }],
     ],
     layout: [
       [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }],
@@ -994,12 +994,19 @@
       const rows = table ? [...table.querySelectorAll("tr")].filter((item) => item.closest("table") === table) : [];
       const deleteRowButton = ribbon.querySelector('.tool-button[data-action="table-row-delete"]');
       const deleteColumnButton = ribbon.querySelector('.tool-button[data-action="table-column-delete"]');
-      if (deleteRowButton) deleteRowButton.disabled = rows.length <= 1;
-      if (deleteColumnButton) deleteColumnButton.disabled = rows.some((row) => row.cells.length - (tableCell.cellIndex < row.cells.length ? 1 : 0) < 1);
+      const verticalMerges = hasVerticalMerges(table);
+      for (const action of ["table-row-above", "table-row-below", "table-column-left", "table-column-right", "table-row-delete", "table-column-delete"]) {
+        const button = ribbon.querySelector('.tool-button[data-action="' + action + '"]');
+        if (button) button.disabled = verticalMerges;
+      }
+      if (deleteRowButton) deleteRowButton.disabled = verticalMerges || rows.length <= 1;
+      if (deleteColumnButton) deleteColumnButton.disabled = verticalMerges || rows.some((row) => row.cells.length - (tableCell.cellIndex < row.cells.length ? 1 : 0) < 1);
       const mergeButton = ribbon.querySelector('.tool-button[data-action="table-merge"]');
       if (mergeButton) mergeButton.disabled = selectedTableCells().length < 2;
+      const verticalMergeButton = ribbon.querySelector('.tool-button[data-action="table-merge-vertical"]');
+      if (verticalMergeButton) verticalMergeButton.disabled = selectedVerticalTableCells().length < 2;
       const splitButton = ribbon.querySelector('.tool-button[data-action="table-split"]');
-      if (splitButton) splitButton.disabled = (Number(tableCell.getAttribute("colspan")) || 1) <= 1;
+      if (splitButton) splitButton.disabled = (Number(tableCell.getAttribute("colspan")) || 1) <= 1 && (Number(tableCell.getAttribute("rowspan")) || 1) <= 1;
     }
     if (!inEditor(focusNode) && !inEditor(anchorNode)) return;
     const contextNode = inEditor(focusNode) ? focusNode : anchorNode;
@@ -1057,6 +1064,32 @@
     }
   }
 
+  function tableGridRows(table) {
+    const rows = [...table.querySelectorAll("tr")].filter((row) => row.closest("table") === table);
+    const occupied = rows.map(() => new Map());
+    const layouts = [];
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      const entries = [];
+      let column = 0;
+      for (const cell of rows[rowIndex].cells) {
+        const span = Math.max(1, Number(cell.getAttribute("colspan")) || 1);
+        while (Array.from({ length: span }, (_, offset) => column + offset).some((slot) => occupied[rowIndex].has(slot))) column++;
+        const rowSpan = Math.max(1, Number(cell.getAttribute("rowspan")) || 1);
+        entries.push({ cell, start: column, span, rowSpan });
+        for (let down = rowIndex; down < Math.min(rows.length, rowIndex + rowSpan); down++) {
+          for (let across = column; across < column + span; across++) occupied[down].set(across, cell);
+        }
+        column += span;
+      }
+      layouts.push({ row: rows[rowIndex], entries });
+    }
+    return layouts;
+  }
+
+  function hasVerticalMerges(table) {
+    return tableGridRows(table).some((layout) => layout.entries.some((entry) => entry.rowSpan > 1));
+  }
+
   function selectedTableCell() {
     const selection = window.getSelection();
     const node = selection?.focusNode || selection?.anchorNode;
@@ -1083,6 +1116,35 @@
     const cells = [...startCell.parentElement.cells].slice(firstIndex, lastIndex + 1);
     if (cells.length < 2 || cells.some((cell) => !range.intersectsNode(cell) || cell.rowSpan > 1)) return [];
     return cells;
+  }
+
+  function selectedVerticalTableCells() {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || selection.isCollapsed) return [];
+    const range = selection.getRangeAt(0);
+    const cellFor = (node) => {
+      const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+      const cell = element?.closest("th,td");
+      return cell && editor.contains(cell) ? cell : null;
+    };
+    const startCell = cellFor(range.startContainer);
+    const endCell = cellFor(range.endContainer);
+    const table = startCell?.closest("table");
+    if (!table || table !== endCell?.closest("table")) return [];
+    const layouts = tableGridRows(table);
+    const firstRow = layouts.findIndex((layout) => layout.row === startCell.parentElement);
+    const lastRow = layouts.findIndex((layout) => layout.row === endCell.parentElement);
+    if (firstRow < 0 || lastRow <= firstRow) return [];
+    const first = layouts[firstRow].entries.find((entry) => entry.cell === startCell);
+    const last = layouts[lastRow].entries.find((entry) => entry.cell === endCell);
+    if (!first || !last || first.start !== last.start || first.span !== 1 || last.span !== 1 || first.rowSpan !== 1 || last.rowSpan !== 1) return [];
+    const cells = [];
+    for (let rowIndex = firstRow; rowIndex <= lastRow; rowIndex++) {
+      const matches = layouts[rowIndex].entries.filter((entry) => entry.start === first.start);
+      if (matches.length !== 1 || matches[0].span !== 1 || matches[0].rowSpan !== 1 || !range.intersectsNode(matches[0].cell)) return [];
+      cells.push(matches[0].cell);
+    }
+    return cells.length > 1 ? cells : [];
   }
 
   function selectedParagraphBlocks() {
@@ -1164,6 +1226,7 @@
     const row = activeCell.closest("tr");
     const table = row?.closest("table");
     if (!row || !table) return;
+    if (hasVerticalMerges(table)) { notify("Split vertically merged cells before changing table rows or columns."); return; }
     const rows = [...table.querySelectorAll("tr")].filter((item) => item.closest("table") === table);
     if (rows.length >= 1000) { notify("Tables are limited to 1,000 rows."); return; }
     const newRow = document.createElement("tr");
@@ -1190,6 +1253,7 @@
     const row = activeCell.closest("tr");
     const table = row?.closest("table");
     if (!row || !table) return;
+    if (hasVerticalMerges(table)) { notify("Split vertically merged cells before changing table rows or columns."); return; }
     const rows = [...table.querySelectorAll("tr")].filter((item) => item.closest("table") === table);
     if (rows.some((item) => item.cells.length >= 50)) { notify("Tables are limited to 50 columns."); return; }
     const targetIndex = activeCell.cellIndex + (position === "right" ? 1 : 0);
@@ -1220,10 +1284,40 @@
     notify("Merged " + cells.length + " adjacent cells.");
   }
 
+  function mergeTableCellsVertically() {
+    const cells = selectedVerticalTableCells();
+    if (cells.length < 2) { notify("Select adjacent cells in one column first."); return; }
+    const firstCell = cells[0];
+    for (const cell of cells.slice(1)) {
+      while (cell.firstChild) firstCell.append(cell.firstChild);
+      cell.remove();
+    }
+    firstCell.setAttribute("rowspan", String(cells.length));
+    focusTableCell(firstCell);
+    notify("Merged " + cells.length + " cells vertically.");
+  }
+
   function splitTableCell() {
     const cell = selectedTableCell();
     if (!cell) { notify("Place the cursor in a table cell first."); return; }
     const span = Number(cell.getAttribute("colspan")) || 1;
+    const rowSpan = Number(cell.getAttribute("rowspan")) || 1;
+    if (span <= 1 && rowSpan > 1) {
+      const layouts = tableGridRows(cell.closest("table"));
+      const rowIndex = layouts.findIndex((layout) => layout.row === cell.parentElement);
+      const entry = layouts[rowIndex]?.entries.find((item) => item.cell === cell);
+      const nextLayout = layouts[rowIndex + 1];
+      if (!entry || !nextLayout || rowIndex + rowSpan > layouts.length) { notify("The merged cell cannot be split at this table boundary."); return; }
+      cell.removeAttribute("rowspan");
+      const newCell = document.createElement(cell.tagName.toLowerCase());
+      if (rowSpan - 1 > 1) newCell.setAttribute("rowspan", String(rowSpan - 1));
+      newCell.innerHTML = "<p><br></p>";
+      const nextEntry = nextLayout.entries.find((item) => item.start >= entry.start);
+      nextLayout.row.insertBefore(newCell, nextEntry?.cell || null);
+      focusTableCell(newCell);
+      notify("Split the vertical merge at the next row.");
+      return;
+    }
     if (span <= 1) { notify("Select a merged cell to split."); return; }
     const firstSpan = Math.ceil(span / 2);
     const secondSpan = span - firstSpan;
@@ -1241,6 +1335,7 @@
   function deleteTableRow() {
     const activeCell = selectedTableCell();
     if (!activeCell) { notify("Place the cursor in a table cell first."); return; }
+    if (hasVerticalMerges(activeCell.closest("table"))) { notify("Split vertically merged cells before changing table rows or columns."); return; }
     const row = activeCell.closest("tr");
     const table = row?.closest("table");
     if (!row || !table) return;
@@ -1276,6 +1371,7 @@
   function deleteTableColumn() {
     const activeCell = selectedTableCell();
     if (!activeCell) { notify("Place the cursor in a table cell first."); return; }
+    if (hasVerticalMerges(activeCell.closest("table"))) { notify("Split vertically merged cells before changing table rows or columns."); return; }
     const row = activeCell.closest("tr");
     const table = row?.closest("table");
     if (!row || !table) return;
@@ -1328,6 +1424,7 @@
       case "table-column-delete": deleteTableColumn(); break;
       case "table-delete": deleteTable(); break;
       case "table-merge": mergeTableCells(); break;
+      case "table-merge-vertical": mergeTableCellsVertically(); break;
       case "table-split": splitTableCell(); break;
       case "undo": case "redo": case "bold": case "italic": case "underline": case "strikeThrough": case "insertUnorderedList": case "insertOrderedList": case "justifyLeft": case "justifyCenter": case "justifyRight": case "justifyFull": case "removeFormat": case "unlink":
         runCommand(action); break;
