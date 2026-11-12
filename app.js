@@ -524,7 +524,7 @@
     $("#editor-card").classList.remove("pdf-preview");
     $("#editor-card").classList.add("landing");
     editor.hidden = false;
-    editor.innerHTML = '<section class="landing-page"><span class="landing-kicker">ADIGUNFREEDOCEDITOR</span><h2>Your documents.<br>Your workspace.</h2><p>Create a document or open one of the file types supported in this first workspace.</p><div class="landing-actions"><button class="landing-primary" type="button" id="landing-create">Create blank document</button><button class="landing-secondary" type="button" id="landing-open-word">Open Word document</button><button class="landing-secondary" type="button" id="landing-open-pdf">Open PDF</button></div><section class="landing-recents" id="landing-recents" aria-labelledby="landing-recents-title"><div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div><button class="landing-all" type="button" id="landing-all">View all</button></div><p class="landing-recents-empty">Loading saved documents…</p></section><div class="landing-details"><div><strong>Work stays here</strong><span>Editable document text is saved in this browser. No account or cloud sync is active.</span></div><div><strong>Supported in this build</strong><span>Import Word structure, edit TXT, Markdown and HTML, or view and download PDF</span></div></div></section>';
+    editor.innerHTML = '<section class="landing-page"><span class="landing-kicker">ADIGUNFREEDOCEDITOR</span><h2>Your documents.<br>Your workspace.</h2><p>Create a document or open one of the file types supported in this first workspace.</p><div class="landing-actions"><button class="landing-primary" type="button" id="landing-create">Create blank document</button><button class="landing-secondary" type="button" id="landing-open-word">Open Word document</button><button class="landing-secondary" type="button" id="landing-open-pdf">Open PDF</button></div><button class="landing-dropzone" type="button" id="landing-open-file" aria-label="Choose or drop a Word, PDF, text, Markdown, or HTML file"><span class="landing-dropzone-icon" aria-hidden="true">↥</span><span class="landing-dropzone-copy"><strong>Choose a file or drop it here</strong><small>DOCX · PDF · TXT · Markdown · HTML</small></span></button><section class="landing-recents" id="landing-recents" aria-labelledby="landing-recents-title"><div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div><button class="landing-all" type="button" id="landing-all">View all</button></div><p class="landing-recents-empty">Loading saved documents…</p></section><div class="landing-details"><div><strong>Work stays here</strong><span>Editable document text is saved in this browser. No account or cloud sync is active.</span></div><div><strong>Supported in this build</strong><span>Import Word structure, edit TXT, Markdown and HTML, or view and download PDF</span></div></div></section>';
     loadLandingRecentDocuments();
   }
 
@@ -1275,6 +1275,7 @@
     if (event.target.closest("#landing-create")) createDocument();
     if (event.target.closest("#landing-open-word")) openFilePicker(".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     if (event.target.closest("#landing-open-pdf")) openFilePicker(".pdf,application/pdf");
+    if (event.target.closest("#landing-open-file")) openFilePicker();
     if (event.target.closest("#landing-all")) document.querySelector('[data-view="recent"]')?.click();
     const trashButton = event.target.closest("[data-trash-id]"); if (trashButton) markDeleted(trashButton.dataset.trashId, true);
     const restoreButton = event.target.closest("[data-restore-id]"); if (restoreButton) markDeleted(restoreButton.dataset.restoreId, false);
@@ -1391,8 +1392,35 @@
     const mod = event.ctrlKey || event.metaKey;
     if (mod && event.key.toLowerCase() === "s") { event.preventDefault(); saveDocument(true); notify("Saved in this browser."); }
   });
-  for (const type of ["dragenter", "dragover"]) $("#document-stage").addEventListener(type, (event) => { event.preventDefault(); $("#editor-card").classList.add("drop-active"); });
-  for (const type of ["dragleave", "drop"]) $("#document-stage").addEventListener(type, (event) => { event.preventDefault(); $("#editor-card").classList.remove("drop-active"); if (type === "drop") importFile(event.dataTransfer.files[0]); });
+  const documentStage = $("#document-stage");
+  let fileDragDepth = 0;
+  function isFileDrag(event) {
+    return Array.from(event.dataTransfer?.types || []).includes("Files");
+  }
+  documentStage.addEventListener("dragenter", (event) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    fileDragDepth++;
+    $("#editor-card").classList.add("drop-active");
+  });
+  documentStage.addEventListener("dragover", (event) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  });
+  documentStage.addEventListener("dragleave", (event) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    fileDragDepth = Math.max(0, fileDragDepth - 1);
+    if (!fileDragDepth) $("#editor-card").classList.remove("drop-active");
+  });
+  documentStage.addEventListener("drop", (event) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    fileDragDepth = 0;
+    $("#editor-card").classList.remove("drop-active");
+    importFile(event.dataTransfer.files[0]);
+  });
 
   document.addEventListener("selectionchange", updateRibbonSelection);
   for (const event of ["click", "keyup", "mouseup", "input", "focus"]) editor.addEventListener(event, updateRibbonSelection);
