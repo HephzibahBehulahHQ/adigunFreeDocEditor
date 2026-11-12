@@ -11,7 +11,9 @@ The repository initially contained the product specification, mockup, custom-dom
 - DOCX import uses the locally vendored Mammoth 1.12.2 browser build, checks ZIP structure and expanded-size limits, then copies only allow-listed HTML elements and safe links/embedded raster images into the editor.
 - `assets/hb-official.jpg` is the unmodified corporate artwork from the shared design system.
 - IndexedDB stores editable document records in this browser. PDF files remain in memory while open and are not copied into the document store.
+- Inserted PNG, JPEG and GIF images are verified by file signature, limited to 8 MB and stored as embedded data URLs in the local editable document.
 
 The editor currently supports a bounded set of browser editing commands. This is not a DOCX document model or an OOXML parser. Before DOCX compatibility, complex revisions, or conversion work, replace or wrap the editing surface with a structured document engine and verify round-trip behavior against representative files.
 
 The Adigun panel has no provider adapter. Its current overview is a deterministic extractive operation over local text, explicitly labelled as such; no document content leaves the browser.
+

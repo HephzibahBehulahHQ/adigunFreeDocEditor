@@ -7,6 +7,7 @@ Status is specific to the current first workspace slice.
 | Responsive workspace shell and entry screen | Implemented | `index.html` and responsive rules in `styles.css`. |
 | Create blank document and basic editing | Implemented | Browser editing surface and Home/Insert/Layout/Review/View controls. |
 | Insert and edit tables | Partial | Insert up to 50 rows × 20 columns; table cells are editable. No row/column merge tools. |
+| Insert local images | Implemented | PNG, JPEG and GIF up to 8 MB; stored in the browser document. DOCX export does not yet preserve inserted images. |
 | Autosave and reopen | Implemented | IndexedDB; preference is stored locally; Ctrl+S is available. |
 | TXT, Markdown and HTML import | Implemented | Imports plain text into the editor; source HTML formatting is not preserved. |
 | PDF viewing and download | Implemented | Browser PDF viewer; editing and page operations are not supported. |
@@ -18,4 +19,5 @@ Status is specific to the current first workspace slice.
 | Hosted AI, translation or rewriting | Not implemented | No provider or backend is configured; no simulated results. |
 | Accounts, cloud sync or shared documents | Not implemented | No identity or remote persistence service exists in this repository. |
 | Track changes and review history | Not implemented | Not represented as a live control in the interface. |
+
 
