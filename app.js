@@ -456,6 +456,7 @@
         if (tool.select) {
           control = document.createElement("select");
           control.className = "tool-select";
+          control.dataset.tool = tool.select;
           control.setAttribute("aria-label", tool.label);
           for (const [value, label] of tool.options) {
             const option = document.createElement("option"); option.value = value; option.textContent = label; control.append(option);
@@ -467,7 +468,7 @@
           });
         } else {
           control = document.createElement("button");
-          control.type = "button"; control.className = "tool-button"; control.textContent = tool.icon; control.title = tool.label; control.setAttribute("aria-label", tool.label);
+          control.type = "button"; control.className = "tool-button"; control.dataset.action = tool.action; control.textContent = tool.icon; control.title = tool.label; control.setAttribute("aria-label", tool.label);
           if (tool.pressed) control.setAttribute("aria-pressed", "false");
           control.addEventListener("click", () => runTool(tool.action, control));
         }
@@ -475,11 +476,33 @@
       }
       ribbon.append(section);
     }
+    updateRibbonSelection();
+  }
+
+  function updateRibbonSelection() {
+    const selection = window.getSelection();
+    const focusNode = selection?.focusNode;
+    if (!focusNode || (focusNode !== editor && !editor.contains(focusNode))) return;
+    const focusElement = focusNode.nodeType === Node.ELEMENT_NODE ? focusNode : focusNode.parentElement;
+    const block = focusElement?.closest("h1,h2,h3,p,li,blockquote,pre");
+    const blockSelect = ribbon.querySelector("[data-tool=block]");
+    if (blockSelect) {
+      const tag = block?.tagName.toLowerCase();
+      blockSelect.value = ["h1", "h2", "h3"].includes(tag) ? tag : "p";
+    }
+    const fontSelect = ribbon.querySelector("[data-tool=size]");
+    const fontSize = document.queryCommandValue("fontSize");
+    if (fontSelect && [...fontSelect.options].some((option) => option.value === fontSize)) fontSelect.value = fontSize;
+    for (const action of ["bold", "italic", "underline"]) {
+      const button = ribbon.querySelector('.tool-button[data-action=' + action + ']');
+      if (button) button.setAttribute("aria-pressed", String(document.queryCommandState(action)));
+    }
   }
 
   function runCommand(command, value) {
     editor.focus();
     document.execCommand(command, false, value || null);
+    updateRibbonSelection();
     countWords(); saveDocument();
   }
 
@@ -979,6 +1002,7 @@
   for (const type of ["dragenter", "dragover"]) $("#document-stage").addEventListener(type, (event) => { event.preventDefault(); $("#editor-card").classList.add("drop-active"); });
   for (const type of ["dragleave", "drop"]) $("#document-stage").addEventListener(type, (event) => { event.preventDefault(); $("#editor-card").classList.remove("drop-active"); if (type === "drop") importFile(event.dataTransfer.files[0]); });
 
+  document.addEventListener("selectionchange", updateRibbonSelection);
   renderRibbon(); setupAssistantDrag(); countWords();
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
   openDatabase().then(() => { setSaveStatus("Saved"); showLanding(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
