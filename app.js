@@ -36,6 +36,18 @@
   const FIND_MATCH_LIMIT = 5000;
   let autosave = localStorage.getItem("adigun-autosave") !== "false";
   let theme = localStorage.getItem("adigun-theme") === "dark" ? "dark" : "light";
+  const defaultPageLayout = (() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("adigun-page-defaults") || "{}");
+      return {
+        paper: saved.paper === "letter" ? "letter" : "a4",
+        orientation: saved.orientation === "landscape" ? "landscape" : "portrait",
+        margins: ["narrow", "wide"].includes(saved.margins) ? saved.margins : "normal",
+      };
+    } catch {
+      return { paper: "a4", orientation: "portrait", margins: "normal" };
+    }
+  })();
   document.documentElement.dataset.theme = theme;
 
   const toolsets = {
@@ -1012,7 +1024,7 @@
     editor.style.minHeight = "";
   }
 
-  function applyPageLayout(layout = {}) {
+  function applyPageLayout(layout = defaultPageLayout) {
     paperSize = layout.paper === "letter" ? "letter" : "a4";
     pageOrientation = layout.orientation === "landscape" ? "landscape" : "portrait";
     pageMargins = ["narrow", "wide"].includes(layout.margins) ? layout.margins : "normal";
@@ -1462,7 +1474,14 @@
     const button = event.target.closest("[data-view]"); if (!button) return;
     setMobileMenu(false);
     document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item === button));
-    if (button.dataset.view === "settings") { $("#autosave-toggle").checked = autosave; $("#theme-toggle").checked = theme === "dark"; $("#settings-dialog").showModal(); }
+    if (button.dataset.view === "settings") {
+      $("#autosave-toggle").checked = autosave;
+      $("#theme-toggle").checked = theme === "dark";
+      $("#default-paper").value = defaultPageLayout.paper;
+      $("#default-orientation").value = defaultPageLayout.orientation;
+      $("#default-margins").value = defaultPageLayout.margins;
+      $("#settings-dialog").showModal();
+    }
     else showDocumentList(button.dataset.view);
   });
   editor.addEventListener("click", (event) => {
@@ -1520,6 +1539,16 @@
   $("#cancel-table").addEventListener("click", () => $("#table-dialog").close());
   $("#autosave-toggle").addEventListener("change", (event) => { autosave = event.target.checked; localStorage.setItem("adigun-autosave", String(autosave)); if (autosave) saveDocument(); else setSaveStatus("Autosave off"); });
   $("#theme-toggle").addEventListener("change", (event) => setTheme(event.target.checked ? "dark" : "light"));
+  function saveDefaultPageLayout() {
+    defaultPageLayout.paper = $("#default-paper").value === "letter" ? "letter" : "a4";
+    defaultPageLayout.orientation = $("#default-orientation").value === "landscape" ? "landscape" : "portrait";
+    defaultPageLayout.margins = ["narrow", "wide"].includes($("#default-margins").value) ? $("#default-margins").value : "normal";
+    localStorage.setItem("adigun-page-defaults", JSON.stringify(defaultPageLayout));
+    notify("New document defaults saved.");
+  }
+  $("#default-paper").addEventListener("change", saveDefaultPageLayout);
+  $("#default-orientation").addEventListener("change", saveDefaultPageLayout);
+  $("#default-margins").addEventListener("change", saveDefaultPageLayout);
   $("#find-form").addEventListener("submit", (event) => { event.preventDefault(); navigateFindMatch(1); });
   $("#find-query").addEventListener("input", () => { refreshFindMatches(true); if (findMatches.length) showFindMatch(0); });
   $("#find-match-case").addEventListener("change", () => { refreshFindMatches(true); if (findMatches.length) showFindMatch(0); });
