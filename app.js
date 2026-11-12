@@ -24,6 +24,7 @@
   let imageInsertionRange;
   let reviewComments = [];
   let pendingReviewAnchor;
+  let reviewHighlightTimer;
   let autosave = localStorage.getItem("adigun-autosave") !== "false";
   let theme = localStorage.getItem("adigun-theme") === "dark" ? "dark" : "light";
   document.documentElement.dataset.theme = theme;
@@ -177,8 +178,7 @@
     return range;
   }
 
-  function reviewCommentRange(comment) {
-    const text = editorText();
+  function reviewCommentRange(comment, text = editorText()) {
     const quote = comment.quote;
     let start = comment.start;
     if (text.slice(start, start + quote.length) !== quote) {
@@ -206,7 +206,8 @@
 
   function updateReviewHighlights() {
     if (typeof CSS === "undefined" || !CSS.highlights || typeof Highlight === "undefined") return;
-    const ranges = reviewComments.filter((comment) => !comment.resolved).map(reviewCommentRange).filter(Boolean);
+    const text = editorText();
+    const ranges = reviewComments.filter((comment) => !comment.resolved).map((comment) => reviewCommentRange(comment, text)).filter(Boolean);
     if (ranges.length) CSS.highlights.set("adigun-review-comments", new Highlight(...ranges));
     else CSS.highlights.delete("adigun-review-comments");
   }
@@ -313,12 +314,15 @@
     if (!autosave && !force) { setSaveStatus("Autosave off"); return; }
     if (!database) { setSaveStatus("Local save unavailable"); return; }
     setSaveStatus("Saving…", true);
+    const documentId = activeId;
+    const documentTitle = title();
+    const savedComments = reviewComments.map((comment) => ({ ...comment }));
     const content = documentModel.fromDOM(editor);
     saveTimer = setTimeout(() => {
       const tx = database.transaction("documents", "readwrite");
-      tx.objectStore("documents").put({ id: activeId, title: title(), content, contentFormat: documentModel.format, reviewComments, updatedAt: Date.now(), kind: "document" });
-      tx.oncomplete = () => { setSaveStatus("Saved"); countWords(); };
-      tx.onerror = () => { setSaveStatus("Save failed"); notify("Could not save this document on your device."); };
+      tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, updatedAt: Date.now(), kind: "document" });
+      tx.oncomplete = () => { if (activeId === documentId) { setSaveStatus("Saved"); countWords(); } };
+      tx.onerror = () => { if (activeId === documentId) { setSaveStatus("Save failed"); notify("Could not save this document on your device."); } };
     }, 280);
   }
 
@@ -1100,7 +1104,7 @@
   filePicker.addEventListener("cancel", () => { filePicker.accept = acceptedFileTypes; });
   imagePicker.addEventListener("change", () => { insertLocalImage(imagePicker.files[0]); imagePicker.value = ""; });
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
-  editor.addEventListener("input", () => { countWords(); renderReviewComments(); saveDocument(); });
+  editor.addEventListener("input", () => { countWords(); clearTimeout(reviewHighlightTimer); reviewHighlightTimer = setTimeout(updateReviewHighlights, 350); saveDocument(); });
   $("#outline-search").addEventListener("input", renderOutline);
   $("#toggle-outline").addEventListener("click", () => {
     const panel = $("#document-outline");
