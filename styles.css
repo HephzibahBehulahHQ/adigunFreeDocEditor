@@ -85,3 +85,6 @@
   .editor-card.margin-narrow .document-page{padding:28px}
   .editor-card.margin-wide .document-page{padding:48px 76px}
 }
+.document-page hr[data-page-break="true"]{height:0;position:relative;overflow:visible;margin:26px 0;border:0;border-top:2px dashed #8995a8}
+.document-page hr[data-page-break="true"]::after{content:"Page break";position:absolute;right:8px;top:-9px;padding:0 7px;background:var(--panel);color:var(--muted);font:10px/16px Inter,ui-sans-serif,system-ui,sans-serif}
+@media print{.document-page hr[data-page-break="true"]{border:0;height:0;break-before:page;page-break-before:always;margin:0}}
