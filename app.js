@@ -22,6 +22,9 @@
   let pageOrientation = "portrait";
   let tableInsertionRange;
   let imageInsertionRange;
+  let reviewComments = [];
+  let pendingReviewAnchor;
+  let reviewHighlightTimer;
   let autosave = localStorage.getItem("adigun-autosave") !== "false";
   let theme = localStorage.getItem("adigun-theme") === "dark" ? "dark" : "light";
   document.documentElement.dataset.theme = theme;
@@ -42,6 +45,7 @@
       [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }],
     ],
     review: [
+      [{ label: "Add comment", action: "add-comment", icon: "▧ Comment" }, { label: "Review comments", action: "show-comments", icon: "☷ Comments" }],
       [{ label: "Spellcheck", action: "spellcheck", icon: "✓ Spellcheck", pressed: true }, { label: "Word count", action: "wordcount", icon: "# Word count" }],
     ],
     view: [
@@ -121,17 +125,204 @@
     empty.textContent = headings.length && query ? "No headings match this filter." : "Add a heading from the Home ribbon to build an outline.";
   }
 
+  function normalizeReviewComments(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item) => item && typeof item.quote === "string" && typeof item.body === "string")
+      .slice(0, 500)
+      .map((item) => ({
+        id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+        start: Number.isInteger(item.start) && item.start >= 0 ? item.start : 0,
+        quote: item.quote.slice(0, 4000),
+        before: typeof item.before === "string" ? item.before.slice(-32) : "",
+        after: typeof item.after === "string" ? item.after.slice(0, 32) : "",
+        body: item.body.slice(0, 2000),
+        author: "You",
+        createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now(),
+        resolved: Boolean(item.resolved),
+      }))
+      .filter((item) => item.quote.trim() && item.body.trim());
+  }
+
+  function editorText() {
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    let text = "";
+    let node;
+    while ((node = walker.nextNode())) text += node.nodeValue;
+    return text;
+  }
+
+  function editorOffset(node, offset) {
+    if (!node || (node !== editor && !editor.contains(node))) return -1;
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.setEnd(node, offset);
+    return range.toString().length;
+  }
+
+  function rangeAtTextOffsets(start, end) {
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    let total = 0;
+    let startPoint;
+    let endPoint;
+    let node;
+    while ((node = walker.nextNode())) {
+      const next = total + node.nodeValue.length;
+      if (!startPoint && start <= next) startPoint = { node, offset: Math.max(0, start - total) };
+      if (end <= next) { endPoint = { node, offset: Math.max(0, end - total) }; break; }
+      total = next;
+    }
+    if (!startPoint || !endPoint) return null;
+    const range = document.createRange();
+    range.setStart(startPoint.node, Math.min(startPoint.offset, startPoint.node.nodeValue.length));
+    range.setEnd(endPoint.node, Math.min(endPoint.offset, endPoint.node.nodeValue.length));
+    return range;
+  }
+
+  function reviewCommentRange(comment, text = editorText()) {
+    const quote = comment.quote;
+    let start = comment.start;
+    if (text.slice(start, start + quote.length) !== quote) {
+      const matches = [];
+      let cursor = text.indexOf(quote);
+      while (cursor !== -1) { matches.push(cursor); cursor = text.indexOf(quote, cursor + 1); }
+      if (matches.length === 1) start = matches[0];
+      else if (matches.length > 1) {
+        const score = (index) => {
+          const before = text.slice(Math.max(0, index - comment.before.length), index);
+          const after = text.slice(index + quote.length, index + quote.length + comment.after.length);
+          let beforeMatch = 0;
+          while (beforeMatch < before.length && before[before.length - 1 - beforeMatch] === comment.before[comment.before.length - 1 - beforeMatch]) beforeMatch++;
+          let afterMatch = 0;
+          while (afterMatch < after.length && after[afterMatch] === comment.after[afterMatch]) afterMatch++;
+          return beforeMatch + afterMatch;
+        };
+        const ranked = matches.map((index) => ({ index, score: score(index) })).sort((a, b) => b.score - a.score);
+        if (ranked[0].score === 0 || ranked[0].score === ranked[1].score) return null;
+        start = ranked[0].index;
+      } else return null;
+    }
+    return rangeAtTextOffsets(start, start + quote.length);
+  }
+
+  function updateReviewHighlights() {
+    if (typeof CSS === "undefined" || !CSS.highlights || typeof Highlight === "undefined") return;
+    const text = editorText();
+    const ranges = reviewComments.filter((comment) => !comment.resolved).map((comment) => reviewCommentRange(comment, text)).filter(Boolean);
+    if (ranges.length) CSS.highlights.set("adigun-review-comments", new Highlight(...ranges));
+    else CSS.highlights.delete("adigun-review-comments");
+  }
+
+  function renderReviewComments() {
+    const list = $("#review-comment-list");
+    if (!list) return;
+    list.replaceChildren();
+    const openCount = reviewComments.filter((comment) => !comment.resolved).length;
+    $("#review-comment-count").textContent = `${reviewComments.length} comments · ${openCount} open`;
+    const sorted = [...reviewComments].sort((a, b) => b.createdAt - a.createdAt);
+    for (const comment of sorted) {
+      const card = document.createElement("article");
+      card.className = "review-comment";
+      const heading = document.createElement("div");
+      heading.className = "review-comment-meta";
+      const author = document.createElement("strong");
+      author.textContent = comment.author;
+      const time = document.createElement("time");
+      const date = new Date(comment.createdAt);
+      time.textContent = Number.isNaN(date.getTime()) ? "Saved locally" : date.toLocaleDateString();
+      heading.append(author, time);
+      const quote = document.createElement("p");
+      quote.className = "review-comment-quote";
+      quote.textContent = `“${comment.quote}”`;
+      const body = document.createElement("p");
+      body.className = "review-comment-body";
+      body.textContent = comment.body;
+      const actions = document.createElement("div");
+      actions.className = "review-comment-actions";
+      const go = document.createElement("button");
+      go.type = "button";
+      go.className = "review-comment-link";
+      go.dataset.commentGo = comment.id;
+      go.textContent = "Go to text";
+      const resolve = document.createElement("button");
+      resolve.type = "button";
+      resolve.className = "review-comment-resolve";
+      resolve.dataset.commentResolve = comment.id;
+      resolve.textContent = comment.resolved ? "Reopen" : "Resolve";
+      actions.append(go, resolve);
+      card.append(heading, quote, body, actions);
+      if (comment.resolved) card.classList.add("resolved");
+      list.append(card);
+    }
+    $("#review-comments-empty").hidden = reviewComments.length > 0;
+    updateReviewHighlights();
+  }
+
+  function showReviewPanel(open = true) {
+    const panel = $("#review-comments");
+    if (!panel) return;
+    panel.hidden = !open;
+    $("#editor-layout").classList.toggle("has-review", open);
+    if (open) {
+      $("#document-outline").classList.remove("mobile-open");
+      $("#toggle-outline").setAttribute("aria-expanded", "false");
+      renderReviewComments();
+    }
+  }
+
+  function openCommentDialog() {
+    const selection = window.getSelection();
+    if (editor.contentEditable !== "true" || !selection?.rangeCount || selection.isCollapsed || !editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) {
+      notify("Select text in the document before adding a comment.");
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    const start = editorOffset(range.startContainer, range.startOffset);
+    const end = editorOffset(range.endContainer, range.endOffset);
+    const text = editorText();
+    const quote = text.slice(start, end);
+    if (start < 0 || end <= start || !quote.trim()) {
+      notify("Select text in the document before adding a comment.");
+      return;
+    }
+    if (quote.length > 4000) { notify("Select 4,000 characters or fewer to anchor a comment."); return; }
+    pendingReviewAnchor = {
+      start,
+      quote,
+      before: text.slice(Math.max(0, start - 32), start),
+      after: text.slice(end, end + 32),
+    };
+    $("#comment-quote").textContent = `“${quote}”`;
+    $("#comment-text").value = "";
+    $("#comment-dialog").showModal();
+    $("#comment-text").focus();
+  }
+
+  function goToReviewComment(id) {
+    const comment = reviewComments.find((item) => item.id === id);
+    const range = comment && reviewCommentRange(comment);
+    if (!range) { notify("The commented text could not be found in this document."); return; }
+    editor.focus({ preventScroll: true });
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    const element = range.startContainer.parentElement;
+    element?.scrollIntoView({ block: "center", behavior: "auto" });
+  }
+
   function saveDocument(force = false) {
     clearTimeout(saveTimer);
     if (!autosave && !force) { setSaveStatus("Autosave off"); return; }
     if (!database) { setSaveStatus("Local save unavailable"); return; }
     setSaveStatus("Saving…", true);
+    const documentId = activeId;
+    const documentTitle = title();
+    const savedComments = reviewComments.map((comment) => ({ ...comment }));
     const content = documentModel.fromDOM(editor);
     saveTimer = setTimeout(() => {
       const tx = database.transaction("documents", "readwrite");
-      tx.objectStore("documents").put({ id: activeId, title: title(), content, contentFormat: documentModel.format, updatedAt: Date.now(), kind: "document" });
-      tx.oncomplete = () => { setSaveStatus("Saved"); countWords(); };
-      tx.onerror = () => { setSaveStatus("Save failed"); notify("Could not save this document on your device."); };
+      tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, updatedAt: Date.now(), kind: "document" });
+      tx.oncomplete = () => { if (activeId === documentId) { setSaveStatus("Saved"); countWords(); } };
+      tx.onerror = () => { if (activeId === documentId) { setSaveStatus("Save failed"); notify("Could not save this document on your device."); } };
     }, 280);
   }
 
@@ -145,8 +336,9 @@
     editor.contentEditable = String(isDocument);
     titleInput.readOnly = !isDocument;
     $("#editor-layout").classList.toggle("has-outline", isDocument);
+    if (!isDocument) { $("#review-comments").hidden = true; $("#editor-layout").classList.remove("has-review"); }
     $("#document-outline").classList.toggle("visible", isDocument);
-    if (!isDocument) $("#document-outline").classList.remove("mobile-open");
+    if (!isDocument) { $("#document-outline").classList.remove("mobile-open"); $("#review-comments").hidden = true; $("#editor-layout").classList.remove("has-review"); }
     $("#toggle-outline").hidden = !isDocument;
     $("#toggle-outline").setAttribute("aria-expanded", "false");
     $(".ribbon-tabs").hidden = !isDocument;
@@ -177,6 +369,9 @@
     if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
     $("#pdf-frame")?.remove();
     activeId = crypto.randomUUID();
+    reviewComments = [];
+    showReviewPanel(false);
+    renderReviewComments();
     setTitle("Untitled document");
     setWorkspaceMode("document");
     $("#file-kind").textContent = "New document";
@@ -348,6 +543,8 @@
       const doc = event.target.result;
       if (!doc) return;
       activeId = doc.id;
+      reviewComments = normalizeReviewComments(doc.reviewComments);
+      showReviewPanel(false);
       setTitle(doc.title);
       setWorkspaceMode("document");
       $("#editor-card").classList.remove("landing");
@@ -355,6 +552,7 @@
       const content = typeof doc.content === "string" ? documentModel.fromHTML(doc.content) : documentModel.normalize(doc.content);
       editor.innerHTML = documentModel.toHTML(content) || "<p><br></p>";
       editor.hidden = false;
+      renderReviewComments();
       countWords();
       notify("Document opened.");
     };
@@ -380,6 +578,8 @@
         $("#pdf-frame")?.remove();
         activePdfFile = undefined;
         activeId = crypto.randomUUID();
+        reviewComments = [];
+        showReviewPanel(false);
         setTitle(file.name.replace(/\.docx$/i, "") || file.name);
         $("#file-kind").textContent = "DOCX imported · editable structure";
         $("#editor-card").classList.remove("pdf-preview", "landing");
@@ -401,6 +601,8 @@
     $("#pdf-frame")?.remove();
     activePdfFile = undefined;
     activeId = crypto.randomUUID();
+    reviewComments = [];
+    showReviewPanel(false);
     setTitle(file.name.replace(/\.[^.]+$/, "") || file.name);
     $("#file-kind").textContent = extension === "pdf" ? "PDF preview · original file" : `${extension.toUpperCase()} imported as editable text`;
     $("#editor-card").classList.remove("pdf-preview");
@@ -535,6 +737,8 @@
         break;
       }
       case "orientation": pageOrientation = pageOrientation === "portrait" ? "landscape" : "portrait"; $("#editor-card").classList.toggle("landscape", pageOrientation === "landscape"); button.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape"; break;
+      case "add-comment": openCommentDialog(); break;
+      case "show-comments": showReviewPanel(true); break;
       case "spellcheck": editor.spellcheck = !editor.spellcheck; button.setAttribute("aria-pressed", String(editor.spellcheck)); notify(`Browser spellcheck ${editor.spellcheck ? "on" : "off"}.`); break;
       case "wordcount": notify($("#word-count").textContent); break;
       case "zoom-out": setZoom(zoom - 10); break;
@@ -900,11 +1104,12 @@
   filePicker.addEventListener("cancel", () => { filePicker.accept = acceptedFileTypes; });
   imagePicker.addEventListener("change", () => { insertLocalImage(imagePicker.files[0]); imagePicker.value = ""; });
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
-  editor.addEventListener("input", () => { countWords(); saveDocument(); });
+  editor.addEventListener("input", () => { countWords(); clearTimeout(reviewHighlightTimer); reviewHighlightTimer = setTimeout(updateReviewHighlights, 350); saveDocument(); });
   $("#outline-search").addEventListener("input", renderOutline);
   $("#toggle-outline").addEventListener("click", () => {
     const panel = $("#document-outline");
     const open = panel.classList.toggle("mobile-open");
+    if (open) showReviewPanel(false);
     $("#toggle-outline").setAttribute("aria-expanded", String(open));
   });
   $("#outline-list").addEventListener("click", (event) => {
@@ -998,6 +1203,37 @@
   $("#cancel-table").addEventListener("click", () => $("#table-dialog").close());
   $("#autosave-toggle").addEventListener("change", (event) => { autosave = event.target.checked; localStorage.setItem("adigun-autosave", String(autosave)); if (autosave) saveDocument(); else setSaveStatus("Autosave off"); });
   $("#theme-toggle").addEventListener("change", (event) => setTheme(event.target.checked ? "dark" : "light"));
+  $("#comment-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const body = $("#comment-text").value.trim();
+    if (!body) { notify("Write a comment before posting."); return; }
+    if (!pendingReviewAnchor) { notify("Select text in the document before adding a comment."); $("#comment-dialog").close(); return; }
+    if (reviewComments.length >= 500) { notify("This document has reached the 500 comment limit."); return; }
+    reviewComments.push({ id: crypto.randomUUID(), ...pendingReviewAnchor, body: body.slice(0, 2000), author: "You", createdAt: Date.now(), resolved: false });
+    pendingReviewAnchor = null;
+    $("#comment-dialog").close();
+    renderReviewComments();
+    showReviewPanel(true);
+    saveDocument();
+    notify("Comment added and saved with this document.");
+  });
+  const closeCommentDialog = () => { pendingReviewAnchor = null; $("#comment-dialog").close(); };
+  $("#cancel-comment").addEventListener("click", closeCommentDialog);
+  $("#close-comment").addEventListener("click", closeCommentDialog);
+  $("#comment-dialog").addEventListener("close", () => { pendingReviewAnchor = null; });
+  $("#close-review-comments").addEventListener("click", () => showReviewPanel(false));
+  $("#review-comment-list").addEventListener("click", (event) => {
+    const go = event.target.closest("[data-comment-go]");
+    if (go) { goToReviewComment(go.dataset.commentGo); return; }
+    const resolve = event.target.closest("[data-comment-resolve]");
+    if (!resolve) return;
+    const comment = reviewComments.find((item) => item.id === resolve.dataset.commentResolve);
+    if (!comment) return;
+    comment.resolved = !comment.resolved;
+    renderReviewComments();
+    saveDocument();
+    notify(comment.resolved ? "Comment resolved." : "Comment reopened.");
+  });
   document.addEventListener("keydown", (event) => {
     const mod = event.ctrlKey || event.metaKey;
     if (mod && event.key.toLowerCase() === "s") { event.preventDefault(); saveDocument(true); notify("Saved in this browser."); }
