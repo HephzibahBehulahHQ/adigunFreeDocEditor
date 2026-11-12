@@ -100,7 +100,7 @@
     const plainText = isEditableDocument ? editor.innerText.trim() : "";
     const words = plainText.match(/[\p{L}\p{N}]+(?:['’_-][\p{L}\p{N}]+)*/gu) || [];
     $("#word-count").textContent = `${words.length} ${words.length === 1 ? "word" : "words"}`;
-    $("#page-count").textContent = `Page ${Math.max(1, Math.ceil(editor.innerText.length / 3000))}`;
+    $("#page-count").textContent = "Continuous view";
     $("#insight-words").textContent = isEditableDocument ? words.length.toLocaleString() : "—";
     $("#insight-characters").textContent = isEditableDocument ? plainText.length.toLocaleString() : "—";
     $("#insight-reading").textContent = isEditableDocument ? (words.length < 180 ? "<1 min" : `${Math.ceil(words.length / 180)} min`) : "—";
