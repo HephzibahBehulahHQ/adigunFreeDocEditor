@@ -80,3 +80,8 @@
   .editor-card.margin-narrow .document-page{padding:28px 18px 44px}
   .editor-card.margin-wide .document-page{padding:38px 48px 55px}
 }
+@media(min-width:701px) and (max-width:1050px){
+  .editor-card:not(.landing) .document-page{padding:48px}
+  .editor-card.margin-narrow .document-page{padding:28px}
+  .editor-card.margin-wide .document-page{padding:48px 76px}
+}
