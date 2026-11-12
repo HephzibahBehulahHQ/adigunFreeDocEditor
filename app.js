@@ -57,10 +57,28 @@
     return supportedFontFamilies.find((family) => family.toLowerCase() === name.toLowerCase()) || "";
   }
 
+  const textColorOptions = [["#000000", "Black"], ["#404040", "Dark gray"], ["#C00000", "Red"], ["#ED7D31", "Orange"], ["#FFC000", "Gold"], ["#548235", "Green"], ["#4472C4", "Blue"], ["#7030A0", "Purple"], ["#00B0F0", "Cyan"], ["#FFFFFF", "White"]];
+  const highlightColorOptions = [["#FFFF00", "Yellow"], ["#00FF00", "Bright green"], ["#00FFFF", "Cyan"], ["#FF00FF", "Magenta"], ["#0000FF", "Blue"], ["#FF0000", "Red"], ["#000080", "Dark blue"], ["#008080", "Dark cyan"], ["#008000", "Dark green"], ["#800080", "Dark magenta"], ["#800000", "Dark red"], ["#808000", "Dark yellow"], ["#808080", "Dark gray"], ["#C0C0C0", "Light gray"], ["#000000", "Black"], ["#FFFFFF", "White"]];
+  const supportedColors = new Set([...textColorOptions, ...highlightColorOptions].map(([color]) => color));
+
+  function supportedColor(value) {
+    const source = String(value || "").trim();
+    let match = source.match(/^#([\\da-f]{3}|[\\da-f]{6})$/i);
+    if (match && match[1].length === 3) return supportedColor("#" + [...match[1]].map((digit) => digit + digit).join(""));
+    if (!match) {
+      match = source.match(/^rgba?\\(\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})(?:\\s*,\\s*(?:0|1|0?\\.\\d+))?\\s*\\)$/i);
+      if (!match || match.slice(1, 4).some((channel) => Number(channel) > 255) || match[4] && Number(match[4]) < 1) return "";
+      return supportedColor("#" + match.slice(1, 4).map((channel) => Number(channel).toString(16).padStart(2, "0")).join(""));
+    }
+    const color = source.toUpperCase();
+    return supportedColors.has(color) ? color : "";
+  }
+
   const toolsets = {
     home: [
       [{ label: "Undo", action: "undo", icon: "↶" }, { label: "Redo", action: "redo", icon: "↷" }],
       [{ label: "Font family", select: "font", options: [["", "Font"], ...supportedFontFamilies.map((family) => [family, family])] }, { label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Title"], ["h2", "Heading 1"], ["h3", "Heading 2"]] }, { label: "Font size", select: "size", options: [["3", "11"], ["4", "14"], ["5", "18"], ["6", "24"]] }],
+      [{ label: "Text color", select: "text-color", options: [["", "Text color"], ...textColorOptions] }, { label: "Highlight color", select: "highlight-color", options: [["", "Highlight"], ...highlightColorOptions] }],
       [{ label: "Bold", action: "bold", icon: "B", pressed: true }, { label: "Italic", action: "italic", icon: "I", pressed: true }, { label: "Underline", action: "underline", icon: "U", pressed: true }, { label: "Strikethrough", action: "strikeThrough", icon: "S̶ Strike", pressed: true }, { label: "Clear character formatting", action: "removeFormat", icon: "T× Clear" }],
       [{ label: "Bulleted list", action: "insertUnorderedList", icon: "• List", pressed: true }, { label: "Numbered list", action: "insertOrderedList", icon: "1. List", pressed: true }],
       [{ label: "Align left", action: "justifyLeft", icon: "☰", pressed: true }, { label: "Center", action: "justifyCenter", icon: "≡", pressed: true }, { label: "Align right", action: "justifyRight", icon: "☷", pressed: true }, { label: "Justify", action: "justifyFull", icon: "▤", pressed: true }],
@@ -939,6 +957,8 @@
           if (tool.select === "margins") control.value = pageMargins;
           control.addEventListener("change", () => {
             if (tool.select === "font" && control.value) runCommand("fontName", control.value);
+            if (tool.select === "text-color" && control.value) runCommand("foreColor", control.value);
+            if (tool.select === "highlight-color" && control.value) runCommand("hiliteColor", control.value);
             if (tool.select === "block") runCommand("formatBlock", `<${control.value}>`);
             if (tool.select === "size") runCommand("fontSize", control.value);
             if (tool.select === "paper") setPaper(control.value);
@@ -975,6 +995,14 @@
     const fontNode = focusElement?.closest("span[data-font-family],font[face]");
     const fontFamily = supportedFontFamily(fontNode?.getAttribute("data-font-family") || fontNode?.getAttribute("face") || document.queryCommandValue("fontName"));
     if (familySelect) familySelect.value = fontFamily;
+    const textColorSelect = ribbon.querySelector("[data-tool=text-color]");
+    const textColorNode = focusElement?.closest("[data-text-color],font[color]");
+    const currentTextColor = supportedColor(textColorNode?.getAttribute("data-text-color") || textColorNode?.getAttribute("color") || textColorNode?.style?.color || document.queryCommandValue("foreColor"));
+    if (textColorSelect) textColorSelect.value = currentTextColor;
+    const highlightColorSelect = ribbon.querySelector("[data-tool=highlight-color]");
+    const highlightNode = focusElement?.closest("[data-highlight-color],span[style*='background-color']");
+    const currentHighlight = supportedColor(highlightNode?.getAttribute("data-highlight-color") || highlightNode?.style?.backgroundColor || document.queryCommandValue("hiliteColor"));
+    if (highlightColorSelect) highlightColorSelect.value = currentHighlight;
     const fontSelect = ribbon.querySelector("[data-tool=size]");
     const fontSize = document.queryCommandValue("fontSize");
     if (fontSelect && [...fontSelect.options].some((option) => option.value === fontSize)) fontSelect.value = fontSize;
@@ -1116,6 +1144,14 @@
     const images = [];
     const unsupported = new Set();
     const exportableFontFamilies = new Set(["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"]);
+    const exportableTextColors = new Set(["#000000", "#404040", "#C00000", "#ED7D31", "#FFC000", "#548235", "#4472C4", "#7030A0", "#00B0F0", "#FFFFFF"]);
+    const exportableHighlightColors = new Map([["#FFFF00", "yellow"], ["#00FF00", "brightGreen"], ["#00FFFF", "cyan"], ["#FF00FF", "magenta"], ["#0000FF", "blue"], ["#FF0000", "red"], ["#000080", "darkBlue"], ["#008080", "darkCyan"], ["#008000", "darkGreen"], ["#800080", "darkMagenta"], ["#800000", "darkRed"], ["#808000", "darkYellow"], ["#808080", "darkGray"], ["#C0C0C0", "lightGray"], ["#000000", "black"], ["#FFFFFF", "white"]]);
+    function normalizeExportColor(value, palette) {
+      const source = String(value || "").trim();
+      const match = source.match(/^#?([\\da-f]{6})$/i);
+      const color = match ? "#" + match[1].toUpperCase() : "";
+      return palette.has(color) ? color : "";
+    }
     let nextRelationship = 3;
     let nextDrawing = 1;
 
@@ -1125,7 +1161,9 @@
         if (!text) return "";
         const preserve = /^\s|\s$/.test(node.nodeValue) ? ' xml:space="preserve"' : "";
         const fontFamily = marks.fontFamily;
-        const properties = [fontFamily && `<w:rFonts w:ascii="${wordXmlText(fontFamily)}" w:hAnsi="${wordXmlText(fontFamily)}"/>`, marks.bold && "<w:b/>", marks.italic && "<w:i/>", marks.underline && '<w:u w:val="single"/>', marks.strike && "<w:strike/>"].filter(Boolean).join("");
+        const color = marks.textColor ? marks.textColor.slice(1) : "";
+        const highlight = marks.highlightColor ? exportableHighlightColors.get(marks.highlightColor) : "";
+        const properties = [fontFamily && `<w:rFonts w:ascii="${wordXmlText(fontFamily)}" w:hAnsi="${wordXmlText(fontFamily)}"/>`, color && `<w:color w:val="${wordXmlText(color)}"/>`, highlight && `<w:highlight w:val="${highlight}"/>`, marks.bold && "<w:b/>", marks.italic && "<w:i/>", marks.underline && '<w:u w:val="single"/>', marks.strike && "<w:strike/>"].filter(Boolean).join("");
         return `<w:r>${properties ? `<w:rPr>${properties}</w:rPr>` : ""}<w:t${preserve}>${wordXmlText(text)}</w:t></w:r>`;
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return "";
@@ -1184,6 +1222,10 @@
       const requestedFont = String(node.getAttribute("data-font-family") || node.getAttribute("face") || node.style?.fontFamily || "").split(",")[0].trim().replace(/^["\']|["\']$/g, "");
       const fontFamily = [...exportableFontFamilies].find((family) => family.toLowerCase() === requestedFont.toLowerCase());
       if (fontFamily) next.fontFamily = fontFamily;
+      const textColor = normalizeExportColor(node.getAttribute("data-text-color") || node.getAttribute("color") || node.style?.color, exportableTextColors);
+      if (textColor) next.textColor = textColor;
+      const requestedHighlight = normalizeExportColor(node.getAttribute("data-highlight-color") || node.style?.backgroundColor || node.style?.background, new Set(exportableHighlightColors.keys()));
+      if (requestedHighlight) next.highlightColor = requestedHighlight;
       const children = [...node.childNodes].map((child) => serializeInline(child, next)).join("");
       if (tag === "a") {
         const href = node.getAttribute("href") || "";
