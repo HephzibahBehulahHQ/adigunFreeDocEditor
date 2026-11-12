@@ -17,7 +17,7 @@ const element = (tag, attrs = {}, children = [], align = "") => ({
 
 const source = element("div", {}, [
   element("div", { "data-editor-page": "true" }, [element("p", {}, [element("strong", {}, [text("A <useful> & safe" )])], "center")]),
-  element("table", {}, [element("tbody", {}, [element("tr", {}, [element("td", { colspan: 2 }, [element("p", {}, [text("Cell")])])])])]),
+  element("table", {}, [element("tbody", {}, [element("tr", {}, [element("td", { colspan: 2, rowspan: 2 }, [element("p", {}, [text("Cell")])])])])]),
   element("span", { "data-font-family": "Georgia" }, [text("Georgia text")]),
   element("p", { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }, [text("Spaced paragraph")]),
   element("p", { "data-indent-level": "5", "data-line-spacing": "4", "data-paragraph-spacing": "12pt" }, [text("Invalid spacing")]),
@@ -40,6 +40,7 @@ assert.equal(model.version, 1);
 const html = modelApi.toHTML(model);
 assert.match(html, /<p style="text-align:center"><strong>A &lt;useful&gt; &amp; safe<\/strong><\/p>/);
 assert.match(html, /colspan="2"/);
+assert.match(html, /rowspan="2"/);
 assert.match(html, /<span data-font-family="Georgia" style="font-family:Georgia">Georgia text<\/span>/);
 assert.match(html, /<p data-indent-level="2" data-line-spacing="1.5" data-paragraph-spacing="12" style="margin-left:72pt;line-height:1.5;margin-bottom:12pt">Spaced paragraph<\/p>/);
 assert.match(html, /<p>Invalid spacing<\/p>/);

@@ -19,10 +19,39 @@ const paragraph = (child, attrs = {}) => ({
   getAttribute(name) { return attrs[name] || null; },
   closest() { return null; },
 });
+
+const tableCell = (textValue, spans = {}) => {
+  const child = { nodeType: Node.TEXT_NODE, nodeValue: textValue };
+  const block = paragraph(child);
+  const attributes = { ...spans };
+  return {
+    nodeType: 1, tagName: "TD", children: [block], childNodes: [block],
+    colSpan: Number(attributes.colspan) || 1, rowSpan: Number(attributes.rowspan) || 1,
+    getAttribute(name) { return Object.hasOwn(attributes, name) ? String(attributes[name]) : null; },
+    closest() { return null; },
+  };
+};
+const verticalTable = (() => {
+  const tbody = { tagName: "TBODY" };
+  const table = {
+    tagName: "TABLE", children: [tbody], childNodes: [tbody], rows: [],
+    querySelectorAll(selector) { return selector === "tr" ? this.rows : []; },
+  };
+  const row = (cells) => ({
+    tagName: "TR", children: cells, parentElement: tbody,
+    closest(selector) { return selector === "table" ? table : null; },
+  });
+  table.rows.push(
+    row([tableCell("Merged top", { rowspan: 2 }), tableCell("Top right")]),
+    row([tableCell("Bottom right")]),
+  );
+  tbody.children = table.rows;
+  return table;
+})();
 const pageBreak = { nodeType: 1, tagName: "HR", children: [], childNodes: [], textContent: "", getAttribute(name) { return name === "data-page-break" ? "true" : null; } };
 const fontText = { nodeType: Node.TEXT_NODE, nodeValue: "Georgia type" };
 const fontSpan = { nodeType: 1, tagName: "SPAN", children: [fontText], childNodes: [fontText], style: { fontFamily: "Georgia" }, getAttribute(name) { return ({ "data-font-family": "Georgia", "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" })[name] || null; } };
-const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" })] }] };
+const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), verticalTable] }] };
 const page = { classList: { contains() { return false; } } };
 const factory = new Function("Node", "editor", "title", "atob", "$", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip };`);
 const { makeWordPackage, makeStoredZip } = factory(Node, root, () => "Image export QA", atob, () => page);
@@ -57,8 +86,12 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
   assert.match(documentXml, /<w:highlight w:val="yellow"\/>/);
   assert.match(documentXml, /<w:spacing w:line="360" w:lineRule="auto" w:after="240"\/>/);
   assert.match(documentXml, /<w:ind w:left="1440"\/>/);
+  assert.equal((documentXml.match(/<w:gridCol\b/g) || []).length, 2, "vertical spans reserve their grid column");
+  assert.match(documentXml, /<w:vMerge w:val="restart"\/>/);
+  assert.match(documentXml, /<w:vMerge\/>/);
+
   assert.equal((entries.get("word/_rels/document.xml.rels").toString("utf8").match(/relationships\/image/g) || []).length, 1);
   assert.match(entries.get("[Content_Types].xml").toString("utf8"), /Extension="png" ContentType="image\/png"/);
-  process.stdout.write("DOCX image export tests passed: binary PNG, deduplication, DrawingML, dimensions, alt text and content types.\n");
+  process.stdout.write("DOCX export tests passed: PNG media, DrawingML, formatting, dimensions, alt text and vertical table merges.\n");
 }).catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1; });
 

@@ -1565,34 +1565,90 @@
       const rows = [...table.querySelectorAll("tr")].filter((row) => row.closest("table") === table);
       if (!rows.length) { unsupported.add("empty tables"); return ""; }
       const cellsByRow = rows.map((row) => [...row.children].filter((cell) => ["td", "th"].includes(cell.tagName.toLowerCase())));
-      const columnCount = Math.max(0, ...cellsByRow.map((cells) => cells.reduce((total, cell) => total + Math.max(1, Math.min(50, cell.colSpan || 1)), 0)));
-      if (!columnCount || columnCount > 50 || rows.length > 1000) { unsupported.add("tables over 1,000 rows or 50 columns"); return ""; }
+      const layouts = [];
+      let activeVertical = [];
+      let columnCount = 0;
+      let invalidWidth = false;
+
+      rows.forEach((row, rowIndex) => {
+        const occupied = new Set();
+        const placements = [];
+        for (const merge of activeVertical) {
+          placements.push({ start: merge.start, span: merge.span, merge: "continue" });
+          for (let column = merge.start; column < merge.start + merge.span; column++) occupied.add(column);
+        }
+
+        const nextVertical = activeVertical.filter((merge) => merge.remaining > 1)
+          .map((merge) => ({ ...merge, remaining: merge.remaining - 1 }));
+        for (const cell of cellsByRow[rowIndex]) {
+          const span = Math.max(1, Math.min(50, cell.colSpan || 1));
+          let start = 0;
+          while (true) {
+            while (occupied.has(start)) start++;
+            let conflictOffset = -1;
+            for (let offset = 1; offset < span; offset++) {
+              if (occupied.has(start + offset)) { conflictOffset = offset; break; }
+            }
+            if (conflictOffset < 0) break;
+            start += conflictOffset;
+          }
+          if (start + span > 50) { unsupported.add("tables over 50 columns"); invalidWidth = true; return; }
+          for (let column = start; column < start + span; column++) occupied.add(column);
+
+          const requestedRowSpan = Math.max(1, Math.min(50, cell.rowSpan || 1));
+          const remainingRows = rows.length - rowIndex;
+          const rowSpan = Math.min(requestedRowSpan, remainingRows);
+          if (rowSpan < requestedRowSpan) unsupported.add("vertical spans beyond the final table row");
+          placements.push({ start, span, cell, merge: rowSpan > 1 ? "restart" : "", rowSpan });
+          if (rowSpan > 1) nextVertical.push({ start, span, remaining: rowSpan - 1 });
+        }
+        activeVertical = nextVertical;
+        if (occupied.size) columnCount = Math.max(columnCount, Math.max(...occupied) + 1);
+        layouts.push({ row, placements });
+      });
+
+      if (invalidWidth) return "";
+      if (!columnCount || columnCount > 50 || rows.length > 1000) {
+        unsupported.add("tables over 1,000 rows or 50 columns");
+        return "";
+      }
       const columnWidth = Math.floor(tableContentWidth / columnCount);
       const borders = ["top", "left", "bottom", "right", "insideH", "insideV"].map((side) => '<w:' + side + ' w:val="single" w:sz="4" w:space="0" w:color="C6CDD8"/>').join("");
       let xml = '<w:tbl><w:tblPr><w:tblW w:w="' + tableContentWidth + '" w:type="dxa"/><w:tblBorders>' + borders + '</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>';
       for (let column = 0; column < columnCount; column++) xml += '<w:gridCol w:w="' + columnWidth + '"/>';
       xml += '</w:tblGrid>';
-      rows.forEach((row, rowIndex) => {
-        const cells = cellsByRow[rowIndex];
+      for (const layout of layouts) {
+        const row = layout.row;
+        const placements = new Map(layout.placements.map((placement) => [placement.start, placement]));
         xml += '<w:tr>' + (row.parentElement?.tagName.toLowerCase() === "thead" ? '<w:trPr><w:tblHeader w:val="true"/></w:trPr>' : "");
-        let occupied = 0;
-        for (const cell of cells) {
-          const span = Math.max(1, Math.min(columnCount - occupied, cell.colSpan || 1));
-          occupied += span;
-          if (cell.rowSpan > 1) unsupported.add("merged table rows");
-          xml += '<w:tc><w:tcPr><w:tcW w:w="' + columnWidth * span + '" w:type="dxa"/>' + (span > 1 ? '<w:gridSpan w:val="' + span + '"/>' : "") + '</w:tcPr>';
-          const content = [];
-          if (cell.children.length) walkBlocks(cell, "", 0, content);
-          else addParagraph(cell, "", 0, content);
-          xml += content.join("") || "<w:p/>";
-          xml += "</w:tc>";
+        let column = 0;
+        while (column < columnCount) {
+          const placement = placements.get(column);
+          if (!placement) {
+            xml += '<w:tc><w:tcPr><w:tcW w:w="' + columnWidth + '" w:type="dxa"/></w:tcPr><w:p/></w:tc>';
+            column++;
+            continue;
+          }
+          const span = Math.min(columnCount - column, placement.span);
+          const width = columnWidth * span;
+          if (placement.merge === "continue") {
+            xml += '<w:tc><w:tcPr><w:tcW w:w="' + width + '" w:type="dxa"/>' + (span > 1 ? '<w:gridSpan w:val="' + span + '"/>' : "") + '<w:vMerge/></w:tcPr><w:p/></w:tc>';
+          } else {
+            const cell = placement.cell;
+            const verticalMerge = placement.merge === "restart" ? '<w:vMerge w:val="restart"/>' : "";
+            xml += '<w:tc><w:tcPr><w:tcW w:w="' + width + '" w:type="dxa"/>' + (span > 1 ? '<w:gridSpan w:val="' + span + '"/>' : "") + verticalMerge + '</w:tcPr>';
+            const cellContent = [];
+            if (cell.children.length) walkBlocks(cell, "", 0, cellContent);
+            else addParagraph(cell, "", 0, cellContent);
+            xml += cellContent.join("") || "<w:p/>";
+            xml += "</w:tc>";
+          }
+          column += span;
         }
-        while (occupied < columnCount) { xml += '<w:tc><w:tcPr><w:tcW w:w="' + columnWidth + '" w:type="dxa"/></w:tcPr><w:p/></w:tc>'; occupied++; }
         xml += "</w:tr>";
-      });
+      }
       return xml + "</w:tbl>";
     }
-
     function walkBlocks(node, listKind = "", listLevel = 0, output = body) {
       for (const child of [...node.children]) {
         const tag = child.tagName.toLowerCase();
