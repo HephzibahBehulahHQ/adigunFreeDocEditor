@@ -12,7 +12,7 @@ Status is specific to the current first workspace slice.
 | HTML export | Implemented | Downloads the current editable document as an HTML file. |
 | Local document overview | Implemented | Extracts sentences from the current document; not an AI summary. |
 | DOCX export | Partial | Creates a real OOXML `.docx` package; maps headings, emphasis, web links, lists and page setup. Tables, images, tracked revisions and advanced styles are not preserved. |
-| DOCX import and fidelity | Not implemented | No OOXML importer or round-trip compatibility corpus is included. |
+| DOCX import | Partial | Mammoth converts semantic structure in-browser; allow-listed HTML is sanitized. Headings, lists, tables and safe inline raster images can be edited. Word page layout, advanced styles, revisions and full fidelity are not preserved. |
 | PDF annotation, modification or conversion | Not implemented | No PDF editing/conversion engine is included. |
 | Hosted AI, translation or rewriting | Not implemented | No provider or backend is configured; no simulated results. |
 | Accounts, cloud sync or shared documents | Not implemented | No identity or remote persistence service exists in this repository. |
