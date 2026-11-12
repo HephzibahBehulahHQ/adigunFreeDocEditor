@@ -638,9 +638,9 @@
         }
         return image;
       }
-      if (tag === "hr" && node.getAttribute("data-page-break") === "true") element.setAttribute("data-page-break", "true");
       if (!allowedTags.has(tag)) { removed++; const fragment = document.createDocumentFragment(); for (const child of [...node.childNodes]) { const safeChild = copy(child); if (safeChild) fragment.append(safeChild); } return fragment; }
       const element = document.createElement(tag);
+      if (tag === "hr" && node.getAttribute("data-page-break") === "true") element.setAttribute("data-page-break", "true");
       if (tag === "a") {
         const href = node.getAttribute("href") || "";
         try { const url = new URL(href, location.href); if (["http:", "https:", "mailto:"].includes(url.protocol)) element.setAttribute("href", url.href); else removed++; } catch { removed++; }
