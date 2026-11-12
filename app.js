@@ -82,6 +82,30 @@
     $("#insight-words").textContent = isEditableDocument ? words.length.toLocaleString() : "—";
     $("#insight-characters").textContent = isEditableDocument ? plainText.length.toLocaleString() : "—";
     $("#insight-reading").textContent = isEditableDocument ? (words.length < 180 ? "<1 min" : `${Math.ceil(words.length / 180)} min`) : "—";
+ 
+    renderOutline();
+  }
+
+  function renderOutline() {
+    const panel = $("#document-outline");
+    const list = $("#outline-list");
+    if (!panel || !list || !panel.classList.contains("visible")) return;
+    const headings = [...editor.querySelectorAll("h1, h2, h3")];
+    const query = $("#outline-search").value.trim().toLocaleLowerCase();
+    const visibleHeadings = headings.map((heading, index) => ({ heading, index })).filter(({ heading }) => (heading.innerText.trim() || "Untitled heading").toLocaleLowerCase().includes(query));
+    $("#outline-count").textContent = `${headings.length} ${headings.length === 1 ? "heading" : "headings"}`;
+    list.replaceChildren();
+    for (const { heading, index } of visibleHeadings) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "outline-" + heading.tagName.toLowerCase();
+      button.dataset.outlineIndex = String(index);
+      button.textContent = heading.innerText.trim() || "Untitled heading";
+      list.append(button);
+    }
+    const empty = $("#outline-empty");
+    empty.hidden = visibleHeadings.length > 0;
+    empty.textContent = headings.length && query ? "No headings match this filter." : "Add a heading from the Home ribbon to build an outline.";
   }
 
   function saveDocument(force = false) {
@@ -107,6 +131,11 @@
     const isDocument = mode === "document";
     editor.contentEditable = String(isDocument);
     titleInput.readOnly = !isDocument;
+    $("#editor-layout").classList.toggle("has-outline", isDocument);
+    $("#document-outline").classList.toggle("visible", isDocument);
+    if (!isDocument) $("#document-outline").classList.remove("mobile-open");
+    $("#toggle-outline").hidden = !isDocument;
+    $("#toggle-outline").setAttribute("aria-expanded", "false");
     $(".ribbon-tabs").hidden = !isDocument;
     ribbon.hidden = !isDocument;
     $("#undo").hidden = !isDocument;
@@ -826,6 +855,26 @@
   imagePicker.addEventListener("change", () => { insertLocalImage(imagePicker.files[0]); imagePicker.value = ""; });
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
   editor.addEventListener("input", () => { countWords(); saveDocument(); });
+  $("#outline-search").addEventListener("input", renderOutline);
+  $("#toggle-outline").addEventListener("click", () => {
+    const panel = $("#document-outline");
+    const open = panel.classList.toggle("mobile-open");
+    $("#toggle-outline").setAttribute("aria-expanded", String(open));
+  });
+  $("#outline-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-outline-index]");
+    if (!button) return;
+    const heading = editor.querySelectorAll("h1, h2, h3")[Number(button.dataset.outlineIndex)];
+    if (!heading) return;
+    editor.focus({ preventScroll: true });
+    const range = document.createRange();
+    range.selectNodeContents(heading);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    heading.scrollIntoView({ block: "nearest", behavior: "auto" });
+  });
   $("#export-html").addEventListener("click", exportHTML);
   $("#export-docx").addEventListener("click", exportDocx);
   $("#undo").addEventListener("click", () => runCommand("undo"));

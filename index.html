@@ -54,12 +54,23 @@
         <div class="document-stage" id="document-stage">
           <div class="stage-heading">
             <div><span class="eyebrow">YOUR WORKSPACE</span><h1 id="stage-title">Untitled document</h1></div>
+            <div class="stage-actions"><button class="text-button outline-toggle" id="toggle-outline" type="button" aria-controls="document-outline" aria-expanded="false" hidden>☷ Outline</button>
             <button class="text-button" id="assist-button" type="button"><span aria-hidden="true">✧</span> Adigun</button>
           </div>
-          <div class="editor-card" id="editor-card">
-            <div class="page-meta"><span id="file-kind">New document</span><span class="page-status" id="page-count">Page 1</span></div>
-            <article class="document-page" id="document" contenteditable="true" role="textbox" aria-label="Document content" aria-multiline="true" spellcheck="true"><p><br /></p></article>
-            <footer class="page-footer"><span id="word-count">0 words</span><span class="page-footer-right"><span>English</span><span class="footer-divider"></span><button class="zoom-button" id="zoom-out" type="button" aria-label="Zoom out">−</button><span id="zoom-value">100%</span><button class="zoom-button" id="zoom-in" type="button" aria-label="Zoom in">＋</button></span></footer>
+          </div>
+          <div class="editor-layout" id="editor-layout">
+            <aside class="document-outline" id="document-outline" aria-label="Document outline">
+              <div class="outline-heading"><div><span class="eyebrow">DOCUMENT</span><h2>Outline</h2></div><span class="outline-count" id="outline-count">0 headings</span></div>
+              <label class="sr-only" for="outline-search">Filter document headings</label>
+              <input class="outline-search" id="outline-search" type="search" placeholder="Filter headings" autocomplete="off" />
+              <nav class="outline-list" id="outline-list" aria-label="Document headings"></nav>
+              <p class="outline-empty" id="outline-empty">Add a heading from the Home ribbon to build an outline.</p>
+            </aside>
+            <div class="editor-card" id="editor-card">
+              <div class="page-meta"><span id="file-kind">New document</span><span class="page-status" id="page-count">Page 1</span></div>
+              <article class="document-page" id="document" contenteditable="true" role="textbox" aria-label="Document content" aria-multiline="true" spellcheck="true"><p><br /></p></article>
+              <footer class="page-footer"><span id="word-count">0 words</span><span class="page-footer-right"><span>English</span><span class="footer-divider"></span><button class="zoom-button" id="zoom-out" type="button" aria-label="Zoom out">−</button><span id="zoom-value">100%</span><button class="zoom-button" id="zoom-in" type="button" aria-label="Zoom in">＋</button></span></footer>
+            </div>
           </div>
         </div>
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
