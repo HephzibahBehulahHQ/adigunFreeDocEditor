@@ -17,6 +17,7 @@
   let pdfUrl;
   let activePdfFile;
   let pageOrientation = "portrait";
+  let tableInsertionRange;
   let autosave = localStorage.getItem("adigun-autosave") !== "false";
 
   const toolsets = {
@@ -29,7 +30,7 @@
     ],
     insert: [
       [{ label: "Add link", action: "link", icon: "↗ Link" }, { label: "Remove link", action: "unlink", icon: "↗̸" }],
-      [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }],
+      [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }],
     ],
     layout: [
       [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }],
@@ -420,6 +421,13 @@
       }
       case "date": runCommand("insertText", new Intl.DateTimeFormat(undefined, { dateStyle: "long" }).format(new Date())); break;
       case "divider": runCommand("insertHTML", "<hr><p><br></p>"); break;
+      case "table": {
+        const selection = window.getSelection();
+        tableInsertionRange = selection && selection.rangeCount && editor.contains(selection.anchorNode) ? selection.getRangeAt(0).cloneRange() : null;
+        $("#table-dialog").showModal();
+        $("#table-rows").focus();
+        break;
+      }
       case "orientation": pageOrientation = pageOrientation === "portrait" ? "landscape" : "portrait"; $("#editor-card").classList.toggle("landscape", pageOrientation === "landscape"); button.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape"; break;
       case "spellcheck": editor.spellcheck = !editor.spellcheck; button.setAttribute("aria-pressed", String(editor.spellcheck)); notify(`Browser spellcheck ${editor.spellcheck ? "on" : "off"}.`); break;
       case "wordcount": notify($("#word-count").textContent); break;
@@ -479,43 +487,79 @@
     }
 
     const body = [];
-    function addParagraph(element, listKind = "", listLevel = 0) {
+    const letterPaper = $("#editor-card").classList.contains("paper-letter");
+    const landscapePaper = $("#editor-card").classList.contains("landscape");
+    let tablePageWidth = letterPaper ? 12240 : 11906;
+    if (landscapePaper) tablePageWidth = letterPaper ? 15840 : 16838;
+    const tableContentWidth = tablePageWidth - 2268;
+
+    function addParagraph(element, listKind = "", listLevel = 0, output = body) {
       const tag = element.tagName.toLowerCase();
       const paragraphProperties = [];
-      if (["h1", "h2", "h3"].includes(tag)) paragraphProperties.push(`<w:pStyle w:val="Heading${tag.slice(1)}"/>`);
+      if (["h1", "h2", "h3"].includes(tag)) paragraphProperties.push('<w:pStyle w:val="Heading' + tag.slice(1) + '"/>');
+      else if (["h4", "h5", "h6"].includes(tag)) { paragraphProperties.push('<w:pStyle w:val="Heading3"/>'); unsupported.add("heading levels 4–6"); }
       const align = ["left", "center", "right", "justify"].includes(element.style.textAlign) ? element.style.textAlign : "";
-      if (align) paragraphProperties.push(`<w:jc w:val="${align}"/>`);
-      if (listKind) paragraphProperties.push(`<w:numPr><w:ilvl w:val="${Math.min(listLevel, 8)}"/><w:numId w:val="${listKind === "ol" ? 2 : 1}"/></w:numPr>`);
-      const runs = [...element.childNodes].map((node) => serializeInline(node)).join("") || "<w:r><w:t></w:t></w:r>";
-      body.push(`<w:p>${paragraphProperties.length ? `<w:pPr>${paragraphProperties.join("")}</w:pPr>` : ""}${runs}</w:p>`);
+      if (align) paragraphProperties.push('<w:jc w:val="' + align + '"/>');
+      if (listKind) paragraphProperties.push('<w:numPr><w:ilvl w:val="' + Math.min(listLevel, 8) + '"/><w:numId w:val="' + (listKind === "ol" ? 2 : 1) + '"/></w:numPr>');
+      const marks = tag === "th" || element.closest("th") ? { bold: true } : {};
+      const runs = [...element.childNodes].map((node) => serializeInline(node, marks)).join("") || "<w:r><w:t></w:t></w:r>";
+      output.push("<w:p>" + (paragraphProperties.length ? "<w:pPr>" + paragraphProperties.join("") + "</w:pPr>" : "") + runs + "</w:p>");
     }
 
-    function walkBlocks(node, listKind = "", listLevel = 0) {
+    function tableXml(table) {
+      const rows = [...table.querySelectorAll("tr")].filter((row) => row.closest("table") === table);
+      if (!rows.length) { unsupported.add("empty tables"); return ""; }
+      const cellsByRow = rows.map((row) => [...row.children].filter((cell) => ["td", "th"].includes(cell.tagName.toLowerCase())));
+      const columnCount = Math.max(0, ...cellsByRow.map((cells) => cells.reduce((total, cell) => total + Math.max(1, Math.min(50, cell.colSpan || 1)), 0)));
+      if (!columnCount || columnCount > 50 || rows.length > 1000) { unsupported.add("tables over 1,000 rows or 50 columns"); return ""; }
+      const columnWidth = Math.floor(tableContentWidth / columnCount);
+      const borders = ["top", "left", "bottom", "right", "insideH", "insideV"].map((side) => '<w:' + side + ' w:val="single" w:sz="4" w:space="0" w:color="C6CDD8"/>').join("");
+      let xml = '<w:tbl><w:tblPr><w:tblW w:w="' + tableContentWidth + '" w:type="dxa"/><w:tblBorders>' + borders + '</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>';
+      for (let column = 0; column < columnCount; column++) xml += '<w:gridCol w:w="' + columnWidth + '"/>';
+      xml += '</w:tblGrid>';
+      rows.forEach((row, rowIndex) => {
+        const cells = cellsByRow[rowIndex];
+        xml += '<w:tr>' + (row.parentElement?.tagName.toLowerCase() === "thead" ? '<w:trPr><w:tblHeader w:val="true"/></w:trPr>' : "");
+        let occupied = 0;
+        for (const cell of cells) {
+          const span = Math.max(1, Math.min(columnCount - occupied, cell.colSpan || 1));
+          occupied += span;
+          if (cell.rowSpan > 1) unsupported.add("merged table rows");
+          xml += '<w:tc><w:tcPr><w:tcW w:w="' + columnWidth * span + '" w:type="dxa"/>' + (span > 1 ? '<w:gridSpan w:val="' + span + '"/>' : "") + '</w:tcPr>';
+          const content = [];
+          if (cell.children.length) walkBlocks(cell, "", 0, content);
+          else addParagraph(cell, "", 0, content);
+          xml += content.join("") || "<w:p/>";
+          xml += "</w:tc>";
+        }
+        while (occupied < columnCount) { xml += '<w:tc><w:tcPr><w:tcW w:w="' + columnWidth + '" w:type="dxa"/></w:tcPr><w:p/></w:tc>'; occupied++; }
+        xml += "</w:tr>";
+      });
+      return xml + "</w:tbl>";
+    }
+
+    function walkBlocks(node, listKind = "", listLevel = 0, output = body) {
       for (const child of [...node.children]) {
         const tag = child.tagName.toLowerCase();
-        if (tag === "ul" || tag === "ol") { walkBlocks(child, tag, listLevel); continue; }
+        if (tag === "ul" || tag === "ol") { walkBlocks(child, tag, listLevel, output); continue; }
         if (tag === "li") {
           const inlineChildren = [...child.children].filter((item) => ["ul", "ol"].includes(item.tagName.toLowerCase()));
           if (listLevel > 0 || inlineChildren.length) unsupported.add("nested list hierarchy");
           const copy = child.cloneNode(true);
           for (const nested of [...copy.children]) if (["ul", "ol"].includes(nested.tagName.toLowerCase())) nested.remove();
-          addParagraph(copy, listKind || "ul", 0);
-          for (const nested of inlineChildren) walkBlocks(nested, nested.tagName.toLowerCase(), listLevel + 1);
+          addParagraph(copy, listKind || "ul", 0, output);
+          for (const nested of inlineChildren) walkBlocks(nested, nested.tagName.toLowerCase(), listLevel + 1, output);
           continue;
         }
         if (["p", "h1", "h2", "h3", "blockquote", "pre"].includes(tag)) {
           if (tag === "blockquote" || tag === "pre") unsupported.add(tag === "pre" ? "code blocks" : "block quotes");
-          addParagraph(child, listKind, listLevel);
+          addParagraph(child, listKind, listLevel, output);
           continue;
         }
-        if (tag === "table") {
-          unsupported.add("tables");
-          for (const row of child.querySelectorAll("tr")) addParagraph(row, "", 0);
-          continue;
-        }
-        if (tag === "hr") { body.push('<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="808080"/></w:pBdr></w:pPr><w:r><w:t></w:t></w:r></w:p>'); continue; }
-        if (child.children.length) walkBlocks(child, listKind, listLevel);
-        else if (child.textContent.trim()) addParagraph(child, listKind, listLevel);
+        if (tag === "table") { output.push(tableXml(child)); continue; }
+        if (tag === "hr") { output.push('<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="808080"/></w:pBdr></w:pPr><w:r><w:t></w:t></w:r></w:p>'); continue; }
+        if (child.children.length) walkBlocks(child, listKind, listLevel, output);
+        else if (child.textContent.trim()) addParagraph(child, listKind, listLevel, output);
       }
     }
     walkBlocks(editor);
@@ -677,6 +721,47 @@
     const restoreButton = event.target.closest("[data-restore-id]"); if (restoreButton) markDeleted(restoreButton.dataset.restoreId, false);
   });
   $("#build-overview").addEventListener("click", buildOverview);
+  $("#table-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const rows = Number($("#table-rows").value);
+    const columns = Number($("#table-columns").value);
+    if (!Number.isInteger(rows) || !Number.isInteger(columns) || rows < 1 || rows > 50 || columns < 1 || columns > 20) { notify("Enter between 1–50 rows and 1–20 columns."); return; }
+    const table = document.createElement("table");
+    const head = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    for (let column = 0; column < columns; column++) { const cell = document.createElement("th"); cell.innerHTML = "<p><br></p>"; headerRow.append(cell); }
+    head.append(headerRow);
+    table.append(head);
+    const body = document.createElement("tbody");
+    for (let row = 1; row < rows; row++) {
+      const record = document.createElement("tr");
+      for (let column = 0; column < columns; column++) { const cell = document.createElement("td"); cell.innerHTML = "<p><br></p>"; record.append(cell); }
+      body.append(record);
+    }
+    table.append(body);
+    const selection = window.getSelection();
+    const anchor = tableInsertionRange?.startContainer;
+    const anchorElement = anchor?.nodeType === Node.ELEMENT_NODE ? anchor : anchor?.parentElement;
+    const block = anchorElement?.closest("p,h1,h2,h3,blockquote,pre,li,table");
+    if (block && editor.contains(block)) block.after(table);
+    else editor.append(table);
+    const trailingParagraph = document.createElement("p");
+    trailingParagraph.innerHTML = "<br>";
+    table.after(trailingParagraph);
+    editor.focus();
+    selection?.removeAllRanges();
+    const caret = document.createRange();
+    caret.setStart(trailingParagraph, 0);
+    caret.collapse(true);
+    selection?.addRange(caret);
+    countWords();
+    saveDocument();
+    tableInsertionRange = undefined;
+    tableInsertionRange = undefined;
+    $("#table-dialog").close();
+    notify("Inserted a " + rows + " × " + columns + " table. Type in a cell to fill it.");
+  });
+  $("#cancel-table").addEventListener("click", () => $("#table-dialog").close());
   $("#autosave-toggle").addEventListener("change", (event) => { autosave = event.target.checked; localStorage.setItem("adigun-autosave", String(autosave)); if (autosave) saveDocument(); else setSaveStatus("Autosave off"); });
   document.addEventListener("keydown", (event) => {
     const mod = event.ctrlKey || event.metaKey;
