@@ -275,23 +275,26 @@
     $("#find-query").select();
   }
 
-  function replaceFindMatch(match, replacement) {
+  function replaceFindMatch(match, replacement, reopenDialog = true) {
+    const dialog = $("#find-dialog");
+    const shouldReopen = dialog.open && reopenDialog;
+    if (dialog.open) dialog.close();
     const range = rangeAtTextOffsets(match.start, match.end);
-    if (!range) return false;
+    if (!range) { if (shouldReopen) dialog.showModal(); return false; }
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
     editor.focus({ preventScroll: true });
     const before = editorText();
-    document.execCommand("insertText", false, replacement);
     const expected = before.slice(0, match.start) + replacement + before.slice(match.end);
+    document.execCommand("insertText", false, replacement);
     if (editorText() !== expected) {
-      const fallbackRange = rangeAtTextOffsets(match.start, match.end);
-      if (!fallbackRange) return false;
-      fallbackRange.deleteContents();
-      fallbackRange.insertNode(document.createTextNode(replacement));
-      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      if (shouldReopen) dialog.showModal();
+      return false;
     }
+    countWords();
+    saveDocument();
+    if (shouldReopen) dialog.showModal();
     return true;
   }
 
@@ -1337,12 +1340,15 @@
     if (!findMatches.length || findMatchTotal > FIND_MATCH_LIMIT) return;
     const matches = [...findMatches];
     const replacement = $("#replace-query").value;
+    const dialog = $("#find-dialog");
+    dialog.close();
     let replaced = 0;
     replacingAllMatches = true;
     try {
-      for (let index = matches.length - 1; index >= 0; index--) if (replaceFindMatch(matches[index], replacement)) replaced++;
+      for (let index = matches.length - 1; index >= 0; index--) if (replaceFindMatch(matches[index], replacement, false)) replaced++;
     } finally {
       replacingAllMatches = false;
+      dialog.showModal();
     }
     refreshFindMatches(true);
     if (findMatches.length) showFindMatch(0);
