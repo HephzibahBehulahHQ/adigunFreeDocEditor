@@ -113,7 +113,6 @@
     $("#insight-reading").textContent = isEditableDocument ? (words.length < 180 ? "<1 min" : `${Math.ceil(words.length / 180)} min`) : "—";
  
     renderOutline();
-    renderPageNavigation();
   }
 
   function renderOutline() {
@@ -147,10 +146,47 @@
     sheets.forEach((sheet, index) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "break-navigation-item";
+      button.className = "break-navigation-item page-thumbnail-item";
       button.dataset.pageIndex = String(index);
-      button.textContent = `Page ${index + 1}`;
       button.setAttribute("aria-label", `Go to page ${index + 1}`);
+
+      const preview = document.createElement("span");
+      preview.className = "page-thumbnail-preview";
+      preview.setAttribute("aria-hidden", "true");
+      const replica = sheet.cloneNode(true);
+      replica.classList.add("document-page", "page-thumbnail-sheet");
+      replica.removeAttribute("data-editor-page");
+      replica.removeAttribute("role");
+      replica.removeAttribute("aria-label");
+      replica.setAttribute("contenteditable", "false");
+      replica.setAttribute("aria-hidden", "true");
+      replica.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
+      replica.querySelectorAll("img").forEach((image) => {
+        const placeholder = document.createElement("span");
+        placeholder.className = "page-thumbnail-image";
+        placeholder.setAttribute("aria-hidden", "true");
+        placeholder.style.width = `${image.offsetWidth || 80}px`;
+        placeholder.style.height = `${image.offsetHeight || 56}px`;
+        image.replaceWith(placeholder);
+      });
+      const rect = sheet.getBoundingClientRect();
+      const width = rect.width || 720;
+      const height = rect.height || 960;
+      const scale = Math.min(68 / width, 92 / height);
+      replica.style.width = `${width}px`;
+      replica.style.minHeight = `${height}px`;
+      replica.style.maxWidth = "none";
+      replica.style.margin = "0";
+      replica.style.padding = getComputedStyle(sheet).padding;
+      replica.style.transform = `scale(${scale})`;
+      replica.style.transformOrigin = "top left";
+      replica.style.pointerEvents = "none";
+      preview.append(replica);
+
+      const label = document.createElement("span");
+      label.className = "page-thumbnail-label";
+      label.textContent = `Page ${index + 1}`;
+      button.append(preview, label);
       list.append(button);
     });
     $("#break-navigation-empty").hidden = sheets.length > 0;
