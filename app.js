@@ -25,6 +25,11 @@
   let reviewComments = [];
   let pendingReviewAnchor;
   let reviewHighlightTimer;
+  let findMatches = [];
+  let findMatchTotal = 0;
+  let currentFindIndex = -1;
+  let replacingAllMatches = false;
+  const FIND_MATCH_LIMIT = 5000;
   let autosave = localStorage.getItem("adigun-autosave") !== "false";
   let theme = localStorage.getItem("adigun-theme") === "dark" ? "dark" : "light";
   document.documentElement.dataset.theme = theme;
@@ -50,7 +55,7 @@
     ],
     view: [
       [{ label: "Zoom out", action: "zoom-out", icon: "−" }, { label: "Zoom in", action: "zoom-in", icon: "+" }, { label: "Reset zoom", action: "zoom-reset", icon: "100%" }],
-      [{ label: "Find in document", action: "find", icon: "⌕ Find" }, { label: "Toggle Adigun", action: "assistant", icon: "✧ Adigun" }],
+      [{ label: "Find and replace", action: "find", icon: "⌕ Find & replace" }, { label: "Toggle Adigun", action: "assistant", icon: "✧ Adigun" }],
     ],
   };
 
@@ -176,6 +181,118 @@
     range.setStart(startPoint.node, Math.min(startPoint.offset, startPoint.node.nodeValue.length));
     range.setEnd(endPoint.node, Math.min(endPoint.offset, endPoint.node.nodeValue.length));
     return range;
+  }
+
+  function findTextMatches(query, matchCase) {
+    if (!query) return { matches: [], total: 0 };
+    const escaped = query.replace(/[.*+?^${}()|[\\]\\]/g, "\\  function reviewCommentRange(comment, text = editorText()) {");
+    const matcher = new RegExp(escaped, matchCase ? "g" : "gi");
+    const text = editorText();
+    const matches = [];
+    let total = 0;
+    let result;
+    while ((result = matcher.exec(text)) !== null) {
+      total++;
+      if (matches.length < FIND_MATCH_LIMIT) matches.push({ start: result.index, end: result.index + result[0].length });
+      if (!result[0].length) matcher.lastIndex++;
+    }
+    return { matches, total };
+  }
+
+  function clearFindHighlights() {
+    if (typeof CSS !== "undefined" && CSS.highlights) {
+      CSS.highlights.delete("adigun-find");
+      CSS.highlights.delete("adigun-find-current");
+    }
+  }
+
+  function updateFindHighlights() {
+    if (typeof CSS === "undefined" || !CSS.highlights || typeof Highlight === "undefined") return;
+    const ranges = findMatches.map((match) => rangeAtTextOffsets(match.start, match.end)).filter(Boolean);
+    const current = currentFindIndex >= 0 ? rangeAtTextOffsets(findMatches[currentFindIndex].start, findMatches[currentFindIndex].end) : null;
+    if (ranges.length) CSS.highlights.set("adigun-find", new Highlight(...ranges));
+    else CSS.highlights.delete("adigun-find");
+    if (current) CSS.highlights.set("adigun-find-current", new Highlight(current));
+    else CSS.highlights.delete("adigun-find-current");
+  }
+
+  function updateFindStatus() {
+    const status = $("#find-count");
+    if (!status) return;
+    const query = $("#find-query").value;
+    if (!query) status.textContent = "Enter text to find.";
+    else if (!findMatchTotal) status.textContent = "No matches.";
+    else {
+      const totalLabel = findMatchTotal > FIND_MATCH_LIMIT ? `${FIND_MATCH_LIMIT.toLocaleString()}+ matches` : `${findMatchTotal} match${findMatchTotal === 1 ? "" : "es"}`;
+      const position = currentFindIndex >= 0 ? `Match ${currentFindIndex + 1} of ${totalLabel}.` : totalLabel;
+      status.textContent = findMatchTotal > FIND_MATCH_LIMIT ? `${position} Narrow the search to replace all.` : position;
+    }
+    const hasMatches = findMatches.length > 0;
+    $("#find-previous").disabled = !hasMatches;
+    $("#find-next").disabled = !hasMatches;
+    $("#replace-current").disabled = !hasMatches;
+    $("#replace-all").disabled = !hasMatches || findMatchTotal > FIND_MATCH_LIMIT;
+  }
+
+  function refreshFindMatches(reset = false) {
+    const result = findTextMatches($("#find-query").value, $("#find-match-case").checked);
+    findMatches = result.matches;
+    findMatchTotal = result.total;
+    if (reset) currentFindIndex = findMatches.length ? 0 : -1;
+    else if (findMatches.length) currentFindIndex = Math.min(Math.max(currentFindIndex, 0), findMatches.length - 1);
+    else currentFindIndex = -1;
+    updateFindHighlights();
+    updateFindStatus();
+  }
+
+  function showFindMatch(index) {
+    const match = findMatches[index];
+    const range = match && rangeAtTextOffsets(match.start, match.end);
+    if (!range) return;
+    const rect = range.getBoundingClientRect();
+    if (rect.width || rect.height) window.scrollBy({ top: rect.top - 140, behavior: "smooth" });
+    updateFindHighlights();
+    updateFindStatus();
+  }
+
+  function navigateFindMatch(direction) {
+    if (!findMatches.length) { refreshFindMatches(true); return; }
+    currentFindIndex = (currentFindIndex + direction + findMatches.length) % findMatches.length;
+    showFindMatch(currentFindIndex);
+  }
+
+  function openFindDialog() {
+    if (activePdfFile || $("#editor-card").classList.contains("landing") || editor.hidden) {
+      notify("Open an editable document to use Find and replace.");
+      return;
+    }
+    const selection = window.getSelection();
+    if (selection?.toString() && editor.contains(selection.anchorNode)) $("#find-query").value = selection.toString().slice(0, 2000);
+    $("#find-dialog").showModal();
+    refreshFindMatches(true);
+    if (findMatches.length) showFindMatch(0);
+    $("#find-query").focus();
+    $("#find-query").select();
+  }
+
+  function replaceFindMatch(match, replacement) {
+    const range = rangeAtTextOffsets(match.start, match.end);
+    if (!range) return false;
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    editor.focus({ preventScroll: true });
+    const before = editorText();
+    document.execCommand("insertText", false, replacement);
+    const expected = before.slice(0, match.start) + replacement + before.slice(match.end);
+    if (editorText() !== expected) {
+      const fallbackRange = rangeAtTextOffsets(match.start, match.end);
+      if (!fallbackRange) return false;
+      fallbackRange.deleteContents();
+      fallbackRange.insertNode(document.createTextNode(replacement));
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    return true;
   }
 
   function reviewCommentRange(comment, text = editorText()) {
@@ -744,7 +861,7 @@
       case "zoom-out": setZoom(zoom - 10); break;
       case "zoom-in": setZoom(zoom + 10); break;
       case "zoom-reset": setZoom(100); break;
-      case "find": { const query = window.prompt("Find in this document"); if (query) window.find(query, false, false, true); break; }
+      case "find": openFindDialog(); break;
       case "assistant": toggleAssistant(); break;
     }
   }
@@ -1104,7 +1221,7 @@
   filePicker.addEventListener("cancel", () => { filePicker.accept = acceptedFileTypes; });
   imagePicker.addEventListener("change", () => { insertLocalImage(imagePicker.files[0]); imagePicker.value = ""; });
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
-  editor.addEventListener("input", () => { countWords(); clearTimeout(reviewHighlightTimer); reviewHighlightTimer = setTimeout(updateReviewHighlights, 350); saveDocument(); });
+  editor.addEventListener("input", () => { countWords(); clearTimeout(reviewHighlightTimer); reviewHighlightTimer = setTimeout(updateReviewHighlights, 350); saveDocument(); if (!replacingAllMatches && $("#find-dialog").open) refreshFindMatches(false); });
   $("#outline-search").addEventListener("input", renderOutline);
   $("#toggle-outline").addEventListener("click", () => {
     const panel = $("#document-outline");
@@ -1203,6 +1320,36 @@
   $("#cancel-table").addEventListener("click", () => $("#table-dialog").close());
   $("#autosave-toggle").addEventListener("change", (event) => { autosave = event.target.checked; localStorage.setItem("adigun-autosave", String(autosave)); if (autosave) saveDocument(); else setSaveStatus("Autosave off"); });
   $("#theme-toggle").addEventListener("change", (event) => setTheme(event.target.checked ? "dark" : "light"));
+  $("#find-form").addEventListener("submit", (event) => { event.preventDefault(); navigateFindMatch(1); });
+  $("#find-query").addEventListener("input", () => { refreshFindMatches(true); if (findMatches.length) showFindMatch(0); });
+  $("#find-match-case").addEventListener("change", () => { refreshFindMatches(true); if (findMatches.length) showFindMatch(0); });
+  $("#find-next").addEventListener("click", () => navigateFindMatch(1));
+  $("#find-previous").addEventListener("click", () => navigateFindMatch(-1));
+  $("#replace-current").addEventListener("click", () => {
+    if (currentFindIndex < 0) return;
+    const index = currentFindIndex;
+    if (!replaceFindMatch(findMatches[index], $("#replace-query").value)) { notify("The selected match could not be replaced."); return; }
+    refreshFindMatches(false);
+    if (findMatches.length) showFindMatch(Math.min(index, findMatches.length - 1));
+    $("#find-query").focus();
+  });
+  $("#replace-all").addEventListener("click", () => {
+    if (!findMatches.length || findMatchTotal > FIND_MATCH_LIMIT) return;
+    const matches = [...findMatches];
+    const replacement = $("#replace-query").value;
+    let replaced = 0;
+    replacingAllMatches = true;
+    try {
+      for (let index = matches.length - 1; index >= 0; index--) if (replaceFindMatch(matches[index], replacement)) replaced++;
+    } finally {
+      replacingAllMatches = false;
+    }
+    refreshFindMatches(true);
+    if (findMatches.length) showFindMatch(0);
+    notify(`Replaced ${replaced} match${replaced === 1 ? "" : "es"}.`);
+  });
+  $("#close-find").addEventListener("click", () => $("#find-dialog").close());
+  $("#find-dialog").addEventListener("close", clearFindHighlights);
   $("#comment-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const body = $("#comment-text").value.trim();
