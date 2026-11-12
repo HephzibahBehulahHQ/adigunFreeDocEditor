@@ -7,6 +7,7 @@
   const ribbon = $("#ribbon-tools");
   const assistant = $("#adigun-window");
   const filePicker = $("#file-picker");
+  const imagePicker = $("#image-picker");
   const DB_NAME = "adigunFreeDocEditor";
   let database;
   let activeId = crypto.randomUUID();
@@ -18,6 +19,7 @@
   let activePdfFile;
   let pageOrientation = "portrait";
   let tableInsertionRange;
+  let imageInsertionRange;
   let autosave = localStorage.getItem("adigun-autosave") !== "false";
 
   const toolsets = {
@@ -30,7 +32,7 @@
     ],
     insert: [
       [{ label: "Add link", action: "link", icon: "↗ Link" }, { label: "Remove link", action: "unlink", icon: "↗̸" }],
-      [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }],
+      [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }, { label: "Insert image from this device", action: "image", icon: "▧ Image" }],
     ],
     layout: [
       [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }],
@@ -428,6 +430,12 @@
         $("#table-rows").focus();
         break;
       }
+      case "image": {
+        const selection = window.getSelection();
+        imageInsertionRange = selection && selection.rangeCount && editor.contains(selection.anchorNode) ? selection.getRangeAt(0).cloneRange() : null;
+        imagePicker.click();
+        break;
+      }
       case "orientation": pageOrientation = pageOrientation === "portrait" ? "landscape" : "portrait"; $("#editor-card").classList.toggle("landscape", pageOrientation === "landscape"); button.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape"; break;
       case "spellcheck": editor.spellcheck = !editor.spellcheck; button.setAttribute("aria-pressed", String(editor.spellcheck)); notify(`Browser spellcheck ${editor.spellcheck ? "on" : "off"}.`); break;
       case "wordcount": notify($("#word-count").textContent); break;
@@ -664,6 +672,57 @@
     tx.oncomplete = () => { notify(deleted ? "Document moved to Trash." : "Document restored."); showDocumentList(document.querySelector(".nav-item.active")?.dataset.view || "recent"); };
   }
 
+  async function insertLocalImage(file) {
+    imageInsertionRange = imageInsertionRange && editor.contains(imageInsertionRange.startContainer) ? imageInsertionRange : null;
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) { notify("Choose a PNG, JPEG or GIF smaller than 8 MB."); return; }
+    try {
+      const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+      const signatures = [
+        ["image/png", [137, 80, 78, 71, 13, 10, 26, 10]],
+        ["image/jpeg", [255, 216, 255]],
+        ["image/gif", [71, 73, 70, 56, 55, 97]],
+        ["image/gif", [71, 73, 70, 56, 57, 97]],
+      ];
+      const type = signatures.find(([mime, bytes]) => mime === file.type && bytes.every((value, index) => header[index] === value))?.[0];
+      if (!type) { notify("This image is not a valid PNG, JPEG or GIF file."); return; }
+      const src = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("The image could not be read."));
+        reader.readAsDataURL(file);
+      });
+      const image = document.createElement("img");
+      image.src = src;
+      image.alt = file.name.slice(0, 300);
+      image.style.maxWidth = "100%";
+      const paragraph = document.createElement("p");
+      paragraph.append(image);
+      const anchor = imageInsertionRange?.startContainer;
+      const anchorElement = anchor?.nodeType === Node.ELEMENT_NODE ? anchor : anchor?.parentElement;
+      const block = anchorElement?.closest("p,h1,h2,h3,blockquote,pre,li,table");
+      if (block && editor.contains(block)) block.after(paragraph);
+      else editor.append(paragraph);
+      const tail = document.createElement("p");
+      tail.innerHTML = "<br>";
+      paragraph.after(tail);
+      editor.focus();
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      const caret = document.createRange();
+      caret.setStart(tail, 0);
+      caret.collapse(true);
+      selection?.addRange(caret);
+      countWords();
+      saveDocument();
+      notify("Inserted “" + file.name + "” from this device.");
+    } catch (error) {
+      notify(error.message || "The image could not be inserted.");
+    } finally {
+      imageInsertionRange = undefined;
+    }
+  }
+
   function setupAssistantDrag() {
     const handle = $("#adigun-drag-handle");
     let start;
@@ -687,6 +746,7 @@
   $("#open-document").addEventListener("click", () => { setMobileMenu(false); filePicker.click(); });
   $("#mobile-menu").addEventListener("click", () => setMobileMenu(!$("#workspace-nav").classList.contains("mobile-open")));
   filePicker.addEventListener("change", () => { importFile(filePicker.files[0]); filePicker.value = ""; });
+  imagePicker.addEventListener("change", () => { insertLocalImage(imagePicker.files[0]); imagePicker.value = ""; });
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
   editor.addEventListener("input", () => { countWords(); saveDocument(); });
   $("#export-html").addEventListener("click", exportHTML);
@@ -774,3 +834,4 @@
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
   openDatabase().then(async () => { setSaveStatus("Saved"); if ((await getDocuments()).length) await showDocumentList("recent"); else showLanding(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
 })();
+
