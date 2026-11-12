@@ -7,6 +7,7 @@
   const ribbon = $("#ribbon-tools");
   const assistant = $("#adigun-window");
   const filePicker = $("#file-picker");
+  const acceptedFileTypes = filePicker.accept;
   const imagePicker = $("#image-picker");
   const documentModel = window.AdigunDocumentModel;
   const DB_NAME = "adigunFreeDocEditor";
@@ -165,6 +166,12 @@
     button.setAttribute("aria-label", open ? "Close workspace menu" : "Open workspace menu");
   }
 
+  function openFilePicker(accept = acceptedFileTypes) {
+    filePicker.value = "";
+    filePicker.accept = accept;
+    filePicker.click();
+  }
+
   function createDocument() {
     activePdfFile = undefined;
     if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
@@ -202,7 +209,7 @@
     $("#editor-card").classList.remove("pdf-preview");
     $("#editor-card").classList.add("landing");
     editor.hidden = false;
-    editor.innerHTML = '<section class="landing-page"><span class="landing-kicker">ADIGUNFREEDOCEDITOR</span><h2>Your documents.<br>Your workspace.</h2><p>Create a document or open one of the file types supported in this first workspace.</p><div class="landing-actions"><button class="landing-primary" type="button" id="landing-create">Create blank document</button><button class="landing-secondary" type="button" id="landing-open">Open a file</button></div><section class="landing-recents" id="landing-recents" aria-labelledby="landing-recents-title"><div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div><button class="landing-all" type="button" id="landing-all">View all</button></div><p class="landing-recents-empty">Loading saved documents…</p></section><div class="landing-details"><div><strong>Work stays here</strong><span>Editable document text is saved in this browser. No account or cloud sync is active.</span></div><div><strong>Supported in this build</strong><span>Import Word structure, edit TXT, Markdown and HTML, or view and download PDF</span></div></div></section>';
+    editor.innerHTML = '<section class="landing-page"><span class="landing-kicker">ADIGUNFREEDOCEDITOR</span><h2>Your documents.<br>Your workspace.</h2><p>Create a document or open one of the file types supported in this first workspace.</p><div class="landing-actions"><button class="landing-primary" type="button" id="landing-create">Create blank document</button><button class="landing-secondary" type="button" id="landing-open-word">Open Word document</button><button class="landing-secondary" type="button" id="landing-open-pdf">Open PDF</button></div><section class="landing-recents" id="landing-recents" aria-labelledby="landing-recents-title"><div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div><button class="landing-all" type="button" id="landing-all">View all</button></div><p class="landing-recents-empty">Loading saved documents…</p></section><div class="landing-details"><div><strong>Work stays here</strong><span>Editable document text is saved in this browser. No account or cloud sync is active.</span></div><div><strong>Supported in this build</strong><span>Import Word structure, edit TXT, Markdown and HTML, or view and download PDF</span></div></div></section>';
     loadLandingRecentDocuments();
   }
 
@@ -861,9 +868,10 @@
   }
 
   $("#new-document").addEventListener("click", () => { setMobileMenu(false); createDocument(); });
-  $("#open-document").addEventListener("click", () => { setMobileMenu(false); filePicker.click(); });
+  $("#open-document").addEventListener("click", () => { setMobileMenu(false); openFilePicker(); });
   $("#mobile-menu").addEventListener("click", () => setMobileMenu(!$("#workspace-nav").classList.contains("mobile-open")));
-  filePicker.addEventListener("change", () => { importFile(filePicker.files[0]); filePicker.value = ""; });
+  filePicker.addEventListener("change", () => { const file = filePicker.files[0]; filePicker.accept = acceptedFileTypes; filePicker.value = ""; if (file) importFile(file); });
+  filePicker.addEventListener("cancel", () => { filePicker.accept = acceptedFileTypes; });
   imagePicker.addEventListener("change", () => { insertLocalImage(imagePicker.files[0]); imagePicker.value = ""; });
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
   editor.addEventListener("input", () => { countWords(); saveDocument(); });
@@ -914,7 +922,8 @@
     const openButton = event.target.closest("[data-open-id]"); if (openButton) openSaved(openButton.dataset.openId);
     if (event.target.closest("#empty-create")) createDocument();
     if (event.target.closest("#landing-create")) createDocument();
-    if (event.target.closest("#landing-open")) filePicker.click();
+    if (event.target.closest("#landing-open-word")) openFilePicker(".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    if (event.target.closest("#landing-open-pdf")) openFilePicker(".pdf,application/pdf");
     if (event.target.closest("#landing-all")) document.querySelector('[data-view="recent"]')?.click();
     const trashButton = event.target.closest("[data-trash-id]"); if (trashButton) markDeleted(trashButton.dataset.trashId, true);
     const restoreButton = event.target.closest("[data-restore-id]"); if (restoreButton) markDeleted(restoreButton.dataset.restoreId, false);
