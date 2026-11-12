@@ -1115,6 +1115,7 @@
     const imageIds = new Map();
     const images = [];
     const unsupported = new Set();
+    const exportableFontFamilies = new Set(["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"]);
     let nextRelationship = 3;
     let nextDrawing = 1;
 
@@ -1180,7 +1181,8 @@
       if (["i", "em"].includes(tag)) next.italic = true;
       if (tag === "u") next.underline = true;
       if (["s", "strike", "del"].includes(tag)) next.strike = true;
-      const fontFamily = supportedFontFamily(node.getAttribute("data-font-family") || node.getAttribute("face") || node.style?.fontFamily);
+      const requestedFont = String(node.getAttribute("data-font-family") || node.getAttribute("face") || node.style?.fontFamily || "").split(",")[0].trim().replace(/^["\']|["\']$/g, "");
+      const fontFamily = [...exportableFontFamilies].find((family) => family.toLowerCase() === requestedFont.toLowerCase());
       if (fontFamily) next.fontFamily = fontFamily;
       const children = [...node.childNodes].map((child) => serializeInline(child, next)).join("");
       if (tag === "a") {
