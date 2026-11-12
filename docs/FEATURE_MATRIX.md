@@ -12,7 +12,7 @@ Status is specific to the current first workspace slice.
 | Structured document model | Partial | Versioned allow-listed node tree is now the source for local persistence and exports; the interactive editing surface still uses browser contenteditable. The editor groups top-level blocks into paper-sized sheets; oversized blocks grow beyond a sheet, and paragraphs are not split across pages. |
 | Insert and edit tables | Partial | Insert up to 50 rows × 20 columns; table cells are editable. No row/column merge tools. |
 | Insert local images | Implemented | PNG, JPEG and GIF up to 8 MB; stored in the browser document. |
-| Autosave and reopen | Implemented | IndexedDB; preference is stored locally; Ctrl+S is available. |
+| Autosave and reopen | Implemented | IndexedDB; preference is stored locally; toolbar Save and Ctrl+S are available. |
 | TXT, Markdown and HTML import | Implemented | Imports plain text into the editor; source HTML formatting is not preserved. |
 | PDF viewing and download | Implemented | Browser PDF viewer; editing and page operations are not supported. |
 | HTML export | Implemented | Downloads the current editable document as an HTML file. |
