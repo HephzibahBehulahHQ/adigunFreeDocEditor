@@ -2,7 +2,7 @@
   const format = "adigun-document";
   const version = 1;
   const allowedTags = new Set([
-    "p", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "em", "i", "u", "s", "del",
+    "p", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "em", "i", "u", "s", "strike", "del",
     "ul", "ol", "li", "a", "br", "hr", "blockquote", "pre", "code", "table", "thead", "tbody",
     "tfoot", "tr", "th", "td", "img",
   ]);
