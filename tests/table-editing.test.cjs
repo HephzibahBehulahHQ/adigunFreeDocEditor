@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
-const selectionStart = source.indexOf("  function selectedTableCell()");
+const selectionStart = source.indexOf("  function tableGridRows()");
 const selectionEnd = source.indexOf("  function selectedParagraphBlocks()", selectionStart);
 const operationStart = source.indexOf("  function mergeTableCells()", selectionEnd);
 const operationEnd = source.indexOf("  function deleteTableRow()", operationStart);
@@ -25,6 +25,7 @@ class Cell {
   get cellIndex() { return this.parentElement?.cells.indexOf(this) ?? -1; }
   get firstChild() { return this.childNodes[0] || null; }
   get rowSpan() { return Number(this.getAttribute("rowspan")) || 1; }
+  get colSpan() { return Number(this.getAttribute("colspan")) || 1; }
   append(node) {
     if (node.parentElement?.childNodes) {
       const siblings = node.parentElement.childNodes;
@@ -61,7 +62,7 @@ function createEnvironment(cells, { extraRows = [], selectionIndexes = [0, cells
   const editor = { tagName: "DIV", parentElement: null };
   const table = { tagName: "TABLE", parentElement: editor, closest(selector) { return selector === "table" ? this : null; } };
   const makeRow = (items) => {
-    const row = { tagName: "TR", parentElement: table, cells: [] };
+    const row = { tagName: "TR", parentElement: table, cells: [], insertBefore(cell, reference) { const index = reference ? this.cells.indexOf(reference) : this.cells.length; this.cells.splice(index, 0, cell); cell.parentElement = this; } };
     for (const cell of items) { cell.parentElement = row; row.cells.push(cell); }
     return row;
   };
@@ -94,14 +95,14 @@ function createEnvironment(cells, { extraRows = [], selectionIndexes = [0, cells
   const document = { createElement: (tag) => new Cell(tag) };
   const api = new Function("window", "Node", "editor", "document", "notify", "focusTableCell",
     source.slice(selectionStart, selectionEnd) + "\n" + source.slice(operationStart, operationEnd) +
-    "\nreturn { selectedTableCell, selectedTableCells, mergeTableCells, splitTableCell };")(
+    "\nreturn { tableGridRows, hasVerticalMerges, selectedTableCell, selectedTableCells, selectedVerticalTableCells, mergeTableCells, mergeTableCellsVertically, splitTableCell };")(
       window, Node, { contains }, document, (message) => notices.push(message), (cell) => {
         focusedCell = cell;
         selection.anchorNode = cell;
         selection.focusNode = cell;
         selection.isCollapsed = true;
       });
-  return { api, row, rows, selection, notices, get focusedCell() { return focusedCell; } };
+  return { api, row, rows, selection, selected, notices, get focusedCell() { return focusedCell; } };
 }
 
 {
@@ -115,6 +116,25 @@ function createEnvironment(cells, { extraRows = [], selectionIndexes = [0, cells
   assert.equal(first.getAttribute("colspan"), "3");
   assert.deepEqual(first.childNodes.map((node) => node.text), ["A", "B", "C"]);
   assert.equal(env.focusedCell, first);
+}
+
+{
+  const top = new Cell("td", {}, "A"), topRight = new Cell("td", {}, "B");
+  const bottom = new Cell("td", {}, "C"), bottomRight = new Cell("td", {}, "D");
+  const env = createEnvironment([top, topRight], { extraRows: [[bottom, bottomRight]], selectionIndexes: [0, 0] });
+  env.selection.anchorNode = { nodeType: Node.TEXT_NODE, parentElement: top };
+  env.selection.focusNode = { nodeType: Node.TEXT_NODE, parentElement: bottom };
+  env.selected.add(bottom);
+  assert.deepEqual(env.api.selectedVerticalTableCells(), [top, bottom]);
+  env.api.mergeTableCellsVertically();
+  assert.equal(top.getAttribute("rowspan"), "2");
+  assert.deepEqual(top.childNodes.map((node) => node.text), ["A", "C"]);
+  assert.deepEqual(env.rows[1].cells, [bottomRight]);
+  assert.equal(env.api.hasVerticalMerges(top.closest("table")), true);
+  env.api.splitTableCell();
+  assert.equal(top.hasAttribute("rowspan"), false);
+  assert.equal(env.rows[1].cells.length, 2);
+  assert.equal(env.api.hasVerticalMerges(top.closest("table")), false);
 }
 
 {
@@ -150,4 +170,4 @@ function createEnvironment(cells, { extraRows = [], selectionIndexes = [0, cells
   assert.equal(env.notices.length, 0);
 }
 
-process.stdout.write("Table editing tests passed: adjacent selection, content-preserving merge, span-aware split, and unsupported selection guards.\n");
+process.stdout.write("Table editing tests passed: horizontal and vertical selection, content-preserving merge, span-aware split, and unsupported selection guards.\n");
