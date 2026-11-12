@@ -614,7 +614,7 @@
   }
 
   function sanitizeDocxHtml(source) {
-    const allowedTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "em", "i", "u", "s", "del", "ul", "ol", "li", "a", "br", "hr", "blockquote", "pre", "code", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "img"]);
+    const allowedTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "em", "i", "u", "s", "strike", "del", "ul", "ol", "li", "a", "br", "hr", "blockquote", "pre", "code", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "img"]);
     const parsed = new DOMParser().parseFromString(`<main>${source}</main>`, "text/html");
     const root = parsed.querySelector("main");
     let removed = 0;
