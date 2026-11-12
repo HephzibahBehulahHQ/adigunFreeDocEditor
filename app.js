@@ -107,6 +107,7 @@
     $("#undo").hidden = !isDocument;
     $("#redo").hidden = !isDocument;
     $("#export-html").hidden = mode === "list" || mode === "landing";
+    $("#export-docx").hidden = !isDocument;
     $("#export-html").lastElementChild.textContent = mode === "pdf" ? "Download PDF" : "Export HTML";
   }
 
@@ -322,6 +323,140 @@
     $("#editor-card").classList.toggle("paper-letter", size === "letter");
   }
 
+  function wordXmlText(value) {
+    return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
+  }
+
+  function makeWordPackage() {
+    const relationships = [];
+    const hyperlinkIds = new Map();
+    const unsupported = new Set();
+    let nextRelationship = 3;
+
+    function serializeInline(node, marks = {}) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.nodeValue.replace(/\s+/g, " ");
+        if (!text) return "";
+        const preserve = /^\s|\s$/.test(node.nodeValue) ? ' xml:space="preserve"' : "";
+        const properties = [marks.bold && "<w:b/>", marks.italic && "<w:i/>", marks.underline && '<w:u w:val="single"/>', marks.strike && "<w:strike/>"].filter(Boolean).join("");
+        return `<w:r>${properties ? `<w:rPr>${properties}</w:rPr>` : ""}<w:t${preserve}>${wordXmlText(text)}</w:t></w:r>`;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return "";
+      const tag = node.tagName.toLowerCase();
+      if (tag === "br") return "<w:r><w:br/></w:r>";
+      if (tag === "img") { unsupported.add("images"); return ""; }
+      if (["script", "style", "button"].includes(tag)) return "";
+      const next = { ...marks };
+      if (["b", "strong"].includes(tag)) next.bold = true;
+      if (["i", "em"].includes(tag)) next.italic = true;
+      if (tag === "u") next.underline = true;
+      if (["s", "strike", "del"].includes(tag)) next.strike = true;
+      const children = [...node.childNodes].map((child) => serializeInline(child, next)).join("");
+      if (tag === "a") {
+        const href = node.getAttribute("href") || "";
+        if (!/^https?:\/\//i.test(href)) { unsupported.add("non-web links"); return children; }
+        if (!hyperlinkIds.has(href)) {
+          const id = `rId${nextRelationship++}`;
+          hyperlinkIds.set(href, id);
+          relationships.push(`<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${wordXmlText(href)}" TargetMode="External"/>`);
+        }
+        return `<w:hyperlink r:id="${hyperlinkIds.get(href)}">${children}</w:hyperlink>`;
+      }
+      if (["mark", "sub", "sup"].includes(tag)) unsupported.add(tag);
+      return children;
+    }
+
+    const body = [];
+    function addParagraph(element, listKind = "", listLevel = 0) {
+      const tag = element.tagName.toLowerCase();
+      const paragraphProperties = [];
+      if (["h1", "h2", "h3"].includes(tag)) paragraphProperties.push(`<w:pStyle w:val="Heading${tag.slice(1)}"/>`);
+      const align = ["left", "center", "right", "justify"].includes(element.style.textAlign) ? element.style.textAlign : "";
+      if (align) paragraphProperties.push(`<w:jc w:val="${align}"/>`);
+      if (listKind) paragraphProperties.push(`<w:numPr><w:ilvl w:val="${Math.min(listLevel, 8)}"/><w:numId w:val="${listKind === "ol" ? 2 : 1}"/></w:numPr>`);
+      const runs = [...element.childNodes].map((node) => serializeInline(node)).join("") || "<w:r><w:t></w:t></w:r>";
+      body.push(`<w:p>${paragraphProperties.length ? `<w:pPr>${paragraphProperties.join("")}</w:pPr>` : ""}${runs}</w:p>`);
+    }
+
+    function walkBlocks(node, listKind = "", listLevel = 0) {
+      for (const child of [...node.children]) {
+        const tag = child.tagName.toLowerCase();
+        if (tag === "ul" || tag === "ol") { walkBlocks(child, tag, listLevel); continue; }
+        if (tag === "li") {
+          const inlineChildren = [...child.children].filter((item) => ["ul", "ol"].includes(item.tagName.toLowerCase()));
+          if (listLevel > 0 || inlineChildren.length) unsupported.add("nested list hierarchy");
+          const copy = child.cloneNode(true);
+          for (const nested of [...copy.children]) if (["ul", "ol"].includes(nested.tagName.toLowerCase())) nested.remove();
+          addParagraph(copy, listKind || "ul", 0);
+          for (const nested of inlineChildren) walkBlocks(nested, nested.tagName.toLowerCase(), listLevel + 1);
+          continue;
+        }
+        if (["p", "h1", "h2", "h3", "blockquote", "pre"].includes(tag)) {
+          if (tag === "blockquote" || tag === "pre") unsupported.add(tag === "pre" ? "code blocks" : "block quotes");
+          addParagraph(child, listKind, listLevel);
+          continue;
+        }
+        if (tag === "table") {
+          unsupported.add("tables");
+          for (const row of child.querySelectorAll("tr")) addParagraph(row, "", 0);
+          continue;
+        }
+        if (tag === "hr") { body.push('<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="808080"/></w:pBdr></w:pPr><w:r><w:t></w:t></w:r></w:p>'); continue; }
+        if (child.children.length) walkBlocks(child, listKind, listLevel);
+        else if (child.textContent.trim()) addParagraph(child, listKind, listLevel);
+      }
+    }
+    walkBlocks(editor);
+    if (!body.length) body.push("<w:p><w:r><w:t></w:t></w:r></w:p>");
+
+    const isLetter = $("#editor-card").classList.contains("paper-letter");
+    const landscape = $("#editor-card").classList.contains("landscape");
+    let width = isLetter ? 12240 : 11906;
+    let height = isLetter ? 15840 : 16838;
+    if (landscape) [width, height] = [height, width];
+    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join("")}<w:sectPr><w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+    const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style></w:styles>';
+    const numberingXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="multilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="multilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>';
+    const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>';
+    const rootRelationships = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>';
+    const documentRelationships = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>${relationships.join("")}</Relationships>`;
+    const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+    const coreProperties = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${wordXmlText(title())}</dc:title><dc:creator>adigunFreeDocEditor</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
+    const appProperties = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>adigunFreeDocEditor</Application></Properties>';
+    return { files: { "[Content_Types].xml": contentTypes, "_rels/.rels": rootRelationships, "word/document.xml": documentXml, "word/styles.xml": stylesXml, "word/numbering.xml": numberingXml, "word/_rels/document.xml.rels": documentRelationships, "docProps/core.xml": coreProperties, "docProps/app.xml": appProperties }, unsupported: [...unsupported] };
+  }
+
+  function makeStoredZip(files) {
+    const encoder = new TextEncoder();
+    const crcTable = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcTable[n] = c >>> 0; }
+    const crc32 = (data) => { let crc = 0xffffffff; for (const byte of data) crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8); return (crc ^ 0xffffffff) >>> 0; };
+    const chunks = [];
+    const central = [];
+    let offset = 0;
+    for (const [name, value] of Object.entries(files)) {
+      const filename = encoder.encode(name); const data = encoder.encode(value); const crc = crc32(data);
+      const local = new Uint8Array(30 + filename.length); const lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0, true); lv.setUint16(8, 0, true);
+      lv.setUint16(10, 0, true); lv.setUint16(12, 33, true); lv.setUint32(14, crc, true); lv.setUint32(18, data.length, true); lv.setUint32(22, data.length, true); lv.setUint16(26, filename.length, true); lv.setUint16(28, 0, true); local.set(filename, 30);
+      chunks.push(local, data);
+      const entry = new Uint8Array(46 + filename.length); const ev = new DataView(entry.buffer);
+      ev.setUint32(0, 0x02014b50, true); ev.setUint16(4, 20, true); ev.setUint16(6, 20, true); ev.setUint16(8, 0, true); ev.setUint16(10, 0, true); ev.setUint16(12, 0, true); ev.setUint16(14, 33, true); ev.setUint32(16, crc, true); ev.setUint32(20, data.length, true); ev.setUint32(24, data.length, true); ev.setUint16(28, filename.length, true); ev.setUint16(30, 0, true); ev.setUint16(32, 0, true); ev.setUint16(34, 0, true); ev.setUint16(36, 0, true); ev.setUint32(38, 0, true); ev.setUint32(42, offset, true); entry.set(filename, 46); central.push(entry);
+      offset += local.length + data.length;
+    }
+    const centralSize = central.reduce((sum, entry) => sum + entry.length, 0);
+    const end = new Uint8Array(22); const ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true); ev.setUint16(8, central.length, true); ev.setUint16(10, central.length, true); ev.setUint32(12, centralSize, true); ev.setUint32(16, offset, true); ev.setUint16(20, 0, true);
+    return new Blob([...chunks, ...central, end], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  }
+
+  function exportDocx() {
+    if (activePdfFile) { notify("Open an editable document before exporting a Word file."); return; }
+    const wordPackage = makeWordPackage();
+    download(makeStoredZip(wordPackage.files), `${safeFilename(title())}.docx`);
+    notify(wordPackage.unsupported.length ? `Word file saved. Check unsupported content: ${wordPackage.unsupported.join(", ")}.` : "Word document downloaded. Basic formatting and page setup were preserved.");
+  }
+
   function exportHTML() {
     if (activePdfFile) { download(activePdfFile, activePdfFile.name); return; }
     const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHTML(title())}</title></head><body>${editor.innerHTML}</body></html>`;
@@ -398,6 +533,7 @@
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
   editor.addEventListener("input", () => { countWords(); saveDocument(); });
   $("#export-html").addEventListener("click", exportHTML);
+  $("#export-docx").addEventListener("click", exportDocx);
   $("#undo").addEventListener("click", () => runCommand("undo"));
   $("#redo").addEventListener("click", () => runCommand("redo"));
   $("#zoom-out").addEventListener("click", () => setZoom(zoom - 10));

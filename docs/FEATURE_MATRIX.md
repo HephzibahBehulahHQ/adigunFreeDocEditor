@@ -11,7 +11,8 @@ Status is specific to the current first workspace slice.
 | PDF viewing and download | Implemented | Browser PDF viewer; editing and page operations are not supported. |
 | HTML export | Implemented | Downloads the current editable document as an HTML file. |
 | Local document overview | Implemented | Extracts sentences from the current document; not an AI summary. |
-| DOCX import/export and fidelity | Not implemented | No OOXML parser or serializer is included. |
+| DOCX export | Partial | Creates a real OOXML `.docx` package; maps headings, emphasis, web links, lists and page setup. Tables, images, tracked revisions and advanced styles are not preserved. |
+| DOCX import and fidelity | Not implemented | No OOXML importer or round-trip compatibility corpus is included. |
 | PDF annotation, modification or conversion | Not implemented | No PDF editing/conversion engine is included. |
 | Hosted AI, translation or rewriting | Not implemented | No provider or backend is configured; no simulated results. |
 | Accounts, cloud sync or shared documents | Not implemented | No identity or remote persistence service exists in this repository. |
