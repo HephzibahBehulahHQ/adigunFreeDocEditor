@@ -156,7 +156,7 @@
     $("#editor-card").classList.remove("pdf-preview");
     $("#editor-card").classList.add("landing");
     editor.hidden = false;
-    editor.innerHTML = '<section class="landing-page"><span class="landing-kicker">ADIGUNFREEDOCEDITOR</span><h2>Your documents.<br>Your workspace.</h2><p>Create a document or open one of the file types supported in this first workspace.</p><div class="landing-actions"><button class="landing-primary" type="button" id="landing-create">Create blank document</button><button class="landing-secondary" type="button" id="landing-open">Open a file</button></div><div class="landing-details"><div><strong>Work stays here</strong><span>Editable document text is saved in this browser. No account or cloud sync is active.</span></div><div><strong>Supported in this build</strong><span>Edit TXT, Markdown and HTML · view and download PDF</span></div></div></section>';
+    editor.innerHTML = '<section class="landing-page"><span class="landing-kicker">ADIGUNFREEDOCEDITOR</span><h2>Your documents.<br>Your workspace.</h2><p>Create a document or open one of the file types supported in this first workspace.</p><div class="landing-actions"><button class="landing-primary" type="button" id="landing-create">Create blank document</button><button class="landing-secondary" type="button" id="landing-open">Open a file</button></div><div class="landing-details"><div><strong>Work stays here</strong><span>Editable document text is saved in this browser. No account or cloud sync is active.</span></div><div><strong>Supported in this build</strong><span>Import Word structure, edit TXT, Markdown and HTML, or view and download PDF</span></div></div></section>';
   }
 
   async function showDocumentList(view) {
@@ -183,6 +183,88 @@
     return text.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
   }
 
+  function inspectDocxArchive(buffer) {
+    const bytes = new DataView(buffer);
+    const minimum = Math.max(0, buffer.byteLength - 22 - 65535);
+    let endOffset = -1;
+    for (let offset = buffer.byteLength - 22; offset >= minimum; offset--) {
+      if (bytes.getUint32(offset, true) === 0x06054b50) { endOffset = offset; break; }
+    }
+    if (endOffset < 0) throw new Error("The file is not a readable DOCX package.");
+    const count = bytes.getUint16(endOffset + 10, true);
+    const directorySize = bytes.getUint32(endOffset + 12, true);
+    let cursor = bytes.getUint32(endOffset + 16, true);
+    const directoryEnd = cursor + directorySize;
+    if (count === 0 || count > 4096 || directoryEnd > endOffset || directoryEnd > buffer.byteLength) throw new Error("The Word package directory is invalid or too large.");
+    const decoder = new TextDecoder();
+    const names = new Set();
+    let expandedBytes = 0;
+    let hasDocument = false;
+    for (let index = 0; index < count; index++) {
+      if (cursor + 46 > directoryEnd || bytes.getUint32(cursor, true) !== 0x02014b50) throw new Error("The Word package directory is damaged.");
+      const flags = bytes.getUint16(cursor + 8, true);
+      const method = bytes.getUint16(cursor + 10, true);
+      const compressed = bytes.getUint32(cursor + 20, true);
+      const expanded = bytes.getUint32(cursor + 24, true);
+      const nameLength = bytes.getUint16(cursor + 28, true);
+      const extraLength = bytes.getUint16(cursor + 30, true);
+      const commentLength = bytes.getUint16(cursor + 32, true);
+      const next = cursor + 46 + nameLength + extraLength + commentLength;
+      if (next > directoryEnd || (flags & 1) || (method !== 0 && method !== 8) || compressed === 0xffffffff || expanded === 0xffffffff) throw new Error("This Word package uses an unsupported or encrypted archive format.");
+      const name = decoder.decode(new Uint8Array(buffer, cursor + 46, nameLength));
+      if (names.has(name)) throw new Error("The Word package contains duplicate archive entries.");
+      names.add(name);
+      if (expanded > 50 * 1024 * 1024) throw new Error("A file inside this Word package exceeds the 50 MB import limit.");
+      expandedBytes += expanded;
+      if (expandedBytes > 100 * 1024 * 1024) throw new Error("The uncompressed Word package exceeds the 100 MB safety limit.");
+      if (name === "word/document.xml") hasDocument = true;
+      cursor = next;
+    }
+    if (cursor !== directoryEnd || !hasDocument || !names.has("[Content_Types].xml")) throw new Error("This file is missing required Word document parts.");
+    if (expandedBytes > Math.max(32 * 1024 * 1024, buffer.byteLength * 150)) throw new Error("The Word package expands beyond the safe import ratio.");
+  }
+
+  function sanitizeDocxHtml(source) {
+    const allowedTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "em", "i", "u", "s", "del", "ul", "ol", "li", "a", "br", "hr", "blockquote", "pre", "code", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "img"]);
+    const parsed = new DOMParser().parseFromString(`<main>${source}</main>`, "text/html");
+    const root = parsed.querySelector("main");
+    let removed = 0;
+
+    function copy(node) {
+      if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.nodeValue);
+      if (node.nodeType !== Node.ELEMENT_NODE) return null;
+      const tag = node.tagName.toLowerCase();
+      if (tag === "img") {
+        const src = node.getAttribute("src") || "";
+        if (!/^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/]+={0,2}$/i.test(src) || src.length > 11 * 1024 * 1024) { removed++; return null; }
+        const image = document.createElement("img");
+        image.src = src;
+        image.alt = (node.getAttribute("alt") || "").slice(0, 300);
+        for (const dimension of ["width", "height"]) {
+          const value = Number(node.getAttribute(dimension));
+          if (Number.isInteger(value) && value > 0 && value <= 4096) image.setAttribute(dimension, String(value));
+        }
+        return image;
+      }
+      if (!allowedTags.has(tag)) { removed++; const fragment = document.createDocumentFragment(); for (const child of [...node.childNodes]) { const safeChild = copy(child); if (safeChild) fragment.append(safeChild); } return fragment; }
+      const element = document.createElement(tag);
+      if (tag === "a") {
+        const href = node.getAttribute("href") || "";
+        try { const url = new URL(href, location.href); if (["http:", "https:", "mailto:"].includes(url.protocol)) element.setAttribute("href", url.href); else removed++; } catch { removed++; }
+      }
+      if (["th", "td"].includes(tag)) {
+        for (const dimension of ["colspan", "rowspan"]) { const value = Number(node.getAttribute(dimension)); if (Number.isInteger(value) && value > 0 && value <= 50) element.setAttribute(dimension, String(value)); }
+      }
+      if (tag === "ol") { const start = Number(node.getAttribute("start")); if (Number.isInteger(start) && start >= 1 && start <= 100000) element.setAttribute("start", String(start)); }
+      for (const child of [...node.childNodes]) { const safeChild = copy(child); if (safeChild) element.append(safeChild); }
+      return element;
+    }
+
+    const safeRoot = document.createElement("div");
+    for (const child of [...root.childNodes]) { const safeChild = copy(child); if (safeChild) safeRoot.append(safeChild); }
+    return { html: safeRoot.innerHTML, removed };
+  }
+
   function openSaved(id) {
     activePdfFile = undefined;
     $("#pdf-frame")?.remove();
@@ -206,8 +288,38 @@
   async function importFile(file) {
     if (!file) return;
     const extension = file.name.split(".").pop().toLowerCase();
-    if (!(["txt", "md", "html", "htm", "pdf"].includes(extension))) {
-      notify("This build opens PDFs for viewing and edits TXT, Markdown or HTML files.");
+    if (!(["txt", "md", "html", "htm", "pdf", "docx"].includes(extension))) {
+      notify("Supported files: Word DOCX, TXT, Markdown, HTML, and PDF.");
+      return;
+    }
+    if (extension === "docx") {
+      try {
+        if (file.size > 20 * 1024 * 1024) throw new Error("Word documents must be 20 MB or smaller.");
+        if (!window.mammoth?.convertToHtml) throw new Error("The local Word import module did not load. Reload the page and try again.");
+        const arrayBuffer = await file.arrayBuffer();
+        inspectDocxArchive(arrayBuffer);
+        const converted = await window.mammoth.convertToHtml({ arrayBuffer });
+        const sanitized = sanitizeDocxHtml(converted.value);
+        if (sanitized.html.length > 12 * 1024 * 1024) throw new Error("The editable document exceeds the 12 MB safety limit.");
+        if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
+        $("#pdf-frame")?.remove();
+        activePdfFile = undefined;
+        activeId = crypto.randomUUID();
+        setTitle(file.name.replace(/\.docx$/i, "") || file.name);
+        $("#file-kind").textContent = "DOCX imported · editable structure";
+        $("#editor-card").classList.remove("pdf-preview", "landing");
+        editor.hidden = false;
+        setWorkspaceMode("document");
+        $("#export-html").lastElementChild.textContent = "Export HTML";
+        editor.innerHTML = sanitized.html || "<p><br></p>";
+        countWords();
+        saveDocument();
+        const warningCount = converted.messages.filter((message) => message.type === "warning").length;
+        const notes = [];
+        if (warningCount) notes.push(`${warningCount} Word compatibility warning${warningCount === 1 ? "" : "s"}`);
+        if (sanitized.removed) notes.push(`${sanitized.removed} unsupported or unsafe item${sanitized.removed === 1 ? "" : "s"} omitted`);
+        notify(notes.length ? `DOCX imported. ${notes.join("; ")}. Layout and advanced formatting may differ.` : "DOCX imported as editable structure. Word page layout and advanced formatting may differ.");
+      } catch (error) { notify(`Could not import this Word document: ${error.message}`); }
       return;
     }
     if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
@@ -453,6 +565,7 @@
   function exportDocx() {
     if (activePdfFile) { notify("Open an editable document before exporting a Word file."); return; }
     const wordPackage = makeWordPackage();
+    if (wordPackage.unsupported.length && !window.confirm(`This export cannot preserve: ${wordPackage.unsupported.join(", ")}. It will create a reduced Word copy and leave the browser-saved document unchanged. Continue?`)) return;
     download(makeStoredZip(wordPackage.files), `${safeFilename(title())}.docx`);
     notify(wordPackage.unsupported.length ? `Word file saved. Check unsupported content: ${wordPackage.unsupported.join(", ")}.` : "Word document downloaded. Basic formatting and page setup were preserved.");
   }

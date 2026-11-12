@@ -5,6 +5,7 @@
 - Editable document content and local settings are stored in this browser's IndexedDB and localStorage.
 - TXT, Markdown and HTML are read in the browser. HTML import is reduced to plain text before display.
 - DOCX export is generated entirely in the browser from the open document; there is no upload or external conversion service.
+- DOCX import uses a bundled parser in the browser, limits archive and expanded sizes, and sanitizes generated HTML before inserting it into the editor. Links are limited to HTTP, HTTPS and mailto; embedded images are limited to base64 PNG, JPEG, GIF and WebP.
 - PDF bytes are held in an object URL only while the PDF is open. The app does not upload documents.
 - No account, server endpoint, telemetry pipeline or AI provider is configured.
 - The Adigun overview is extractive local processing and is not described as AI output.
