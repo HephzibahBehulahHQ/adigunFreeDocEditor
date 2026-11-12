@@ -185,7 +185,7 @@
 
   function findTextMatches(query, matchCase) {
     if (!query) return { matches: [], total: 0 };
-    const escaped = query.replace(/[.*+?^${}()|[\\]\\]/g, "\\  function reviewCommentRange(comment, text = editorText()) {");
+    const escaped = [...query].map((character) => "\\^$.*+?()[]{}|".includes(character) ? "\\" + character : character).join("");
     const matcher = new RegExp(escaped, matchCase ? "g" : "gi");
     const text = editorText();
     const matches = [];
