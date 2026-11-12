@@ -38,7 +38,7 @@
     home: [
       [{ label: "Undo", action: "undo", icon: "↶" }, { label: "Redo", action: "redo", icon: "↷" }],
       [{ label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Title"], ["h2", "Heading 1"], ["h3", "Heading 2"]] }, { label: "Font size", select: "size", options: [["3", "11"], ["4", "14"], ["5", "18"], ["6", "24"]] }],
-      [{ label: "Bold", action: "bold", icon: "B", pressed: true }, { label: "Italic", action: "italic", icon: "I", pressed: true }, { label: "Underline", action: "underline", icon: "U", pressed: true }],
+      [{ label: "Bold", action: "bold", icon: "B", pressed: true }, { label: "Italic", action: "italic", icon: "I", pressed: true }, { label: "Underline", action: "underline", icon: "U", pressed: true }, { label: "Strikethrough", action: "strikeThrough", icon: "S̶ Strike", pressed: true }],
       [{ label: "Bulleted list", action: "insertUnorderedList", icon: "• List" }, { label: "Numbered list", action: "insertOrderedList", icon: "1. List" }],
       [{ label: "Align left", action: "justifyLeft", icon: "☰" }, { label: "Center", action: "justifyCenter", icon: "≡" }, { label: "Align right", action: "justifyRight", icon: "☷" }],
     ],
@@ -818,7 +818,7 @@
     const fontSelect = ribbon.querySelector("[data-tool=size]");
     const fontSize = document.queryCommandValue("fontSize");
     if (fontSelect && [...fontSelect.options].some((option) => option.value === fontSize)) fontSelect.value = fontSize;
-    for (const action of ["bold", "italic", "underline"]) {
+    for (const action of ["bold", "italic", "underline", "strikeThrough"]) {
       const button = ribbon.querySelector('.tool-button[data-action=' + action + ']');
       if (button) button.setAttribute("aria-pressed", String(document.queryCommandState(action)));
     }
@@ -833,7 +833,7 @@
 
   function runTool(action, button) {
     switch (action) {
-      case "undo": case "redo": case "bold": case "italic": case "underline": case "insertUnorderedList": case "insertOrderedList": case "justifyLeft": case "justifyCenter": case "justifyRight": case "unlink":
+      case "undo": case "redo": case "bold": case "italic": case "underline": case "strikeThrough": case "insertUnorderedList": case "insertOrderedList": case "justifyLeft": case "justifyCenter": case "justifyRight": case "unlink":
         runCommand(action); break;
       case "link": {
         const url = window.prompt("Enter a link URL (https://…)");
