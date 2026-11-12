@@ -88,7 +88,7 @@
     insert: [
       [{ label: "Add link", action: "link", icon: "↗ Link" }, { label: "Remove link", action: "unlink", icon: "↗̸" }],
       [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert page break", action: "page-break", icon: "↧ Page break" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }, { label: "Insert image from this device", action: "image", icon: "▧ Image" }],
-      [{ label: "Insert row above", action: "table-row-above", icon: "▤ Row ↑" }, { label: "Insert row below", action: "table-row-below", icon: "▤ Row ↓" }, { label: "Insert column left", action: "table-column-left", icon: "▥ Col ←" }, { label: "Insert column right", action: "table-column-right", icon: "▥ Col →" }],
+      [{ label: "Insert row above", action: "table-row-above", icon: "▤ Row ↑" }, { label: "Insert row below", action: "table-row-below", icon: "▤ Row ↓" }, { label: "Insert column left", action: "table-column-left", icon: "▥ Col ←" }, { label: "Insert column right", action: "table-column-right", icon: "▥ Col →" }, { label: "Delete row", action: "table-row-delete", icon: "⌫ Row" }, { label: "Delete column", action: "table-column-delete", icon: "⌫ Col" }, { label: "Delete table", action: "table-delete", icon: "⌫ Table" }],
     ],
     layout: [
       [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }],
@@ -989,6 +989,14 @@
     const inEditor = (node) => node && (node === editor || editor.contains(node));
     const tableCell = selectedTableCell();
     for (const button of ribbon.querySelectorAll('.tool-button[data-action^="table-"]')) button.disabled = !tableCell;
+    if (tableCell) {
+      const table = tableCell.closest("table");
+      const rows = table ? [...table.querySelectorAll("tr")].filter((item) => item.closest("table") === table) : [];
+      const deleteRowButton = ribbon.querySelector('.tool-button[data-action="table-row-delete"]');
+      const deleteColumnButton = ribbon.querySelector('.tool-button[data-action="table-column-delete"]');
+      if (deleteRowButton) deleteRowButton.disabled = rows.length <= 1;
+      if (deleteColumnButton) deleteColumnButton.disabled = rows.some((row) => row.cells.length - (tableCell.cellIndex < row.cells.length ? 1 : 0) < 1);
+    }
     if (!inEditor(focusNode) && !inEditor(anchorNode)) return;
     const contextNode = inEditor(focusNode) ? focusNode : anchorNode;
     const focusElement = contextNode.nodeType === Node.ELEMENT_NODE ? contextNode : contextNode.parentElement;
@@ -1172,6 +1180,69 @@
     notify("Inserted a column " + position + ".");
   }
 
+  function deleteTableRow() {
+    const activeCell = selectedTableCell();
+    if (!activeCell) { notify("Place the cursor in a table cell first."); return; }
+    const row = activeCell.closest("tr");
+    const table = row?.closest("table");
+    if (!row || !table) return;
+    const rows = [...table.querySelectorAll("tr")].filter((item) => item.closest("table") === table);
+    if (rows.length <= 1) { notify("A table must keep at least one row."); return; }
+    const rowIndex = rows.indexOf(row);
+    const cellIndex = activeCell.cellIndex;
+    const removeHeader = row.parentElement.tagName === "THEAD";
+    row.remove();
+    let focusTarget;
+    if (removeHeader) {
+      const promoted = table.tBodies[0]?.rows[0];
+      if (promoted) {
+        for (const oldCell of [...promoted.cells]) {
+          const newCell = document.createElement("th");
+          for (const attribute of [...oldCell.attributes]) newCell.setAttribute(attribute.name, attribute.value);
+          while (oldCell.firstChild) newCell.append(oldCell.firstChild);
+          oldCell.replaceWith(newCell);
+        }
+        (table.tHead || table.createTHead()).append(promoted);
+        focusTarget = promoted.cells[Math.min(cellIndex, promoted.cells.length - 1)];
+      }
+    }
+    if (!focusTarget) {
+      const remaining = [...table.querySelectorAll("tr")].filter((item) => item.closest("table") === table);
+      const targetRow = remaining[Math.min(rowIndex, remaining.length - 1)];
+      focusTarget = targetRow?.cells[Math.min(cellIndex, (targetRow?.cells.length || 1) - 1)];
+    }
+    if (focusTarget) focusTableCell(focusTarget);
+    notify("Deleted the table row.");
+  }
+
+  function deleteTableColumn() {
+    const activeCell = selectedTableCell();
+    if (!activeCell) { notify("Place the cursor in a table cell first."); return; }
+    const row = activeCell.closest("tr");
+    const table = row?.closest("table");
+    if (!row || !table) return;
+    const rows = [...table.querySelectorAll("tr")].filter((item) => item.closest("table") === table);
+    const cellIndex = activeCell.cellIndex;
+    if (rows.some((item) => item.cells.length - (cellIndex < item.cells.length ? 1 : 0) < 1)) {
+      notify("A table must keep at least one column in every row.");
+      return;
+    }
+    for (const tableRow of rows) if (tableRow.cells[cellIndex]) tableRow.deleteCell(cellIndex);
+    focusTableCell(row.cells[Math.min(cellIndex, row.cells.length - 1)]);
+    notify("Deleted the table column.");
+  }
+
+  function deleteTable() {
+    const activeCell = selectedTableCell();
+    const table = activeCell?.closest("table");
+    if (!table) { notify("Place the cursor in a table cell first."); return; }
+    const paragraph = document.createElement("p");
+    paragraph.innerHTML = "<br>";
+    table.replaceWith(paragraph);
+    focusTableCell(paragraph);
+    notify("Deleted the table.");
+  }
+
   function focusTableCell(cell) {
     const paragraph = cell?.querySelector("p") || cell;
     if (!paragraph) return;
@@ -1195,6 +1266,9 @@
       case "table-row-below": insertTableRow("below"); break;
       case "table-column-left": insertTableColumn("left"); break;
       case "table-column-right": insertTableColumn("right"); break;
+      case "table-row-delete": deleteTableRow(); break;
+      case "table-column-delete": deleteTableColumn(); break;
+      case "table-delete": deleteTable(); break;
       case "undo": case "redo": case "bold": case "italic": case "underline": case "strikeThrough": case "insertUnorderedList": case "insertOrderedList": case "justifyLeft": case "justifyCenter": case "justifyRight": case "justifyFull": case "removeFormat": case "unlink":
         runCommand(action); break;
       case "link": {

@@ -10,7 +10,7 @@ Status is specific to the current first workspace slice.
 | Document outline navigation | Implemented | Heading levels 1–3 are listed from the open editable document; heading filter and click-to-navigate use current document content. Collapsible panel on tablet and mobile. |
 | Create blank document and basic editing | Implemented | Browser editing surface and Home/Insert/Layout/Review/View controls; text style, supported font family and size, text and highlight colors, paragraph and line spacing, indentation, emphasis, list and alignment controls reflect the current caret or selection. |
 | Structured document model | Partial | Versioned allow-listed node tree is now the source for local persistence and exports; the interactive editing surface still uses browser contenteditable. The editor groups top-level blocks into paper-sized sheets; oversized blocks grow beyond a sheet, and paragraphs are not split across pages. |
-| Insert and edit tables | Partial | Insert up to 50 rows × 20 columns and add rows or columns beside the current cell; table cells are editable. No delete or merge tools. |
+| Insert and edit tables | Partial | Insert up to 50 rows × 20 columns, add rows or columns beside the current cell, and delete rows, columns or a table. The last row and column are retained. No merge tools. |
 | Insert local images | Implemented | PNG, JPEG and GIF up to 8 MB; stored in the browser document. |
 | Autosave and reopen | Implemented | IndexedDB; preference is stored locally; toolbar Save and Ctrl+S are available. |
 | TXT, Markdown and HTML import | Implemented | Imports plain text into the editor; source HTML formatting is not preserved. |
