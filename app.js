@@ -70,7 +70,7 @@
       [{ label: "Spellcheck", action: "spellcheck", icon: "✓ Spellcheck", pressed: true }, { label: "Word count", action: "wordcount", icon: "# Word count" }],
     ],
     view: [
-      [{ label: "Zoom out", action: "zoom-out", icon: "−" }, { label: "Zoom in", action: "zoom-in", icon: "+" }, { label: "Reset zoom", action: "zoom-reset", icon: "100%" }],
+      [{ label: "Zoom out", action: "zoom-out", icon: "−" }, { label: "Zoom in", action: "zoom-in", icon: "+" }, { label: "Fit to width", action: "zoom-fit", icon: "↔ Fit width" }, { label: "Reset zoom", action: "zoom-reset", icon: "100%" }],
       [{ label: "Find and replace", action: "find", icon: "⌕ Find & replace" }, { label: "Toggle Adigun", action: "assistant", icon: "✧ Adigun" }],
     ],
   };
@@ -899,6 +899,19 @@
     $("#zoom-value").textContent = `${zoom}%`;
   }
 
+  function fitToWidth() {
+    if (editor.contentEditable !== "true" || $("#editor-card").classList.contains("landing")) return;
+    const container = editor.parentElement;
+    if (!container) return;
+    const previousZoom = editor.style.zoom;
+    editor.style.zoom = "100%";
+    const pageWidth = editor.getBoundingClientRect().width;
+    const availableWidth = container.clientWidth;
+    editor.style.zoom = previousZoom;
+    if (!pageWidth || !availableWidth) return;
+    setZoom(Math.round((availableWidth / pageWidth) * 100));
+  }
+
   function renderRibbon() {
     ribbon.replaceChildren();
     for (const group of toolsets[activeTab]) {
@@ -999,6 +1012,7 @@
       case "zoom-out": setZoom(zoom - 10); break;
       case "zoom-in": setZoom(zoom + 10); break;
       case "zoom-reset": setZoom(100); break;
+      case "zoom-fit": fitToWidth(); break;
       case "find": openFindDialog(); break;
       case "assistant": toggleAssistant(); break;
     }
@@ -1460,6 +1474,7 @@
   $("#redo").addEventListener("click", () => runCommand("redo"));
   $("#zoom-out").addEventListener("click", () => setZoom(zoom - 10));
   $("#zoom-in").addEventListener("click", () => setZoom(zoom + 10));
+  $("#zoom-fit").addEventListener("click", fitToWidth);
   $("#assist-button").addEventListener("click", () => toggleAssistant(true));
   $("#assistant-launcher").addEventListener("click", () => toggleAssistant(true));
   $("#close-adigun").addEventListener("click", () => toggleAssistant(false));
