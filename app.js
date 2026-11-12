@@ -458,8 +458,11 @@
   function makeWordPackage() {
     const relationships = [];
     const hyperlinkIds = new Map();
+    const imageIds = new Map();
+    const images = [];
     const unsupported = new Set();
     let nextRelationship = 3;
+    let nextDrawing = 1;
 
     function serializeInline(node, marks = {}) {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -472,7 +475,50 @@
       if (node.nodeType !== Node.ELEMENT_NODE) return "";
       const tag = node.tagName.toLowerCase();
       if (tag === "br") return "<w:r><w:br/></w:r>";
-      if (tag === "img") { unsupported.add("images"); return ""; }
+      if (tag === "img") {
+        const src = node.getAttribute("src") || "";
+        const match = /^data:image\/(png|jpeg|gif);base64,([a-z0-9+/]+={0,2})$/i.exec(src);
+        if (!match || src.length > 11 * 1024 * 1024) {
+          unsupported.add("unsupported image formats");
+          const alt = node.getAttribute("alt") || "";
+          return alt ? `<w:r><w:t>${wordXmlText(alt)}</w:t></w:r>` : "";
+        }
+        let image = imageIds.get(src);
+        if (!image) {
+          const mime = `image/${match[1].toLowerCase()}`;
+          const extension = match[1].toLowerCase() === "jpeg" ? "jpg" : match[1].toLowerCase();
+          let binary;
+          try { binary = atob(match[2]); } catch {
+            unsupported.add("invalid embedded images");
+            const alt = node.getAttribute("alt") || "";
+            return alt ? `<w:r><w:t>${wordXmlText(alt)}</w:t></w:r>` : "";
+          }
+          const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+          const signature = mime === "image/png" ? [137, 80, 78, 71, 13, 10, 26, 10] : mime === "image/jpeg" ? [255, 216, 255] : [71, 73, 70, 56];
+          const validSignature = signature.every((value, index) => bytes[index] === value) && (mime !== "image/gif" || bytes[4] === 55 && bytes[5] === 97 || bytes[4] === 57 && bytes[5] === 97);
+          if (!validSignature) {
+            unsupported.add("invalid embedded images");
+            const alt = node.getAttribute("alt") || "";
+            return alt ? `<w:r><w:t>${wordXmlText(alt)}</w:t></w:r>` : "";
+          }
+          const fileName = `image${images.length + 1}.${extension}`;
+          const relationshipId = `rId${nextRelationship++}`;
+          image = { fileName, mime, bytes, relationshipId };
+          imageIds.set(src, image);
+          images.push(image);
+          relationships.push(`<Relationship Id="${relationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${fileName}"/>`);
+        }
+        const naturalWidth = node.naturalWidth || Number(node.getAttribute("width")) || 480;
+        const naturalHeight = node.naturalHeight || Number(node.getAttribute("height")) || Math.round(naturalWidth * 0.75);
+        const requestedWidth = Number(node.getAttribute("width")) || naturalWidth;
+        const requestedHeight = Number(node.getAttribute("height")) || naturalHeight * requestedWidth / naturalWidth;
+        const scale = Math.min(1, (tableContentWidth / 15) / requestedWidth);
+        const cx = Math.max(1, Math.round(requestedWidth * scale * 9525));
+        const cy = Math.max(1, Math.round(requestedHeight * scale * 9525));
+        const drawingId = nextDrawing++;
+        const alt = wordXmlText((node.getAttribute("alt") || image.fileName).slice(0, 300));
+        return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${drawingId}" name="${image.fileName}" descr="${alt}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${drawingId}" name="${image.fileName}" descr="${alt}"/><pic:cNvPicPr><a:picLocks noChangeAspect="1"/></pic:cNvPicPr></pic:nvPicPr><pic:blipFill><a:blip r:embed="${image.relationshipId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+      }
       if (["script", "style", "button"].includes(tag)) return "";
       const next = { ...marks };
       if (["b", "strong"].includes(tag)) next.bold = true;
@@ -581,13 +627,15 @@
     const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join("")}<w:sectPr><w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
     const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style></w:styles>';
     const numberingXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="multilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="multilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>';
-    const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>';
+    const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>';
     const rootRelationships = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>';
     const documentRelationships = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>${relationships.join("")}</Relationships>`;
     const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const coreProperties = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${wordXmlText(title())}</dc:title><dc:creator>adigunFreeDocEditor</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
     const appProperties = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>adigunFreeDocEditor</Application></Properties>';
-    return { files: { "[Content_Types].xml": contentTypes, "_rels/.rels": rootRelationships, "word/document.xml": documentXml, "word/styles.xml": stylesXml, "word/numbering.xml": numberingXml, "word/_rels/document.xml.rels": documentRelationships, "docProps/core.xml": coreProperties, "docProps/app.xml": appProperties }, unsupported: [...unsupported] };
+    const files = { "[Content_Types].xml": contentTypes, "_rels/.rels": rootRelationships, "word/document.xml": documentXml, "word/styles.xml": stylesXml, "word/numbering.xml": numberingXml, "word/_rels/document.xml.rels": documentRelationships, "docProps/core.xml": coreProperties, "docProps/app.xml": appProperties };
+    for (const image of images) files[`word/media/${image.fileName}`] = image.bytes;
+    return { files, unsupported: [...unsupported] };
   }
 
   function makeStoredZip(files) {
@@ -599,7 +647,7 @@
     const central = [];
     let offset = 0;
     for (const [name, value] of Object.entries(files)) {
-      const filename = encoder.encode(name); const data = encoder.encode(value); const crc = crc32(data);
+      const filename = encoder.encode(name); const data = value instanceof Uint8Array ? value : encoder.encode(value); const crc = crc32(data);
       const local = new Uint8Array(30 + filename.length); const lv = new DataView(local.buffer);
       lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0, true); lv.setUint16(8, 0, true);
       lv.setUint16(10, 0, true); lv.setUint16(12, 33, true); lv.setUint32(14, crc, true); lv.setUint32(18, data.length, true); lv.setUint32(22, data.length, true); lv.setUint16(26, filename.length, true); lv.setUint16(28, 0, true); local.set(filename, 30);
@@ -614,12 +662,15 @@
     return new Blob([...chunks, ...central, end], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   }
 
-  function exportDocx() {
+  async function exportDocx() {
     if (activePdfFile) { notify("Open an editable document before exporting a Word file."); return; }
+    try {
+      for (const image of editor.querySelectorAll("img")) if (typeof image.decode === "function") await image.decode();
+    } catch { notify("Wait for the document images to finish loading, then export again."); return; }
     const wordPackage = makeWordPackage();
     if (wordPackage.unsupported.length && !window.confirm(`This export cannot preserve: ${wordPackage.unsupported.join(", ")}. It will create a reduced Word copy and leave the browser-saved document unchanged. Continue?`)) return;
     download(makeStoredZip(wordPackage.files), `${safeFilename(title())}.docx`);
-    notify(wordPackage.unsupported.length ? `Word file saved. Check unsupported content: ${wordPackage.unsupported.join(", ")}.` : "Word document downloaded. Basic formatting and page setup were preserved.");
+    notify(wordPackage.unsupported.length ? `Word file saved. Check unsupported content: ${wordPackage.unsupported.join(", ")}.` : "Word document downloaded with supported tables, images and page setup.");
   }
 
   function exportHTML() {
