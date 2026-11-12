@@ -72,6 +72,8 @@
       if (Number.isInteger(start) && start > 1 && start <= 100000) result.start = start;
     }
     if (paragraphTags.has(tag)) {
+      const indentLevel = Number(attributes["data-indent-level"]);
+      if (Number.isInteger(indentLevel) && indentLevel >= 1 && indentLevel <= 4) result["data-indent-level"] = String(indentLevel);
       if (lineSpacingValues.has(String(attributes["data-line-spacing"]))) result["data-line-spacing"] = String(attributes["data-line-spacing"]);
       if (paragraphSpacingValues.has(String(attributes["data-paragraph-spacing"]))) result["data-paragraph-spacing"] = String(attributes["data-paragraph-spacing"]);
       if (["left", "center", "right", "justify"].includes(attributes.align)) result.align = attributes.align;
@@ -108,7 +110,7 @@
     const sourceTag = node.tagName.toLowerCase();
     const tag = sourceTag === "font" ? "span" : sourceTag;
     const attrs = {};
-    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-font-family", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing"]) {
+    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-font-family", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level"]) {
       const value = node.getAttribute(name);
       if (value !== null) attrs[name] = value;
     }
@@ -141,6 +143,7 @@
     const styles = [];
     if (attributes.align) { styles.push(`text-align:${attributes.align}`); delete attributes.align; }
     if (paragraphTags.has(input.tag)) {
+      if (attributes["data-indent-level"]) styles.push(`margin-left:${Number(attributes["data-indent-level"]) * 36}pt`);
       if (attributes["data-line-spacing"]) styles.push(`line-height:${attributes["data-line-spacing"]}`);
       if (attributes["data-paragraph-spacing"]) styles.push(`margin-bottom:${attributes["data-paragraph-spacing"]}pt`);
     }
