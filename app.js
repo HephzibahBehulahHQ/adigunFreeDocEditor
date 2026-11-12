@@ -56,7 +56,7 @@
       [{ label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Title"], ["h2", "Heading 1"], ["h3", "Heading 2"]] }, { label: "Font size", select: "size", options: [["3", "11"], ["4", "14"], ["5", "18"], ["6", "24"]] }],
       [{ label: "Bold", action: "bold", icon: "B", pressed: true }, { label: "Italic", action: "italic", icon: "I", pressed: true }, { label: "Underline", action: "underline", icon: "U", pressed: true }, { label: "Strikethrough", action: "strikeThrough", icon: "S̶ Strike", pressed: true }],
       [{ label: "Bulleted list", action: "insertUnorderedList", icon: "• List", pressed: true }, { label: "Numbered list", action: "insertOrderedList", icon: "1. List", pressed: true }],
-      [{ label: "Align left", action: "justifyLeft", icon: "☰", pressed: true }, { label: "Center", action: "justifyCenter", icon: "≡", pressed: true }, { label: "Align right", action: "justifyRight", icon: "☷", pressed: true }],
+      [{ label: "Align left", action: "justifyLeft", icon: "☰", pressed: true }, { label: "Center", action: "justifyCenter", icon: "≡", pressed: true }, { label: "Align right", action: "justifyRight", icon: "☷", pressed: true }, { label: "Justify", action: "justifyFull", icon: "▤", pressed: true }],
     ],
     insert: [
       [{ label: "Add link", action: "link", icon: "↗ Link" }, { label: "Remove link", action: "unlink", icon: "↗̸" }],
@@ -980,6 +980,7 @@
     const alignments = {
       justifyLeft: textAlign === "left" || (textAlign === "start" && direction !== "rtl"),
       justifyCenter: textAlign === "center",
+      justifyFull: textAlign === "justify",
       justifyRight: textAlign === "right" || (textAlign === "start" && direction === "rtl"),
     };
     for (const [action, pressed] of Object.entries(alignments)) {
@@ -997,7 +998,7 @@
 
   function runTool(action, button) {
     switch (action) {
-      case "undo": case "redo": case "bold": case "italic": case "underline": case "strikeThrough": case "insertUnorderedList": case "insertOrderedList": case "justifyLeft": case "justifyCenter": case "justifyRight": case "unlink":
+      case "undo": case "redo": case "bold": case "italic": case "underline": case "strikeThrough": case "insertUnorderedList": case "insertOrderedList": case "justifyLeft": case "justifyCenter": case "justifyRight": case "justifyFull": case "unlink":
         runCommand(action); break;
       case "link": {
         const url = window.prompt("Enter a link URL (https://…)");
