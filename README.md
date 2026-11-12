@@ -14,8 +14,8 @@ Open `http://localhost:4173`. The application has no build step. The DOCX conver
 
 ## Current support
 
-- Create and edit basic text with headings, emphasis, lists, alignment, links and browser spellcheck.
-- Export editable documents as `.docx`, preserving supported headings, basic text emphasis, hyperlinks, lists, page size and orientation. This is a bounded first Word export; tables, images, revisions and advanced Word styling are not preserved.
+- Create and edit text with headings, emphasis, lists, alignment, links, tables and browser spellcheck.
+- Export editable documents as `.docx`, preserving supported headings, basic text emphasis, hyperlinks, lists, tables, page size and orientation. Table cell spans are limited; images, revisions and advanced Word styling are not preserved.
 - Import `.docx` as editable semantic content, including supported headings, lists, tables and safe inline raster images. Mammoth converts Word structure to HTML; page layout and advanced Word styling are not preserved.
 - Save and reopen editable documents in this browser's IndexedDB. Autosave can be switched off; Ctrl+S remains available.
 - Import TXT, Markdown and HTML as editable text.

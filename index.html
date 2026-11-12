@@ -88,6 +88,17 @@
         <div class="settings-foot"><span>Documents are stored in this browser. No account or cloud sync is active.</span><button class="button button-outline" value="close">Done</button></div>
       </form>
     </dialog>
+    <dialog class="settings-dialog table-dialog" id="table-dialog" aria-labelledby="table-title">
+      <form id="table-form">
+        <div class="settings-head"><div><span class="eyebrow">INSERT</span><h2 id="table-title">Create a table</h2></div><button class="window-control" id="cancel-table" type="button" aria-label="Cancel table insertion">×</button></div>
+        <p class="table-dialog-note">The first row is a bold header row. You can type directly into each cell.</p>
+        <div class="table-size-fields">
+          <label for="table-rows">Rows <input id="table-rows" type="number" min="1" max="50" value="3" required /></label>
+          <label for="table-columns">Columns <input id="table-columns" type="number" min="1" max="20" value="3" required /></label>
+        </div>
+        <div class="settings-foot"><span>Up to 50 rows and 20 columns.</span><button class="button button-outline" type="submit">Insert table</button></div>
+      </form>
+    </dialog>
     <script src="./assets/vendor/mammoth.browser.min.js" defer></script>
     <script src="./app.js" defer></script>
   </body>
