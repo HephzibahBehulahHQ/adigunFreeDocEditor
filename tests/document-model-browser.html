@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Document model browser verification</title>
+<pre id="result">Running…</pre>
+<script src="../document-model.js"></script>
+<script>
+  const output = document.querySelector("#result");
+  try {
+    const model = window.AdigunDocumentModel.fromHTML('<p style="text-align:center"><strong>Legacy &amp; safe</strong></p><table><tbody><tr><td colspan="2">Cell</td></tr></tbody></table><a href="javascript:alert(1)">unsafe link</a><script>alert(2)<\/script><img src="https://invalid.example/image.png">');
+    const html = window.AdigunDocumentModel.toHTML(model);
+    if (!html.includes('<p style="text-align:center"><strong>Legacy &amp; safe</strong></p>')) throw new Error("Legacy text or paragraph alignment did not migrate.");
+    if (!html.includes('colspan="2"') || !html.includes("unsafe link")) throw new Error("Supported table content did not migrate.");
+    if (/javascript:|<script|invalid\.example/.test(html)) throw new Error("Unsafe HTML survived model normalization.");
+    output.textContent = "PASS — Legacy HTML migration, formatted text, table spans, and unsafe URL removal.";
+    output.dataset.result = "pass";
+  } catch (error) {
+    output.textContent = `FAIL — ${error.message}`;
+    output.dataset.result = "fail";
+  }
+</script>
+</html>
+
