@@ -62,7 +62,7 @@ function createEnvironment(cells, { extraRows = [], selectionIndexes = [0, cells
   const editor = { tagName: "DIV", parentElement: null };
   const table = { tagName: "TABLE", parentElement: editor, closest(selector) { return selector === "table" ? this : null; } };
   const makeRow = (items) => {
-    const row = { tagName: "TR", parentElement: table, cells: [], insertBefore(cell, reference) { const index = reference ? this.cells.indexOf(reference) : this.cells.length; this.cells.splice(index, 0, cell); cell.parentElement = this; } };
+    const row = { tagName: "TR", parentElement: table, cells: [], closest(selector) { return selector === "table" ? table : null; }, insertBefore(cell, reference) { const index = reference ? this.cells.indexOf(reference) : this.cells.length; this.cells.splice(index, 0, cell); cell.parentElement = this; } };
     for (const cell of items) { cell.parentElement = row; row.cells.push(cell); }
     return row;
   };
