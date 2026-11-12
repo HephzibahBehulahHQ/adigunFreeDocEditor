@@ -98,7 +98,7 @@
     for (const { heading, index } of visibleHeadings) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "outline-" + heading.tagName.toLowerCase();
+      button.className = "outline-item outline-" + heading.tagName.toLowerCase();
       button.dataset.outlineIndex = String(index);
       button.textContent = heading.innerText.trim() || "Untitled heading";
       list.append(button);
