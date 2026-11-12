@@ -20,6 +20,6 @@ Status is specific to the current first workspace slice.
 | PDF annotation, modification or conversion | Not implemented | No PDF editing/conversion engine is included. |
 | Hosted AI, translation or rewriting | Not implemented | No provider or backend is configured; no simulated results. |
 | Accounts, cloud sync or shared documents | Not implemented | No identity or remote persistence service exists in this repository. |
-| Track changes and review history | Not implemented | Not represented as a live control in the interface. |
+| Document comments | Partial | Quote- and context-anchored comments are saved with the local document; comments can be resolved and reopened. No insertion/deletion tracking or DOCX revision history is provided. |
 
 
