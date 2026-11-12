@@ -607,6 +607,7 @@
   function setWorkspaceMode(mode) {
     const isDocument = mode === "document";
     $("#document-ruler").hidden = !isDocument;
+    if (!isDocument) $("#editor-card").classList.remove("paper-layout");
     editor.contentEditable = String(isDocument);
     titleInput.readOnly = !isDocument;
     $("#editor-layout").classList.toggle("has-outline", isDocument);
@@ -623,6 +624,7 @@
     $("#export-html").hidden = mode === "list" || mode === "landing";
     $("#export-docx").hidden = !isDocument;
     $("#export-html").lastElementChild.textContent = mode === "pdf" ? "Download PDF" : "Export HTML";
+    updateParagraphRuler();
   }
 
   function setMobileMenu(open) {
@@ -1010,6 +1012,7 @@
       const splitButton = ribbon.querySelector('.tool-button[data-action="table-split"]');
       if (splitButton) splitButton.disabled = (Number(tableCell.getAttribute("colspan")) || 1) <= 1 && (Number(tableCell.getAttribute("rowspan")) || 1) <= 1;
     }
+    updateParagraphRuler();
     if (!inEditor(focusNode) && !inEditor(anchorNode)) return;
     const contextNode = inEditor(focusNode) ? focusNode : anchorNode;
     const focusElement = contextNode.nodeType === Node.ELEMENT_NODE ? contextNode : contextNode.parentElement;
@@ -1036,7 +1039,6 @@
     const paragraphSpacingSelect = ribbon.querySelector("[data-tool=paragraph-spacing]");
     if (paragraphSpacingSelect) paragraphSpacingSelect.value = block?.getAttribute("data-paragraph-spacing") || "";
     const indentLevels = selectedParagraphBlocks().map((item) => Number(item.getAttribute("data-indent-level")) || 0);
-    updateParagraphRuler();
     const outdentButton = ribbon.querySelector('.tool-button[data-action="outdent"]');
     const indentButton = ribbon.querySelector('.tool-button[data-action="indent"]');
     if (outdentButton) outdentButton.disabled = !indentLevels.some((level) => level > 0);
