@@ -34,6 +34,7 @@
   let tableInsertionRange;
   let imageInsertionRange;
   let reviewComments = [];
+  let trackChangesEnabled = false;
   let reviewFilter = "all";
   let reviewSearch = "";
   let pendingReviewAnchor;
@@ -105,7 +106,7 @@
       [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }, { label: "Header & footer", action: "page-header-footer", icon: "↕ Header / footer" }, { label: "Page numbers", action: "page-numbers", icon: "＃ Pages" }],
     ],
     review: [
-      [{ label: "Add comment", action: "add-comment", icon: "▧ Comment" }, { label: "Review comments", action: "show-comments", icon: "☷ Comments" }],
+      [{ label: "Track changes", action: "track-changes", icon: "▤ Track changes" }, { label: "Add comment", action: "add-comment", icon: "▧ Comment" }, { label: "Review comments", action: "show-comments", icon: "☷ Comments" }],
       [{ label: "Spellcheck", action: "spellcheck", icon: "✓ Spellcheck", pressed: true }, { label: "Word count", action: "wordcount", icon: "# Word count" }],
     ],
     view: [
@@ -549,6 +550,7 @@
       ? "No comments match these filters."
       : "Select text and use Review → Add comment to start a discussion.";
     updateReviewHighlights();
+    renderTrackedChanges();
   }
 
   function showReviewPanel(open = true) {
@@ -561,6 +563,140 @@
       $("#toggle-outline").setAttribute("aria-expanded", "false");
       renderReviewComments();
     }
+  }
+
+  function trackedRevisionNodes() {
+    return [...editor.querySelectorAll("ins[data-revision-id], del[data-revision-id]")];
+  }
+
+  function renderTrackedChanges() {
+    const list = $("#tracked-revision-list");
+    if (!list) return;
+    const revisions = trackedRevisionNodes();
+    $("#tracked-revision-count").textContent = `${revisions.length} pending ${revisions.length === 1 ? "change" : "changes"}`;
+    list.replaceChildren();
+    for (const revision of revisions) {
+      const card = document.createElement("article");
+      card.className = "tracked-revision";
+      const meta = document.createElement("div");
+      meta.className = "tracked-revision-meta";
+      const label = document.createElement("strong");
+      label.textContent = revision.tagName.toLowerCase() === "ins" ? "Inserted text" : "Deleted text";
+      const author = document.createElement("span");
+      author.textContent = revision.dataset.revisionAuthor || "You";
+      meta.append(label, author);
+      const quote = document.createElement("p");
+      quote.className = "tracked-revision-quote";
+      quote.textContent = revision.textContent || "(empty text)";
+      const actions = document.createElement("div");
+      actions.className = "tracked-revision-actions";
+      for (const [action, text] of [["accept", "Accept"], ["reject", "Reject"]]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.revisionAction = action;
+        button.dataset.revisionId = revision.dataset.revisionId;
+        button.textContent = text;
+        actions.append(button);
+      }
+      card.append(meta, quote, actions);
+      list.append(card);
+    }
+    $("#tracked-revisions-empty").hidden = revisions.length > 0;
+    for (const action of ["accept-all", "reject-all"]) {
+      const button = document.querySelector(`[data-revision-action="${action}"]`);
+      if (button) button.disabled = revisions.length === 0;
+    }
+  }
+
+  function settleTrackedRevision(revision, accept) {
+    if (!revision?.parentNode) return;
+    if (revision.tagName.toLowerCase() === "ins") {
+      if (accept) revision.replaceWith(...revision.childNodes);
+      else revision.remove();
+    } else if (revision.tagName.toLowerCase() === "del") {
+      if (accept) revision.remove();
+      else revision.replaceWith(...revision.childNodes);
+    }
+  }
+
+  function resolveTrackedRevision(id, action) {
+    const revision = trackedRevisionNodes().find((item) => item.dataset.revisionId === id);
+    if (!revision) return;
+    settleTrackedRevision(revision, action === "accept");
+    renderTrackedChanges();
+    renderReviewComments();
+    saveDocument();
+    countWords();
+  }
+
+  function resolveAllTrackedRevisions(accept) {
+    const revisions = trackedRevisionNodes();
+    for (const revision of revisions) settleTrackedRevision(revision, accept);
+    renderTrackedChanges();
+    renderReviewComments();
+    saveDocument();
+    countWords();
+    notify(`${accept ? "Accepted" : "Rejected"} ${revisions.length} pending ${revisions.length === 1 ? "change" : "changes"}.`);
+  }
+
+  function createTrackedRevision(tag, content) {
+    const revision = document.createElement(tag);
+    revision.dataset.revisionId = crypto.randomUUID();
+    revision.dataset.revisionAuthor = "You";
+    revision.dataset.revisionCreatedAt = String(Date.now());
+    if (typeof content === "string") revision.textContent = content;
+    else revision.append(content);
+    return revision;
+  }
+
+  function handleTrackedBeforeInput(event) {
+    if (!trackChangesEnabled || editor.contentEditable !== "true" || event.isComposing) return;
+    const type = event.inputType;
+    const isBackwardDelete = type === "deleteContentBackward";
+    const isForwardDelete = type === "deleteContentForward";
+    const isInsert = type === "insertText" || type === "insertFromPaste";
+    if (!isBackwardDelete && !isForwardDelete && !isInsert) return;
+    const value = isInsert ? (type === "insertFromPaste" ? event.dataTransfer?.getData("text/plain") || event.data || "" : event.data || "") : "";
+    if (isInsert && (!value || /[\r\n]/.test(value))) return;
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) return;
+    const range = selection.getRangeAt(0).cloneRange();
+    const startNode = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
+    if (startNode?.closest("[data-revision-id]") || range.cloneContents().querySelector?.("[data-revision-id]")) return;
+    const blockSelector = "p,h1,h2,h3,h4,h5,h6,li,td,th,blockquote,pre";
+    if (range.collapsed) {
+      const textNode = range.startContainer;
+      if (textNode.nodeType !== Node.TEXT_NODE) return;
+      if (isBackwardDelete && range.startOffset > 0) range.setStart(textNode, range.startOffset - 1);
+      else if (isForwardDelete && range.startOffset < textNode.nodeValue.length) range.setEnd(textNode, range.startOffset + 1);
+      else return;
+    }
+    const startElement = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
+    const endElement = range.endContainer.nodeType === Node.ELEMENT_NODE ? range.endContainer : range.endContainer.parentElement;
+    const startBlock = startElement?.closest(blockSelector);
+    const endBlock = endElement?.closest(blockSelector);
+    if (!startBlock || startBlock !== endBlock || range.toString().length > 4000) return;
+    event.preventDefault();
+    if (!range.collapsed) {
+      const deleted = range.extractContents();
+      if (deleted.textContent) {
+        const deletion = createTrackedRevision("del", deleted);
+        range.insertNode(deletion);
+        range.setStartAfter(deletion);
+        range.collapse(true);
+      }
+    }
+    if (isInsert) {
+      const insertion = createTrackedRevision("ins", value);
+      range.insertNode(insertion);
+      range.setStartAfter(insertion);
+      range.collapse(true);
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+    renderTrackedChanges();
+    countWords();
+    saveDocument();
   }
 
   function openCommentDialog() {
@@ -614,7 +750,7 @@
     const content = documentModel.fromDOM(editor);
     saveTimer = setTimeout(() => {
       const tx = database.transaction("documents", "readwrite");
-      tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, layout: { paper: paperSize, orientation: pageOrientation, margins: pageMargins, pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText }, updatedAt: Date.now(), kind: "document" });
+      tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, trackChanges: trackChangesEnabled, layout: { paper: paperSize, orientation: pageOrientation, margins: pageMargins, pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText }, updatedAt: Date.now(), kind: "document" });
       tx.oncomplete = () => { if (activeId === documentId) { setSaveStatus("Saved"); countWords(); } };
       tx.onerror = () => { if (activeId === documentId) { setSaveStatus("Save failed"); notify("Could not save this document on your device."); } };
     }, 280);
@@ -673,6 +809,8 @@
     activeId = crypto.randomUUID();
     applyPageLayout();
     reviewComments = [];
+    trackChangesEnabled = false;
+    updateRibbonSelection();
     showReviewPanel(false);
     renderReviewComments();
     setTitle("Untitled document");
@@ -964,6 +1102,8 @@
       activeId = doc.id;
       applyPageLayout(doc.layout);
       reviewComments = normalizeReviewComments(doc.reviewComments);
+      trackChangesEnabled = Boolean(doc.trackChanges);
+      updateRibbonSelection();
       showReviewPanel(false);
       setTitle(doc.title);
       setWorkspaceMode("document");
@@ -1024,6 +1164,8 @@
     activeId = crypto.randomUUID();
     applyPageLayout();
     reviewComments = [];
+    trackChangesEnabled = false;
+    updateRibbonSelection();
     showReviewPanel(false);
     setTitle(file.name.replace(/\.[^.]+$/, "") || file.name);
     $("#file-kind").textContent = extension === "pdf" ? "PDF preview · original file" : `${extension.toUpperCase()} imported as editable text`;
@@ -1116,7 +1258,7 @@
         } else {
           control = document.createElement("button");
           control.type = "button"; control.className = "tool-button"; control.dataset.action = tool.action; control.textContent = tool.action === "orientation" && pageOrientation === "landscape" ? "▭ Landscape" : tool.icon; control.title = tool.label; control.setAttribute("aria-label", tool.label);
-          if (tool.pressed || tool.action === "page-numbers") control.setAttribute("aria-pressed", tool.action === "page-numbers" ? String(pageNumbersEnabled) : "false");
+          if (tool.pressed || ["page-numbers", "track-changes"].includes(tool.action)) control.setAttribute("aria-pressed", tool.action === "page-numbers" ? String(pageNumbersEnabled) : tool.action === "track-changes" ? String(trackChangesEnabled) : "false");
           control.addEventListener("click", () => runTool(tool.action, control));
         }
         section.append(control);
@@ -1133,6 +1275,8 @@
     const inEditor = (node) => node && (node === editor || editor.contains(node));
     const tableCell = selectedTableCell();
     for (const button of ribbon.querySelectorAll('.tool-button[data-action^="table-"]')) button.disabled = !tableCell;
+    const trackingButton = ribbon.querySelector('.tool-button[data-action="track-changes"]');
+    if (trackingButton) trackingButton.setAttribute("aria-pressed", String(trackChangesEnabled));
     if (tableCell) {
       const table = tableCell.closest("table");
       const rows = table ? [...table.querySelectorAll("tr")].filter((item) => item.closest("table") === table) : [];
@@ -1612,6 +1756,13 @@
   function runTool(action, button) {
     switch (action) {
       case "page-numbers": setPageNumbers(!pageNumbersEnabled, button); break;
+      case "track-changes":
+        trackChangesEnabled = !trackChangesEnabled;
+        button.setAttribute("aria-pressed", String(trackChangesEnabled));
+        if (trackChangesEnabled) showReviewPanel(true);
+        saveDocument();
+        notify(trackChangesEnabled ? "Track changes on. Text insertions and deletions will be reviewable." : "Track changes off.");
+        break;
       case "page-header-footer": openPageHeaderFooterDialog(); break;
       case "indent": applyParagraphIndent(1); break;
       case "outdent": applyParagraphIndent(-1); break;
@@ -1781,6 +1932,7 @@
     }
     let nextRelationship = 3;
     let nextDrawing = 1;
+    let nextRevision = 1;
 
     function serializeInline(node, marks = {}) {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -1791,7 +1943,8 @@
         const color = marks.textColor ? marks.textColor.slice(1) : "";
         const highlight = marks.highlightColor ? exportableHighlightColors.get(marks.highlightColor) : "";
         const properties = [fontFamily && `<w:rFonts w:ascii="${wordXmlText(fontFamily)}" w:hAnsi="${wordXmlText(fontFamily)}"/>`, color && `<w:color w:val="${wordXmlText(color)}"/>`, highlight && `<w:highlight w:val="${highlight}"/>`, marks.bold && "<w:b/>", marks.italic && "<w:i/>", marks.underline && '<w:u w:val="single"/>', marks.strike && "<w:strike/>"].filter(Boolean).join("");
-        return `<w:r>${properties ? `<w:rPr>${properties}</w:rPr>` : ""}<w:t${preserve}>${wordXmlText(text)}</w:t></w:r>`;
+        const textTag = marks.revisionType === "deletion" ? "w:delText" : "w:t";
+        return `<w:r>${properties ? `<w:rPr>${properties}</w:rPr>` : ""}<${textTag}${preserve}>${wordXmlText(text)}</${textTag}></w:r>`;
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return "";
       const tag = node.tagName.toLowerCase();
@@ -1842,10 +1995,12 @@
       }
       if (["script", "style", "button"].includes(tag)) return "";
       const next = { ...marks };
+      const revisionType = ["ins", "del"].includes(tag) && node.getAttribute("data-revision-id") ? tag : "";
+      if (revisionType) next.revisionType = revisionType === "del" ? "deletion" : "insertion";
       if (["b", "strong"].includes(tag)) next.bold = true;
       if (["i", "em"].includes(tag)) next.italic = true;
       if (tag === "u") next.underline = true;
-      if (["s", "strike", "del"].includes(tag)) next.strike = true;
+      if (["s", "strike", "del"].includes(tag) && !revisionType) next.strike = true;
       const requestedFont = String(node.getAttribute("data-font-family") || node.getAttribute("face") || node.style?.fontFamily || "").split(",")[0].trim().replace(/^["\']|["\']$/g, "");
       const fontFamily = [...exportableFontFamilies].find((family) => family.toLowerCase() === requestedFont.toLowerCase());
       if (fontFamily) next.fontFamily = fontFamily;
@@ -1865,6 +2020,12 @@
         return `<w:hyperlink r:id="${hyperlinkIds.get(href)}">${children}</w:hyperlink>`;
       }
       if (["mark", "sub", "sup"].includes(tag)) unsupported.add(tag);
+      if (revisionType) {
+        const rawDate = Number(node.getAttribute("data-revision-created-at"));
+        const revisionDate = Number.isFinite(rawDate) ? new Date(rawDate).toISOString() : new Date().toISOString();
+        const author = wordXmlText((node.getAttribute("data-revision-author") || "You").slice(0, 80));
+        return `<w:${revisionType} w:id="${nextRevision++}" w:author="${author}" w:date="${revisionDate}">${children}</w:${revisionType}>`;
+      }
       return children;
     }
 
@@ -2214,7 +2375,8 @@
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
   window.addEventListener("resize", applyPaperCanvasMinimumHeight);
   if (window.ResizeObserver) new ResizeObserver(applyPaperCanvasMinimumHeight).observe(editor);
-  editor.addEventListener("input", () => { countWords(); clearTimeout(reviewHighlightTimer); reviewHighlightTimer = setTimeout(updateReviewHighlights, 350); saveDocument(); if (!replacingAllMatches && $("#find-dialog").open) refreshFindMatches(false); });
+  editor.addEventListener("beforeinput", handleTrackedBeforeInput);
+  editor.addEventListener("input", () => { countWords(); clearTimeout(reviewHighlightTimer); reviewHighlightTimer = setTimeout(() => { updateReviewHighlights(); renderTrackedChanges(); }, 350); saveDocument(); if (!replacingAllMatches && $("#find-dialog").open) refreshFindMatches(false); });
   $("#outline-search").addEventListener("input", renderOutline);
   $("#toggle-outline").addEventListener("click", () => {
     const panel = $("#document-outline");
@@ -2411,6 +2573,16 @@
     renderReviewComments();
   });
   $("#review-search").addEventListener("input", (event) => { reviewSearch = event.target.value; renderReviewComments(); });
+  $("#tracked-revision-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-revision-action]");
+    if (button && ["accept", "reject"].includes(button.dataset.revisionAction)) resolveTrackedRevision(button.dataset.revisionId, button.dataset.revisionAction);
+  });
+  $("#tracked-revision-actions").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-revision-action]");
+    if (!button) return;
+    if (button.dataset.revisionAction === "accept-all") resolveAllTrackedRevisions(true);
+    if (button.dataset.revisionAction === "reject-all") resolveAllTrackedRevisions(false);
+  });
   $("#review-comment-list").addEventListener("click", (event) => {
     const go = event.target.closest("[data-comment-go]");
     if (go) { goToReviewComment(go.dataset.commentGo); return; }
