@@ -122,7 +122,7 @@
 .document-ruler-heading output{font-variant-numeric:tabular-nums;color:#344056}
 .ruler-measure{width:min(192px,100%)}
 .ruler-values{display:flex;justify-content:space-between;padding:0 2px 2px;color:var(--muted);font-size:9px}
-#paragraph-indent-ruler{display:block;width:100%;height:17px;margin:0;appearance:none;background:linear-gradient(to bottom,transparent 0 9px,#bbc4d2 9px 10px,transparent 10px),repeating-linear-gradient(to right,transparent 0 23px,#cbd2de 23px 24px,transparent 24px 47px,#9da9bb 47px 48px);cursor:pointer}
+#paragraph-indent-ruler{display:block;width:100%;height:24px;margin:0;appearance:none;background:linear-gradient(to bottom,transparent 0 11px,#bbc4d2 11px 12px,transparent 12px),repeating-linear-gradient(to right,transparent 0 23px,#cbd2de 23px 24px,transparent 24px 47px,#9da9bb 47px 48px);cursor:pointer}
 #paragraph-indent-ruler::-webkit-slider-thumb{width:12px;height:12px;appearance:none;border:1px solid #5448b3;border-radius:2px;background:#766ad6;box-shadow:0 1px 3px #25304a55;transform:rotate(45deg);cursor:ew-resize}
 #paragraph-indent-ruler::-moz-range-thumb{width:10px;height:10px;border:1px solid #5448b3;border-radius:2px;background:#766ad6;box-shadow:0 1px 3px #25304a55;transform:rotate(45deg);cursor:ew-resize}
 #paragraph-indent-ruler:focus-visible{outline:2px solid #6557c2;outline-offset:2px}
