@@ -2835,6 +2835,11 @@
     notify(comment.resolved ? "Comment resolved." : "Comment reopened.");
   });
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && $("#workspace-nav").classList.contains("mobile-open")) {
+      setMobileMenu(false);
+      $("#mobile-menu").focus();
+      return;
+    }
     const mod = event.ctrlKey || event.metaKey;
     if (mod && event.key.toLowerCase() === "s") { event.preventDefault(); saveDocument(true); notify("Saved in this browser."); }
   });
