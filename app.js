@@ -24,6 +24,7 @@
   let activeDocumentKind = "none";
   let activeWorkspaceMode = "landing";
   let openDocumentTabs = [];
+  let assistantManuallyControlled = false;
   let assistantDockWidth = 310;
   try {
     const savedAssistantWidth = Number(localStorage.getItem("adigun-assistant-dock-width"));
@@ -973,6 +974,7 @@
     activeWorkspaceMode = mode;
     renderOpenDocumentTabs();
     updateParagraphRuler();
+    maybeAutoOpenAssistantForDocument(isDocument);
   }
 
   function setActiveNavigationItem(activeItem) {
@@ -2766,7 +2768,7 @@
       case "zoom-reset": setZoom(100); break;
       case "zoom-fit": fitToWidth(); break;
       case "find": openFindDialog(); break;
-      case "assistant": toggleAssistant(); break;
+      case "assistant": toggleAssistant(undefined, true); break;
     }
   }
 
@@ -3401,7 +3403,12 @@
 
   function safeFilename(name) { return name.replace(/[\\/:*?"<>|]/g, "-").slice(0, 90) || "document"; }
 
-  function toggleAssistant(open = assistant.classList.contains("hidden")) {
+  function maybeAutoOpenAssistantForDocument(isDocument) {
+    if (isDocument && !assistantManuallyControlled && window.matchMedia("(min-width: 1200px)").matches) toggleAssistant(true, false);
+  }
+
+  function toggleAssistant(open = assistant.classList.contains("hidden"), userInitiated = false) {
+    if (userInitiated) assistantManuallyControlled = true;
     if (open && window.matchMedia("(max-width: 900px)").matches) {
       showReviewPanel(false);
       $("#document-outline").classList.remove("mobile-open");
@@ -3687,11 +3694,11 @@
   $("#zoom-in").addEventListener("click", () => setZoom(zoom + 10));
   $("#zoom-fit").addEventListener("click", fitToWidth);
   $("#paragraph-indent-ruler").addEventListener("input", (event) => setParagraphIndent(event.currentTarget.value));
-  $("#assist-button").addEventListener("click", () => toggleAssistant());
+  $("#assist-button").addEventListener("click", () => toggleAssistant(undefined, true));
   $("#assistant-find").addEventListener("click", useAssistantFind);
   $("#assistant-review").addEventListener("click", useAssistantReview);
-  $("#close-adigun").addEventListener("click", () => toggleAssistant(false));
-  $("#minimize-adigun").addEventListener("click", () => { assistant.classList.toggle("minimized"); $("#minimize-adigun").setAttribute("aria-label", assistant.classList.contains("minimized") ? "Restore Adigun" : "Minimize Adigun"); });
+  $("#close-adigun").addEventListener("click", () => toggleAssistant(false, true));
+  $("#minimize-adigun").addEventListener("click", () => { assistantManuallyControlled = true; assistant.classList.toggle("minimized"); $("#minimize-adigun").setAttribute("aria-label", assistant.classList.contains("minimized") ? "Restore Adigun" : "Minimize Adigun"); });
   function activateRibbonTab(tab) {
     if (!tab) return;
     activeTab = tab.dataset.tab;
