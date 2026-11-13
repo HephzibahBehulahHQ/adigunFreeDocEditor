@@ -47,6 +47,7 @@ jobs:
           node tests/workspace-chrome.test.cjs
           node tests/review-navigation.test.cjs
           node tests/review-target-size.test.cjs
+          node tests/zoom-target-size.test.cjs
       - name: Package application
         run: |
           mkdir -p _site/assets/vendor
