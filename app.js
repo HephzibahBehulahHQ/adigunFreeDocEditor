@@ -2754,7 +2754,7 @@
   }
 
   function makeWordPackage(source = editor, pageLayout = null, comments = []) {
-    const exportLayout = pageLayout || { paper: $("#editor-card").classList.contains("paper-letter") ? "letter" : "a4", orientation: $("#editor-card").classList.contains("landscape") ? "landscape" : "portrait", margins: pageMargins, customMarginsMm: pageCustomMarginsMm, pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText };
+    const exportLayout = pageLayout || { paper: $("#editor-card").classList.contains("paper-letter") ? "letter" : "a4", orientation: $("#editor-card").classList.contains("landscape") ? "landscape" : "portrait", margins: $("#editor-card").classList.contains("margin-narrow") ? "narrow" : $("#editor-card").classList.contains("margin-wide") ? "wide" : "normal", pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText };
     const relationships = [];
     const hyperlinkIds = new Map();
     const imageIds = new Map();
@@ -3197,7 +3197,7 @@
     try {
       for (const image of source.querySelectorAll("img")) if (typeof image.decode === "function") await image.decode();
     } catch { notify("Wait for the document images to finish loading, then export again."); return; }
-    const wordPackage = makeWordPackage(source, null, reviewComments);
+    const wordPackage = makeWordPackage(source, { paper: paperSize, orientation: pageOrientation, margins: pageMargins, customMarginsMm: pageCustomMarginsMm, pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText }, reviewComments);
     const warnings = docxExportWarnings(wordPackage.unsupported, wordPackage.omittedCommentCount);
     if (warnings.length && !(await confirmDocxExport(warnings))) return;
     download(makeStoredZip(wordPackage.files), safeFilename(title()) + ".docx");
