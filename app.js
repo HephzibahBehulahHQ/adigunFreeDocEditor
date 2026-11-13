@@ -1500,7 +1500,12 @@
         $("#export-html").lastElementChild.textContent = "Export HTML";
         editor.innerHTML = revisionMapping.html || "<p><br></p>";
         countWords();
-        renderTrackedChanges();
+        const hasImportedRevisions = revisionMapping.preserved.insertions + revisionMapping.preserved.deletions > 0;
+        if (hasImportedRevisions) {
+          activeTab = "review";
+          renderRibbon();
+          showReviewPanel(true);
+        } else renderTrackedChanges();
         saveDocument();
         const warningCount = converted.messages.filter((message) => message.type === "warning").length;
         const notes = [];
