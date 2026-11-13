@@ -14,6 +14,8 @@
   const DB_NAME = "adigunFreeDocEditor";
   let database;
   let activeId = crypto.randomUUID();
+  let lastSavedFor = activeId;
+  let lastSavedAt = null;
   let activeTab = "home";
   let saveTimer;
   let editorPaginationTimer;
@@ -132,8 +134,31 @@
     toastTimer = setTimeout(() => toast.classList.remove("visible"), 2600);
   }
 
-  function setSaveStatus(label, saving = false) {
-    saveState.lastChild.textContent = label;
+  function formatSavedTime(timestamp, locale) {
+    if (timestamp === undefined || timestamp === null || timestamp === "") return "";
+    const date = new Date(Number(timestamp));
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
+  }
+
+  function setSaveStatus(label, saving = false, savedAt) {
+    if (lastSavedFor !== activeId) { lastSavedFor = activeId; lastSavedAt = null; }
+    if (savedAt !== undefined && savedAt !== null) lastSavedAt = Number.isFinite(Number(savedAt)) ? Number(savedAt) : null;
+    const saveLabel = $("#save-label");
+    const saveTime = $("#save-time");
+    saveLabel.textContent = label;
+    const timeLabel = formatSavedTime(lastSavedAt);
+    saveTime.hidden = !timeLabel;
+    saveTime.textContent = timeLabel;
+    if (timeLabel) {
+      const date = new Date(lastSavedAt);
+      saveTime.dateTime = date.toISOString();
+      saveTime.setAttribute("aria-label", "Last saved " + date.toLocaleString());
+      saveState.title = "Last saved " + date.toLocaleString();
+    } else {
+      saveTime.removeAttribute("datetime");
+      saveTime.removeAttribute("aria-label");
+      saveState.title = label;
+    }
     saveState.querySelector(".save-dot").style.background = saving ? "#d4af37" : "#38b778";
   }
 
@@ -774,9 +799,10 @@
     const savedComments = reviewComments.map((comment) => ({ ...comment }));
     const content = documentModel.fromDOM(editor);
     saveTimer = setTimeout(() => {
+      const updatedAt = Date.now();
       const tx = database.transaction("documents", "readwrite");
-      tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, trackChanges: trackChangesEnabled, layout: { paper: paperSize, orientation: pageOrientation, margins: pageMargins, pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText }, updatedAt: Date.now(), kind: "document" });
-      tx.oncomplete = () => { if (activeId === documentId) { setSaveStatus("Saved"); countWords(); } };
+      tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, trackChanges: trackChangesEnabled, layout: { paper: paperSize, orientation: pageOrientation, margins: pageMargins, pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText }, updatedAt, kind: "document" });
+      tx.oncomplete = () => { if (activeId === documentId) { setSaveStatus("Saved", false, updatedAt); countWords(); } };
       tx.onerror = () => { if (activeId === documentId) { setSaveStatus("Save failed"); notify("Could not save this document on your device."); } };
     }, 280);
   }
@@ -1207,6 +1233,7 @@
       updateRibbonSelection();
       showReviewPanel(false);
       setTitle(doc.title);
+      setSaveStatus("Saved", false, doc.updatedAt);
       setWorkspaceMode("document");
       $("#editor-card").classList.remove("landing");
       $("#file-kind").textContent = "Saved on this device";
