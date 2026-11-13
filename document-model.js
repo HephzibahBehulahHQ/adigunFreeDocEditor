@@ -2,7 +2,7 @@
   const format = "adigun-document";
   const version = 1;
   const allowedTags = new Set([
-    "p", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "em", "i", "u", "s", "strike", "del",
+    "p", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "em", "i", "u", "s", "strike", "del", "ins",
     "ul", "ol", "li", "span", "a", "br", "hr", "blockquote", "pre", "code", "table", "thead", "tbody",
     "tfoot", "tr", "th", "td", "img",
   ]);
@@ -43,6 +43,12 @@
         const url = new URL(attributes.href, location.href);
         if (["http:", "https:", "mailto:"].includes(url.protocol)) result.href = url.href;
       } catch { /* Invalid links are omitted from the document model. */ }
+    }
+    if (["ins", "del"].includes(tag)) {
+      if (typeof attributes["data-revision-id"] === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(attributes["data-revision-id"])) result["data-revision-id"] = attributes["data-revision-id"];
+      if (typeof attributes["data-revision-author"] === "string") result["data-revision-author"] = attributes["data-revision-author"].slice(0, 80);
+      const createdAt = Number(attributes["data-revision-created-at"]);
+      if (Number.isFinite(createdAt) && createdAt > 0 && createdAt <= 8640000000000000) result["data-revision-created-at"] = String(Math.floor(createdAt));
     }
     if (tag === "img" && typeof attributes.src === "string" && attributes.src.length <= 11 * 1024 * 1024 && imageSource.test(attributes.src)) {
       result.src = attributes.src;
@@ -110,7 +116,7 @@
     const sourceTag = node.tagName.toLowerCase();
     const tag = sourceTag === "font" ? "span" : sourceTag;
     const attrs = {};
-    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-font-family", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level"]) {
+    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-font-family", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level", "data-revision-id", "data-revision-author", "data-revision-created-at"]) {
       const value = node.getAttribute(name);
       if (value !== null) attrs[name] = value;
     }
