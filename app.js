@@ -815,6 +815,7 @@
   function setWorkspaceMode(mode) {
     const isDocument = mode === "document";
     const isConversion = mode === "conversion";
+    $("#workspace").classList.toggle("mode-no-document-title", ["landing", "list", "conversion"].includes(mode));
     $("#conversion-workspace").hidden = !isConversion;
     if (!isConversion) { editor.hidden = false; $(".page-footer").hidden = false; }
     $("#document-ruler").hidden = !isDocument;
