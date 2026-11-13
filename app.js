@@ -1591,7 +1591,7 @@
       else delete sheet.dataset.pageHeader;
       if (pageFooterText) sheet.dataset.pageFooter = `${pageFooterText}${pageNumbersEnabled ? " · " : ""}`;
       else delete sheet.dataset.pageFooter;
-      sheet.setAttribute("aria-label", `Page ${index + 1}${pageNumbersEnabled ? ` of ${total}` : ""}`);
+      sheet.setAttribute("aria-label", `Page ${index + 1}${pageNumbersEnabled ? ` of ${total}` : ""}${pageHeaderText ? `, header ${pageHeaderText}` : ""}${pageFooterText ? `, footer ${pageFooterText}` : ""}`);
     });
   }
 
@@ -2198,6 +2198,7 @@
     notify("Inserted a " + rows + " × " + columns + " table. Type in a cell to fill it.");
   });
   $("#cancel-table").addEventListener("click", () => $("#table-dialog").close());
+  $("#apply-page-header-footer").addEventListener("click", () => setPageHeaderFooter($("#page-header-text").value, $("#page-footer-text").value));
   $("#autosave-toggle").addEventListener("change", (event) => { autosave = event.target.checked; localStorage.setItem("adigun-autosave", String(autosave)); if (autosave) saveDocument(); else setSaveStatus("Autosave off"); });
   $("#theme-toggle").addEventListener("change", (event) => setTheme(event.target.checked ? "dark" : "light"));
   function saveDefaultPageLayout() {
