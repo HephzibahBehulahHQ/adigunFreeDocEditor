@@ -889,15 +889,14 @@
     documentTabStrip.hidden = !visible;
     for (const item of openDocumentTabs) {
       const wrapper = document.createElement("div");
-      wrapper.className = "open-document-tab-item";
-      wrapper.setAttribute("aria-selected", String(item.id === activeId && item.kind === activeDocumentKind));
+      wrapper.className = `open-document-tab-item${item.id === activeId && item.kind === activeDocumentKind ? " active" : ""}`;
       const tab = document.createElement("button");
       tab.className = "open-document-tab";
       tab.type = "button";
       tab.id = `open-document-tab-${item.id}`;
       tab.dataset.documentTab = item.id;
       tab.setAttribute("aria-pressed", String(item.id === activeId && item.kind === activeDocumentKind));
-      tab.tabIndex = 0;
+      tab.tabIndex = item.id === activeId && item.kind === activeDocumentKind ? 0 : -1;
       tab.textContent = item.title;
       tab.title = item.title;
       const close = document.createElement("button");
@@ -1930,7 +1929,6 @@
     if (id === activeId && activeDocumentKind === "document") { setWorkspaceMode("document"); return; }
     if (!alreadyFlushed && !(await flushActiveDocument())) { notify("Save the open document before switching tabs."); return; }
     if (!database) { notify("Local document storage is unavailable in this browser."); return; }
-    const previousMode = activeWorkspaceMode;
     let doc;
     try {
       doc = await new Promise((resolve, reject) => {
@@ -1968,7 +1966,11 @@
   async function activateOpenDocumentTab(id, alreadyFlushed = false) {
     const tab = openDocumentTabs.find((item) => item.id === id);
     if (!tab) return;
-    if (tab.kind === "document") { await openSaved(id, alreadyFlushed); return; }
+    if (tab.kind === "document") {
+      await openSaved(id, alreadyFlushed);
+      document.getElementById(`open-document-tab-${id}`)?.focus();
+      return;
+    }
     if (!alreadyFlushed && !(await flushActiveDocument())) { notify("Save the open document before switching tabs."); return; }
     if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
     $("#pdf-frame")?.remove();
@@ -1996,6 +1998,7 @@
     $(".ribbon-tabs").hidden = true;
     ribbon.hidden = true;
     renderOpenDocumentTabs();
+    document.getElementById(`open-document-tab-${id}`)?.focus();
   }
 
   async function closeOpenDocumentTab(id) {
