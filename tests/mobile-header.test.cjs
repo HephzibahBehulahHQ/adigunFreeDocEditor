@@ -17,10 +17,11 @@ const mobileRules = css.slice(css.lastIndexOf("@media(max-width:700px){"));
 assert.match(mobileRules, /\.sidebar\{justify-content:flex-start\}/);
 assert.match(mobileRules, /\.product-name\{display:flex/);
 assert.match(mobileRules, /\.mobile-brand\{display:none\}/);
-assert.match(mobileRules, /@media\(max-width:420px\)\{[\s\S]*?\.document-title\{width:min\(80px,24vw\)/);
+assert.match(mobileRules, /@media\(max-width:420px\)\{[\s\S]*?\.document-title\{width:min\(110px,28vw\)/);
 assert.match(mobileRules, /\.icon-button\{width:26px\}/);
 
 const braceDelta = [...css].reduce((count, character) => count + (character === "{" ? 1 : character === "}" ? -1 : 0), 0);
 assert.equal(braceDelta, 0, "stylesheet braces remain balanced");
 process.stdout.write("Mobile header tests passed: product identity and editor actions fit the compact header rules.\n");
+
 
