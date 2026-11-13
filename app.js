@@ -2622,7 +2622,6 @@
       $("#toggle-outline").setAttribute("aria-expanded", "false");
     }
     assistant.classList.toggle("hidden", !open);
-    $("#assistant-launcher").classList.toggle("visible", !open);
     assistant.setAttribute("aria-hidden", String(!open));
     $("#assist-button").setAttribute("aria-expanded", String(open));
   }
@@ -2824,7 +2823,6 @@
   $("#zoom-fit").addEventListener("click", fitToWidth);
   $("#paragraph-indent-ruler").addEventListener("input", (event) => setParagraphIndent(event.currentTarget.value));
   $("#assist-button").addEventListener("click", () => toggleAssistant());
-  $("#assistant-launcher").addEventListener("click", () => toggleAssistant(true));
   $("#assistant-find").addEventListener("click", useAssistantFind);
   $("#assistant-review").addEventListener("click", useAssistantReview);
   $("#close-adigun").addEventListener("click", () => toggleAssistant(false));
