@@ -31,4 +31,5 @@ jobs:
           node tests/responsive-panels.test.cjs
           node tests/tablet-layout.test.cjs
           node tests/assistant-tools.test.cjs
+          node tests/local-data-privacy.test.cjs
 
