@@ -160,8 +160,20 @@
           <label class="setting-choice" for="default-orientation"><span>Orientation</span><select id="default-orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
           <label class="setting-choice" for="default-margins"><span>Margins</span><select id="default-margins"><option value="normal">Normal</option><option value="narrow">Narrow</option><option value="wide">Wide</option></select></label>
         </section>
-        <div class="settings-foot"><span>Documents are stored in this browser. No account or cloud sync is active.</span><button class="button button-outline" value="close">Done</button></div>
+        <section class="settings-defaults privacy-settings" aria-labelledby="privacy-settings-title">
+          <div class="settings-defaults-head"><strong id="privacy-settings-title">Privacy and local data</strong><small>Editable documents, comments, tracked changes, and Trash entries stay in this browser. No account or cloud sync is active.</small></div>
+          <p class="local-data-count" id="local-data-count" aria-live="polite">Checking local storage…</p>
+          <button class="button button-danger" id="clear-local-data" type="button">Delete all saved documents</button>
+        </section>
+        <div class="settings-foot"><span>Preferences stay on this device. AI tools are unavailable because no provider is connected.</span><button class="button button-outline" value="close">Done</button></div>
       </form>
+    </dialog>
+    <dialog class="settings-dialog clear-local-data-dialog" id="clear-local-data-dialog" role="alertdialog" aria-labelledby="clear-local-data-title" aria-describedby="clear-local-data-warning">
+      <div class="clear-local-data-content">
+        <div class="settings-head"><div><span class="eyebrow">PRIVACY AND LOCAL DATA</span><h2 id="clear-local-data-title">Delete local documents?</h2></div><button class="window-control" id="cancel-clear-local-data-close" type="button" aria-label="Cancel deleting local documents">×</button></div>
+        <p class="clear-local-data-warning" id="clear-local-data-warning">This permanently removes all saved documents, comments, tracked changes, and Trash entries from this browser. It also closes the open document and discards unsaved changes. Downloaded copies and your preferences are not affected.</p>
+        <div class="clear-local-data-actions"><button class="button button-outline" id="cancel-clear-local-data" type="button">Keep documents</button><button class="button button-danger" id="confirm-clear-local-data" type="button">Delete local documents</button></div>
+      </div>
     </dialog>
     <dialog class="settings-dialog comment-dialog" id="comment-dialog" aria-labelledby="comment-title">
       <form id="comment-form">
