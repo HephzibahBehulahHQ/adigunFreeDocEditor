@@ -1375,8 +1375,11 @@
       const end = range?.end;
       if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start || end > sourceText.length) { omitted++; continue; }
       const quote = sourceText.slice(start, end);
-      const body = Array.from(item.getElementsByTagNameNS(wordNs, "p")).map(textOf).join("\n").trim();
+      const paragraphs = Array.from(item.getElementsByTagNameNS(wordNs, "p"));
+      const body = paragraphs.map(textOf).join("\n").trim();
       if (!quote.trim() || quote.length > 4000 || !body || body.length > 2000) { omitted++; continue; }
+      const lastParagraph = paragraphs.at(-1);
+      const paragraphId = lastParagraph?.getAttributeNS(word14Ns, "paraId") || lastParagraph?.getAttribute("w14:paraId") || item.getAttributeNS(word14Ns, "paraId") || item.getAttribute("w14:paraId") || "";
       const record = {
         start,
         quote,
@@ -1385,7 +1388,7 @@
         body,
         author: item.getAttributeNS(wordNs, "author") || item.getAttribute("w:author") || "Unknown author",
         createdAt: Date.parse(item.getAttributeNS(wordNs, "date") || item.getAttribute("w:date") || "") || Date.now(),
-        resolved: resolvedByParaId.get((item.getAttributeNS(word14Ns, "paraId") || item.getAttribute("w14:paraId") || "").toUpperCase()) || false,
+        resolved: resolvedByParaId.get(paragraphId.toUpperCase()) || false,
       };
       const mappedStart = resolveReviewCommentStart(record, targetText);
       if (mappedStart < 0) { omitted++; continue; }
