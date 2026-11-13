@@ -41,5 +41,6 @@ jobs:
           node tests/review-navigation.test.cjs
           node tests/review-target-size.test.cjs
           node tests/zoom-target-size.test.cjs
+          node tests/document-ruler-target-size.test.cjs
 
 
