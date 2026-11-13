@@ -96,6 +96,10 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
 
   assert.equal((entries.get("word/_rels/document.xml.rels").toString("utf8").match(/relationships\/image/g) || []).length, 1);
   assert.match(entries.get("[Content_Types].xml").toString("utf8"), /Extension="png" ContentType="image\/png"/);
-  process.stdout.write("DOCX export tests passed: PNG media, DrawingML, formatting, dimensions, alt text and vertical table merges.\n");
+  setPageNumbers(false);
+  const withoutPageNumbers = makeWordPackage(root);
+  assert.equal(Object.hasOwn(withoutPageNumbers.files, "word/footer1.xml"), false, "footer is omitted when page numbering is off");
+  assert.doesNotMatch(withoutPageNumbers.files["word/document.xml"], /w:footerReference/);
+  process.stdout.write("DOCX export tests passed: page fields, PNG media, DrawingML, formatting, dimensions, alt text and vertical table merges.\n");
 }).catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1; });
 
