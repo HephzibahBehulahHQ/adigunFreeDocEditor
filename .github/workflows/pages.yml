@@ -39,6 +39,7 @@ jobs:
           node tests/tablet-layout.test.cjs
           node tests/assistant-tools.test.cjs
           node tests/local-data-privacy.test.cjs
+          node tests/assistant-docked-layout.test.cjs
           node tests/mobile-header.test.cjs
           node tests/save-status.test.cjs
           node tests/keyboard-accessibility.test.cjs
@@ -86,5 +87,6 @@ jobs:
         uses: actions/deploy-pages@v5
         with:
           artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+
 
 

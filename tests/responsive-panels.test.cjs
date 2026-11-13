@@ -33,11 +33,13 @@ const nodes = {
   "#toggle-outline": element(),
   "#assistant-launcher": element(),
   "#assist-button": element(),
+  ".app-shell": element(),
 };
 nodes["#review-comments"].hidden = true;
 const assistant = element();
-const window = { matchMedia: () => ({ matches: true }) };
-const api = new Function("window", "$", "assistant", "renderReviewComments", [
+const window = { matchMedia: (query) => ({ matches: query === "(max-width: 900px)" }), addEventListener() {} };
+const appShell = nodes[".app-shell"];
+const api = new Function("window", "$", "assistant", "appShell", "renderReviewComments", [
   source.slice(reviewStart, reviewEnd),
   source.slice(assistantStart, assistantEnd),
   "return { showReviewPanel, showOutlinePanel, toggleAssistant };",
@@ -45,6 +47,7 @@ const api = new Function("window", "$", "assistant", "renderReviewComments", [
   window,
   (selector) => nodes[selector],
   assistant,
+  appShell,
   () => {},
 );
 
@@ -56,6 +59,7 @@ assert.equal(nodes["#assist-button"].attributes["aria-expanded"], "false", "clos
 api.toggleAssistant(true);
 assert.equal(nodes["#review-comments"].hidden, true, "opening Adigun closes Review on compact layouts");
 assert.equal(assistant.classList.contains("hidden"), false, "Adigun opens after Review closes");
+assert.equal(appShell.classList.contains("assistant-docked"), false, "compact layouts keep Adigun in the floating panel layout");
 
 api.showOutlinePanel(true);
 assert.equal(nodes["#document-outline"].classList.contains("mobile-open"), true, "opening Outline displays it");
@@ -66,4 +70,5 @@ assert.equal(nodes["#document-outline"].classList.contains("mobile-open"), false
 assert.equal(nodes["#toggle-outline"].attributes["aria-expanded"], "false");
 
 process.stdout.write("Responsive panel tests passed: Review, Outline, and Adigun remain exclusive on compact layouts.\n");
+
 

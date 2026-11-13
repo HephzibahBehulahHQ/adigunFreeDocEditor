@@ -5,6 +5,7 @@
   const saveState = $("#save-state");
   const toast = $("#toast");
   const ribbon = $("#ribbon-tools");
+  const appShell = $(".app-shell");
   const assistant = $("#adigun-window");
   const filePicker = $("#file-picker");
   const conversionFilePicker = $("#conversion-file-picker");
@@ -3232,7 +3233,16 @@
     assistant.classList.toggle("hidden", !open);
     assistant.setAttribute("aria-hidden", String(!open));
     $("#assist-button").setAttribute("aria-expanded", String(open));
+    updateAssistantLayout();
   }
+
+  function updateAssistantLayout() {
+    const docked = !assistant.classList.contains("hidden") && window.matchMedia("(min-width: 1200px)").matches;
+    appShell.classList.toggle("assistant-docked", docked);
+    assistant.classList.toggle("docked", docked);
+  }
+
+  window.addEventListener("resize", updateAssistantLayout);
 
   function useAssistantFind() {
     if (window.matchMedia("(max-width: 900px)").matches) toggleAssistant(false);
@@ -3717,4 +3727,5 @@
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
   openDatabase().then(() => { setSaveStatus("Saved"); showLanding(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
 })();
+
 

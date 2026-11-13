@@ -114,31 +114,32 @@
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
       </section>
 
+      <section class="adigun-window hidden" id="adigun-window" aria-label="Adigun assistant" aria-hidden="true">
+        <header class="adigun-header" id="adigun-drag-handle">
+          <span class="adigun-glyph" aria-hidden="true">✦</span><div class="adigun-heading"><strong>Adigun</strong><span>Document tools · on this device</span></div>
+          <button class="window-control" id="minimize-adigun" type="button" aria-label="Minimize Adigun">−</button>
+          <button class="window-control" id="close-adigun" type="button" aria-label="Close Adigun">×</button>
+        </header>
+        <div class="adigun-body">
+          <div class="assistant-offline"><span class="offline-indicator"></span><div><strong>Local tools ready</strong><p>These tools read the open document in your browser. No AI provider is connected.</p></div></div>
+          <div class="insight-grid" aria-live="polite"><div><strong id="insight-words">0</strong><span>Words</span></div><div><strong id="insight-characters">0</strong><span>Characters</span></div><div><strong id="insight-reading">&lt;1 min</strong><span>Reading time</span></div></div>
+          <section class="assistant-quick-tools" aria-labelledby="assistant-quick-tools-title">
+            <h3 id="assistant-quick-tools-title">Quick tools</h3>
+            <div class="assistant-tool-grid">
+              <button class="assistant-tool" id="assistant-find" type="button"><span class="assistant-tool-icon" aria-hidden="true">⌕</span><span><strong>Find and replace</strong><small>Search this document</small></span></button>
+              <button class="assistant-tool" id="assistant-review" type="button"><span class="assistant-tool-icon" aria-hidden="true">▧</span><span><strong>Review</strong><small>Comments and changes</small></span></button>
+            </div>
+          </section>
+          <button class="overview-button" id="build-overview" type="button">Build a quick overview</button>
+          <p class="overview-note">Extracts key sentences from this document. It does not use or imitate AI.</p>
+          <div class="overview-result" id="overview-result" hidden></div>
+        </div>
+      </section>
+
       <input class="sr-only" id="file-picker" type="file" aria-label="Choose a document or PDF file" accept=".docx,.txt,.md,.html,.htm,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html,application/pdf" />
       <input class="sr-only" id="image-picker" type="file" aria-label="Choose an image to insert" accept="image/png,image/jpeg,image/gif" />
       <input class="sr-only" id="conversion-file-picker" type="file" aria-label="Choose a file to convert" accept=".docx,.txt,.md,.markdown,.html,.htm,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html" />
     </main>
-    <section class="adigun-window hidden" id="adigun-window" aria-label="Adigun assistant" aria-hidden="true">
-      <header class="adigun-header" id="adigun-drag-handle">
-        <span class="adigun-glyph" aria-hidden="true">✦</span><div class="adigun-heading"><strong>Adigun</strong><span>Document tools · on this device</span></div>
-        <button class="window-control" id="minimize-adigun" type="button" aria-label="Minimize Adigun">−</button>
-        <button class="window-control" id="close-adigun" type="button" aria-label="Close Adigun">×</button>
-      </header>
-      <div class="adigun-body">
-        <div class="assistant-offline"><span class="offline-indicator"></span><div><strong>Local tools ready</strong><p>These tools read the open document in your browser. No AI provider is connected.</p></div></div>
-        <div class="insight-grid" aria-live="polite"><div><strong id="insight-words">0</strong><span>Words</span></div><div><strong id="insight-characters">0</strong><span>Characters</span></div><div><strong id="insight-reading">&lt;1 min</strong><span>Reading time</span></div></div>
-        <section class="assistant-quick-tools" aria-labelledby="assistant-quick-tools-title">
-          <h3 id="assistant-quick-tools-title">Quick tools</h3>
-          <div class="assistant-tool-grid">
-            <button class="assistant-tool" id="assistant-find" type="button"><span class="assistant-tool-icon" aria-hidden="true">⌕</span><span><strong>Find and replace</strong><small>Search this document</small></span></button>
-            <button class="assistant-tool" id="assistant-review" type="button"><span class="assistant-tool-icon" aria-hidden="true">▧</span><span><strong>Review</strong><small>Comments and changes</small></span></button>
-          </div>
-        </section>
-        <button class="overview-button" id="build-overview" type="button">Build a quick overview</button>
-        <p class="overview-note">Extracts key sentences from this document. It does not use or imitate AI.</p>
-        <div class="overview-result" id="overview-result" hidden></div>
-      </div>
-    </section>
     <dialog class="settings-dialog template-dialog" id="template-dialog" aria-labelledby="template-dialog-title">
       <div class="template-library">
         <div class="settings-head"><div><span class="eyebrow">ON THIS DEVICE</span><h2 id="template-dialog-title">Choose a template</h2></div><button class="window-control" id="close-templates" type="button" aria-label="Close templates">×</button></div>
@@ -248,4 +249,5 @@
     <script src="./app.js" defer></script>
   </body>
 </html>
+
 

@@ -4,7 +4,7 @@ The repository initially contained the product specification, mockup, custom-dom
 
 ## Runtime boundaries
 
-- `index.html` defines the accessible application shell, workspace, entry screen, editor surface, and Adigun panel.
+- `index.html` defines the accessible application shell, workspace, entry screen, editor surface, and Adigun panel. On wide screens, the open local tools panel occupies a dedicated right rail; narrower screens retain the floating panel layout.
 - `styles.css` defines responsive layout and maps the verified HB brand tokens.
 - `app.js` owns document state, toolbar actions, browser-local persistence, file import/export and the local extractive overview.
 - `document-model.js` normalizes editable content to a versioned JSON tree with an allow-list for nodes and attributes, including font-family, text-color, highlight-color, line-spacing, paragraph-spacing and indent-level allow-lists. IndexedDB stores this model; older HTML records are migrated on open, and HTML/DOCX exports serialize through the model.
@@ -21,4 +21,5 @@ The schema-backed model now governs persistence and exports. Interactive editing
 The editor currently supports a bounded set of browser editing commands. This is not a DOCX document model or an OOXML parser. Before DOCX compatibility, complex revisions, or conversion work, replace or wrap the editing surface with a structured document engine and verify round-trip behavior against representative files.
 
 The Adigun panel has no provider adapter. Its current overview is a deterministic extractive operation over local text, explicitly labelled as such; no document content leaves the browser.
+
 

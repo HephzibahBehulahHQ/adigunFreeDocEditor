@@ -19,7 +19,7 @@ Status is specific to the current first workspace slice.
 | TXT, Markdown and HTML import | Implemented | Imports plain text into the editor; source HTML formatting is not preserved. |
 | PDF viewing and download | Implemented | Browser PDF viewer; editing and page operations are not supported. |
 | HTML export | Implemented | Downloads the current editable document as an HTML file. |
-| Local document overview | Implemented | Extracts sentences from the current document; not an AI summary. |
+| Local document overview | Implemented | Extracts sentences from the current document; not an AI summary. The Adigun local-tools panel docks in a dedicated right rail on wide screens and remains floating at narrower widths. |
 | DOCX export | Partial | Creates a real OOXML `.docx` package; maps headings, supported font families, colors/highlights, paragraph/line spacing and indentation, emphasis, web links, lists, tables, header rows, horizontal and vertical cell spans, PNG/JPEG/GIF images, page setup, and tracked insertions/deletions as `w:ins`/`w:del` with author/date. WebP/SVG images and advanced styles are not preserved. |
 | DOCX import | Partial | Mammoth converts semantic structure in-browser; allow-listed HTML is sanitized. Headings, lists, tables, safe inline raster images, supported A4/US Letter size/orientation, preset margins, and custom per-side margins up to 100 mm can be edited. All sections must agree; gutters, custom page sizes, mixed sections, first/even-page header/footer variants, unsupported fields, advanced styling, and full fidelity are not preserved. Supported default header/footer text and PAGE fields import; unsupported settings generate a warning. Simple paragraph revisions are mapped when converted text aligns exactly; unaligned or unsupported revisions may be lost. |
 | PDF annotation, modification or conversion | Not implemented | No PDF editing/conversion engine is included. |
@@ -29,5 +29,6 @@ Status is specific to the current first workspace slice.
 | Strikethrough formatting | Implemented | Applies to selected text and persists through the local document model, DOCX import and DOCX export. |
 | Document comments | Partial | Quote- and context-anchored comments are saved with the local document; comments can be resolved and reopened. DOCX import brings in comments whose selected text can be matched, preserving author, date, and resolved status; comments with missing, unsupported, or unmatched text anchors are reported. Anchored comments export as native Word comments; conversion warns that source comments are not retained. |
 | Track changes and review history | Partial | Opt-in local tracking captures plain text insertions and same-paragraph deletions, with author/time metadata and per-change or bulk accept/reject actions. Revisions persist when reopened and export as OOXML `w:ins`/`w:del` with author/date. Formatting and multi-paragraph edits are not tracked; simple imported DOCX revisions are reviewable when paragraph alignment is exact. |
+
 
 
