@@ -361,7 +361,7 @@
         before: typeof item.before === "string" ? item.before.slice(-32) : "",
         after: typeof item.after === "string" ? item.after.slice(0, 32) : "",
         body: item.body.slice(0, 2000),
-        author: "You",
+        author: typeof item.author === "string" && item.author.trim() ? item.author.trim().slice(0, 80) : "You",
         createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now(),
         resolved: Boolean(item.resolved),
       }))
@@ -1121,6 +1121,10 @@
         const sanitized = sanitizeDocxHtml(converted.value);
         const revisionMapping = mapDocxRevisionsToHtml(sanitized.html, revisionCounts?.paragraphs);
         html = revisionMapping.html || "<p><br></p>";
+        const commentTargetText = new DOMParser().parseFromString("<main>" + html + "</main>", "text/html").querySelector("main")?.textContent || "";
+        const sourceCommentData = await readDocxReviewComments(arrayBuffer, archiveEntry, commentTargetText);
+        if (sourceCommentData.unreadable) warnings.push("Source Word comments could not be read and may not be retained.");
+        else if (sourceCommentData.total) warnings.push("Source Word comments (" + sourceCommentData.total + ") are not retained in conversion.");
         const warningCount = converted.messages.filter((message) => message.type === "warning").length;
         if (warningCount) warnings.push(warningCount + " Word compatibility warning" + (warningCount === 1 ? "" : "s") + ".");
         if (sanitized.removed) warnings.push(sanitized.removed + " unsupported or unsafe item" + (sanitized.removed === 1 ? " was" : "s were") + " omitted.");
@@ -1234,6 +1238,8 @@
     const names = new Set();
     let expandedBytes = 0;
     let documentEntry = null;
+    let commentsEntry = null;
+    let commentsExtendedEntry = null;
     for (let index = 0; index < count; index++) {
       if (cursor + 46 > directoryEnd || bytes.getUint32(cursor, true) !== 0x02014b50) throw new Error("The Word package directory is damaged.");
       const flags = bytes.getUint16(cursor + 8, true);
@@ -1252,11 +1258,13 @@
       expandedBytes += expanded;
       if (expandedBytes > 100 * 1024 * 1024) throw new Error("The uncompressed Word package exceeds the 100 MB safety limit.");
       if (name === "word/document.xml") documentEntry = { method, compressed, expanded, localOffset: bytes.getUint32(cursor + 42, true) };
+      else if (name === "word/comments.xml") commentsEntry = { method, compressed, expanded, localOffset: bytes.getUint32(cursor + 42, true) };
+      else if (name === "word/commentsExtended.xml") commentsExtendedEntry = { method, compressed, expanded, localOffset: bytes.getUint32(cursor + 42, true) };
       cursor = next;
     }
     if (cursor !== directoryEnd || !documentEntry || !names.has("[Content_Types].xml")) throw new Error("This file is missing required Word document parts.");
     if (expandedBytes > Math.max(32 * 1024 * 1024, buffer.byteLength * 150)) throw new Error("The Word package expands beyond the safe import ratio.");
-    return documentEntry;
+    return Object.assign(documentEntry, { commentsEntry, commentsExtendedEntry });
   }
 
   function readWordRevisionParagraphs(parsed) {
@@ -1306,6 +1314,152 @@
       paragraphs.push(record);
     }
     return paragraphs;
+  }
+
+
+  function mapDocxCommentsToReviewComments(documentXml, commentsXml, commentsExtendedXml, targetText) {
+    const wordNs = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const word14Ns = "http://schemas.microsoft.com/office/word/2010/wordml";
+    const word15Ns = "http://schemas.microsoft.com/office/word/2012/wordml";
+    const ranges = new Map();
+    let sourceText = "";
+    function visitDocument(node) {
+      for (const child of Array.from(node.childNodes || [])) {
+        if (child.nodeType !== 1) continue;
+        const localName = child.localName || String(child.nodeName || "").split(":").pop();
+        if (child.namespaceURI === wordNs && localName === "del") continue;
+        if (child.namespaceURI === wordNs && localName === "commentRangeStart") {
+          const id = child.getAttributeNS(wordNs, "id") || child.getAttribute("w:id");
+          if (id) ranges.set(id, { start: sourceText.length, end: null });
+          continue;
+        }
+        if (child.namespaceURI === wordNs && localName === "commentRangeEnd") {
+          const id = child.getAttributeNS(wordNs, "id") || child.getAttribute("w:id");
+          if (id && ranges.has(id)) ranges.get(id).end = sourceText.length;
+          continue;
+        }
+        if (child.namespaceURI === wordNs && localName === "t") { sourceText += child.textContent || ""; continue; }
+        if (child.namespaceURI === wordNs && (localName === "tab")) { sourceText += "\t"; continue; }
+        if (child.namespaceURI === wordNs && (localName === "br" || localName === "cr")) { sourceText += "\n"; continue; }
+        visitDocument(child);
+      }
+    }
+    visitDocument(documentXml);
+    const resolvedByParaId = new Map();
+    if (commentsExtendedXml) {
+      for (const item of Array.from(commentsExtendedXml.getElementsByTagNameNS(word15Ns, "commentEx"))) {
+        const paraId = item.getAttributeNS(word15Ns, "paraId") || item.getAttribute("w15:paraId");
+        if (paraId) resolvedByParaId.set(paraId.toUpperCase(), (item.getAttributeNS(word15Ns, "done") || item.getAttribute("w15:done")) === "1");
+      }
+    }
+    function textOf(node) {
+      let value = "";
+      for (const child of Array.from(node.childNodes || [])) {
+        if (child.nodeType !== 1) continue;
+        const localName = child.localName || String(child.nodeName || "").split(":").pop();
+        if (child.namespaceURI === wordNs && localName === "t") value += child.textContent || "";
+        else if (child.namespaceURI === wordNs && localName === "tab") value += "\t";
+        else if (child.namespaceURI === wordNs && (localName === "br" || localName === "cr")) value += "\n";
+        else value += textOf(child);
+      }
+      return value;
+    }
+    const imported = [];
+    let omitted = 0;
+    let total = 0;
+    for (const item of Array.from(commentsXml.getElementsByTagNameNS(wordNs, "comment"))) {
+      total++;
+      const id = item.getAttributeNS(wordNs, "id") || item.getAttribute("w:id");
+      const range = ranges.get(id);
+      const start = range?.start;
+      const end = range?.end;
+      if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start || end > sourceText.length) { omitted++; continue; }
+      const quote = sourceText.slice(start, end);
+      const body = Array.from(item.getElementsByTagNameNS(wordNs, "p")).map(textOf).join("\n").trim();
+      if (!quote.trim() || quote.length > 4000 || !body || body.length > 2000) { omitted++; continue; }
+      const record = {
+        start,
+        quote,
+        before: sourceText.slice(Math.max(0, start - 32), start),
+        after: sourceText.slice(end, end + 32),
+        body,
+        author: item.getAttributeNS(wordNs, "author") || item.getAttribute("w:author") || "Unknown author",
+        createdAt: Date.parse(item.getAttributeNS(wordNs, "date") || item.getAttribute("w:date") || "") || Date.now(),
+        resolved: resolvedByParaId.get((item.getAttributeNS(word14Ns, "paraId") || item.getAttribute("w14:paraId") || "").toUpperCase()) || false,
+      };
+      const mappedStart = resolveReviewCommentStart(record, targetText);
+      if (mappedStart < 0) { omitted++; continue; }
+      record.start = mappedStart;
+      imported.push(record);
+    }
+    return { comments: imported.slice(0, 500), omitted: omitted + Math.max(0, imported.length - 500), total };
+  }
+
+
+  async function readDocxZipPartText(buffer, entry, expectedName) {
+    try {
+      if (!entry || entry.expanded > 50 * 1024 * 1024) return null;
+      const bytes = new DataView(buffer);
+      const localOffset = entry.localOffset;
+      if (localOffset + 30 > buffer.byteLength || bytes.getUint32(localOffset, true) !== 0x04034b50) return null;
+      const flags = bytes.getUint16(localOffset + 6, true);
+      const method = bytes.getUint16(localOffset + 8, true);
+      const nameLength = bytes.getUint16(localOffset + 26, true);
+      const extraLength = bytes.getUint16(localOffset + 28, true);
+      if ((flags & 1) || method !== entry.method) return null;
+      const nameOffset = localOffset + 30;
+      const dataOffset = nameOffset + nameLength + extraLength;
+      const dataEnd = dataOffset + entry.compressed;
+      if (dataEnd > buffer.byteLength) return null;
+      if (new TextDecoder().decode(new Uint8Array(buffer, nameOffset, nameLength)) !== expectedName) return null;
+      const compressedBytes = new Uint8Array(buffer, dataOffset, entry.compressed);
+      let xmlBytes;
+      if (method === 0) {
+        if (entry.compressed !== entry.expanded) return null;
+        xmlBytes = compressedBytes;
+      } else {
+        if (typeof DecompressionStream !== "function") return null;
+        const stream = new Blob([compressedBytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+        const reader = stream.getReader();
+        const chunks = [];
+        let total = 0;
+        while (true) {
+          const result = await reader.read();
+          if (result.done) break;
+          total += result.value.byteLength;
+          if (total > entry.expanded || total > 50 * 1024 * 1024) { await reader.cancel(); return null; }
+          chunks.push(result.value);
+        }
+        if (total !== entry.expanded) return null;
+        xmlBytes = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) { xmlBytes.set(chunk, offset); offset += chunk.byteLength; }
+      }
+      const xmlText = new TextDecoder("utf-8", { fatal: true }).decode(xmlBytes);
+      return /<!DOCTYPE/i.test(xmlText) ? null : xmlText;
+    } catch {
+      return null;
+    }
+  }
+
+  async function readDocxReviewComments(buffer, archive, targetText) {
+    if (!archive?.commentsEntry) return { comments: [], omitted: 0, total: 0, unreadable: false };
+    const [documentText, commentsText, extendedText] = await Promise.all([
+      readDocxZipPartText(buffer, archive, "word/document.xml"),
+      readDocxZipPartText(buffer, archive.commentsEntry, "word/comments.xml"),
+      archive.commentsExtendedEntry ? readDocxZipPartText(buffer, archive.commentsExtendedEntry, "word/commentsExtended.xml") : Promise.resolve(null),
+    ]);
+    if (!documentText || !commentsText) return { comments: [], omitted: 0, total: 0, unreadable: true };
+    try {
+      const parser = new DOMParser();
+      const documentXml = parser.parseFromString(documentText, "application/xml");
+      const commentsXml = parser.parseFromString(commentsText, "application/xml");
+      const extendedXml = extendedText ? parser.parseFromString(extendedText, "application/xml") : null;
+      if ([documentXml, commentsXml, extendedXml].filter(Boolean).some((xml) => xml.getElementsByTagName("parsererror").length)) return { comments: [], omitted: 0, total: 0, unreadable: true };
+      return mapDocxCommentsToReviewComments(documentXml, commentsXml, extendedXml, targetText);
+    } catch {
+      return { comments: [], omitted: 0, total: 0, unreadable: true };
+    }
   }
 
   async function readDocxRevisionCounts(buffer, entry) {
@@ -1543,13 +1697,15 @@
         const converted = await window.mammoth.convertToHtml({ arrayBuffer });
         const sanitized = sanitizeDocxHtml(converted.value);
         const revisionMapping = mapDocxRevisionsToHtml(sanitized.html, revisionCounts?.paragraphs);
+        const commentTargetText = new DOMParser().parseFromString("<main>" + revisionMapping.html + "</main>", "text/html").querySelector("main")?.textContent || "";
+        const importedCommentData = await readDocxReviewComments(arrayBuffer, archiveEntry, commentTargetText);
         if (revisionMapping.html.length > 12 * 1024 * 1024) throw new Error("The editable document exceeds the 12 MB safety limit.");
         if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
         $("#pdf-frame")?.remove();
         activePdfFile = undefined;
         activeId = crypto.randomUUID();
         applyPageLayout();
-        reviewComments = [];
+        reviewComments = normalizeReviewComments(importedCommentData.comments);
         showReviewPanel(false);
         setTitle(file.name.replace(/\.docx$/i, "") || file.name);
         $("#file-kind").textContent = "DOCX imported · editable structure";
@@ -1560,7 +1716,7 @@
         editor.innerHTML = revisionMapping.html || "<p><br></p>";
         countWords();
         const hasImportedRevisions = revisionMapping.preserved.insertions + revisionMapping.preserved.deletions > 0;
-        if (hasImportedRevisions) {
+        if (hasImportedRevisions || reviewComments.length) {
           activeTab = "review";
           renderRibbon();
           showReviewPanel(true);
@@ -1572,6 +1728,8 @@
         if (sanitized.removed) notes.push(`${sanitized.removed} unsupported or unsafe item${sanitized.removed === 1 ? "" : "s"} omitted`);
         const revisionWarning = sourceRevisionLossWarning(revisionCounts, false, revisionMapping.preserved);
         if (revisionWarning) notes.push(revisionWarning);
+        if (importedCommentData.unreadable) notes.push("Word comments could not be read");
+        else if (importedCommentData.omitted) notes.push(importedCommentData.omitted + " Word comment" + (importedCommentData.omitted === 1 ? "" : "s") + " could not be imported because the anchor or text is missing, unsupported, or unmatched");
         notify(notes.length ? `DOCX imported. ${notes.join("; ")}. Layout and advanced formatting may differ.` : "DOCX imported as editable structure. Word page layout and advanced formatting may differ.");
       } catch (error) { notify(`Could not import this Word document: ${error.message}`); }
       return;
