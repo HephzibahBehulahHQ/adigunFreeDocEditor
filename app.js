@@ -854,6 +854,15 @@
     updateParagraphRuler();
   }
 
+  function setActiveNavigationItem(activeItem) {
+    document.querySelectorAll(".nav-item[data-view]").forEach((item) => {
+      const current = item === activeItem;
+      item.classList.toggle("active", current);
+      if (current) item.setAttribute("aria-current", "page");
+      else item.removeAttribute("aria-current");
+    });
+  }
+
   function setMobileMenu(open) {
     const nav = $("#workspace-nav");
     const button = $("#mobile-menu");
@@ -964,7 +973,7 @@
       showReviewPanel(false);
       $("#clear-local-data-dialog").close();
       $("#settings-dialog").close();
-      document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === "recent"));
+      setActiveNavigationItem(document.querySelector(".nav-item[data-view=\"recent\"]"));
       showLanding();
       notify("Saved documents and Trash entries were deleted from this browser.");
     } catch {
@@ -2617,7 +2626,7 @@
   $(".sidebar").addEventListener("click", (event) => {
     const button = event.target.closest("[data-view]"); if (!button) return;
     setMobileMenu(false);
-    document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item === button));
+    setActiveNavigationItem(button);
     if (button.dataset.view === "templates") {
       $("#template-dialog").showModal();
     }
