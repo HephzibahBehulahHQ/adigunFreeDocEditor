@@ -183,6 +183,10 @@
     scheduleEditorPagination();
     const words = plainText.match(/[\p{L}\p{N}]+(?:['’_-][\p{L}\p{N}]+)*/gu) || [];
     $("#word-count").textContent = `${words.length} ${words.length === 1 ? "word" : "words"}`;
+    const characterCount = isEditableDocument ? plainText.length : null;
+    $("#character-count").textContent = characterCount === null
+      ? "— characters"
+      : `${characterCount.toLocaleString()} ${characterCount === 1 ? "character" : "characters"}`;
     const pageCount = Math.max(1, editor.querySelectorAll(".document-sheet").length);
     $("#page-count").textContent = `${pageCount} ${pageCount === 1 ? "page" : "pages"}`;
     $("#insight-words").textContent = isEditableDocument ? words.length.toLocaleString() : "—";
