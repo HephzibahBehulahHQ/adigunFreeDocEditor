@@ -3,12 +3,17 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+const css = fs.readFileSync(path.join(__dirname, "..", "styles.css"), "utf8");
 const reviewStart = source.indexOf("  function showReviewPanel(");
 const reviewEnd = source.indexOf("  function trackedRevisionNodes(", reviewStart);
 const assistantStart = source.indexOf("  function toggleAssistant(");
 const assistantEnd = source.indexOf("  function buildOverview(", assistantStart);
 assert.ok(reviewStart >= 0 && reviewEnd > reviewStart);
 assert.ok(assistantStart >= 0 && assistantEnd > assistantStart);
+assert.match(css, /@media\(max-width:900px\)\{\.editor-layout\.has-outline\{grid-template-columns:minmax\(0,1fr\)\}/);
+assert.match(css, /\.document-outline\.visible:not\(\.mobile-open\)\{display:none\}/);
+assert.match(css, /\.document-outline\.visible\.mobile-open\{display:block;position:static;grid-column:1\}/);
+assert.match(css, /\.outline-toggle:not\(\[hidden\]\)\{display:inline-flex\}/);
 
 class Classes {
   values = new Set();
