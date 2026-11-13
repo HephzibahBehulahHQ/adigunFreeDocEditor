@@ -556,6 +556,7 @@
   function showReviewPanel(open = true) {
     const panel = $("#review-comments");
     if (!panel) return;
+    if (open && window.matchMedia("(max-width: 900px)").matches) toggleAssistant(false);
     panel.hidden = !open;
     $("#editor-layout").classList.toggle("has-review", open);
     if (open) {
@@ -563,6 +564,17 @@
       $("#toggle-outline").setAttribute("aria-expanded", "false");
       renderReviewComments();
     }
+  }
+
+  function showOutlinePanel(open) {
+    const panel = $("#document-outline");
+    if (!panel) return;
+    panel.classList.toggle("mobile-open", open);
+    if (open) {
+      showReviewPanel(false);
+      if (window.matchMedia("(max-width: 900px)").matches) toggleAssistant(false);
+    }
+    $("#toggle-outline").setAttribute("aria-expanded", String(open));
   }
 
   function trackedRevisionNodes() {
@@ -2288,6 +2300,11 @@
   function safeFilename(name) { return name.replace(/[\\/:*?"<>|]/g, "-").slice(0, 90) || "document"; }
 
   function toggleAssistant(open = assistant.classList.contains("hidden")) {
+    if (open && window.matchMedia("(max-width: 900px)").matches) {
+      showReviewPanel(false);
+      $("#document-outline").classList.remove("mobile-open");
+      $("#toggle-outline").setAttribute("aria-expanded", "false");
+    }
     assistant.classList.toggle("hidden", !open);
     $("#assistant-launcher").classList.toggle("visible", !open);
     assistant.setAttribute("aria-hidden", String(!open));
@@ -2428,9 +2445,7 @@
   $("#outline-search").addEventListener("input", renderOutline);
   $("#toggle-outline").addEventListener("click", () => {
     const panel = $("#document-outline");
-    const open = panel.classList.toggle("mobile-open");
-    if (open) showReviewPanel(false);
-    $("#toggle-outline").setAttribute("aria-expanded", String(open));
+    showOutlinePanel(!panel.classList.contains("mobile-open"));
   });
   $("#break-navigation-list").addEventListener("click", (event) => {
     const button = event.target.closest("[data-page-index]");
@@ -2691,7 +2706,10 @@
 
   document.addEventListener("selectionchange", updateRibbonSelection);
   for (const event of ["click", "keyup", "mouseup", "input", "focus"]) editor.addEventListener(event, updateRibbonSelection);
-  window.addEventListener("resize", scheduleEditorPagination, { passive: true });
+  window.addEventListener("resize", () => {
+    if (window.matchMedia("(max-width: 900px)").matches && (!$("#review-comments").hidden || $("#document-outline").classList.contains("mobile-open"))) toggleAssistant(false);
+    scheduleEditorPagination();
+  }, { passive: true });
   renderRibbon(); setupAssistantDrag(); countWords();
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
   openDatabase().then(() => { setSaveStatus("Saved"); showLanding(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
