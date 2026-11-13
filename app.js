@@ -1759,6 +1759,7 @@
       case "track-changes":
         trackChangesEnabled = !trackChangesEnabled;
         button.setAttribute("aria-pressed", String(trackChangesEnabled));
+        if (trackChangesEnabled) showReviewPanel(true);
         saveDocument();
         notify(trackChangesEnabled ? "Track changes on. Text insertions and deletions will be reviewable." : "Track changes off.");
         break;
