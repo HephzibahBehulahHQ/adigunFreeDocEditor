@@ -49,5 +49,6 @@ jobs:
           node tests/mobile-menu-keyboard.test.cjs
           node tests/mobile-menu-outside-click.test.cjs
           node tests/file-picker-labels.test.cjs
+          node tests/assistant-panel-state.test.cjs
 
 
