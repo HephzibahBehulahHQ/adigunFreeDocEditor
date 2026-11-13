@@ -2376,6 +2376,23 @@
   function setupAssistantDrag() {
     const handle = $("#adigun-drag-handle");
     let start;
+    let sizeSaveTimer;
+    try {
+      const size = JSON.parse(localStorage.getItem("adigun-assistant-size") || "null");
+      const maxWidth = Math.max(260, window.innerWidth - 20);
+      const maxHeight = Math.max(230, window.innerHeight - 100);
+      if (Number.isFinite(size?.width)) assistant.style.width = `${Math.min(maxWidth, Math.max(260, size.width))}px`;
+      if (Number.isFinite(size?.height)) assistant.style.height = `${Math.min(maxHeight, Math.max(230, size.height))}px`;
+    } catch { /* Ignore invalid optional size data. */ }
+    if (window.ResizeObserver) new ResizeObserver(() => {
+      if (assistant.classList.contains("hidden") || assistant.classList.contains("minimized")) return;
+      clearTimeout(sizeSaveTimer);
+      sizeSaveTimer = setTimeout(() => {
+        try {
+          localStorage.setItem("adigun-assistant-size", JSON.stringify({ width: Math.round(assistant.getBoundingClientRect().width), height: Math.round(assistant.getBoundingClientRect().height) }));
+        } catch { /* Ignore unavailable optional size storage. */ }
+      }, 180);
+    }).observe(assistant);
     handle.addEventListener("pointerdown", (event) => {
       if (event.target.closest("button")) return;
       start = { x: event.clientX, y: event.clientY, left: assistant.offsetLeft, top: assistant.offsetTop };
