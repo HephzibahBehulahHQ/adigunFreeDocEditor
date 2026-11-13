@@ -16,6 +16,7 @@
   const imagePicker = $("#image-picker");
   const documentModel = window.AdigunDocumentModel;
   const DB_NAME = "adigunFreeDocEditor";
+  const OPEN_DOCUMENT_SESSION_KEY = "adigun-open-document-session";
   let database;
   let activeId = crypto.randomUUID();
   let lastSavedFor = activeId;
@@ -934,11 +935,42 @@
     documentTabList.querySelector(".open-document-tab-item.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
+  function serializeOpenDocumentSession(tabs, currentId) {
+    const documentIds = [...new Set(tabs.filter((item) => item.kind === "document").map((item) => item.id).filter((id) => typeof id === "string" && id.length <= 64))].slice(-100);
+    if (!documentIds.length) return null;
+    return JSON.stringify({ version: 1, documentIds, activeId: documentIds.includes(currentId) ? currentId : null });
+  }
+
+  function parseOpenDocumentSession(raw) {
+    if (typeof raw !== "string" || raw.length > 8192) return null;
+    try {
+      const state = JSON.parse(raw);
+      if (state?.version !== 1 || !Array.isArray(state.documentIds)) return null;
+      const documentIds = [...new Set(state.documentIds.filter((id) => typeof id === "string" && id.length > 0 && id.length <= 64))].slice(-100);
+      if (!documentIds.length) return null;
+      return { documentIds, activeId: documentIds.includes(state.activeId) ? state.activeId : null };
+    } catch { return null; }
+  }
+
+  function readOpenDocumentSession() {
+    try { return parseOpenDocumentSession(sessionStorage.getItem(OPEN_DOCUMENT_SESSION_KEY)); }
+    catch { return null; }
+  }
+
+  function persistOpenDocumentSession() {
+    try {
+      const state = serializeOpenDocumentSession(openDocumentTabs, activeDocumentKind === "document" ? activeId : null);
+      if (state) sessionStorage.setItem(OPEN_DOCUMENT_SESSION_KEY, state);
+      else sessionStorage.removeItem(OPEN_DOCUMENT_SESSION_KEY);
+    } catch { /* The open tabs still work for the current page session. */ }
+  }
+
   function registerOpenDocumentTab(tab) {
     const existing = openDocumentTabs.find((item) => item.id === tab.id);
     if (existing) Object.assign(existing, tab);
     else openDocumentTabs.push(tab);
     renderOpenDocumentTabs();
+    persistOpenDocumentSession();
   }
 
   async function flushActiveDocument() {
@@ -1993,6 +2025,32 @@
     notify("Document opened.");
   }
 
+  async function restoreOpenDocumentTabs() {
+    const session = readOpenDocumentSession();
+    if (!session) { showLanding(); return; }
+    try {
+      const documents = await Promise.all(session.documentIds.map((id) => new Promise((resolve, reject) => {
+        const request = database.transaction("documents", "readonly").objectStore("documents").get(id);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      })));
+      openDocumentTabs = documents.filter((doc) => doc && !doc.deleted && doc.kind !== "pdf").map((doc) => ({ id: doc.id, title: doc.title, kind: "document" }));
+      const active = openDocumentTabs.find((tab) => tab.id === session.activeId);
+      if (active) { await openSaved(active.id, true); return; }
+      activeId = crypto.randomUUID();
+      activeDocumentKind = "none";
+      renderOpenDocumentTabs();
+      persistOpenDocumentSession();
+      showLanding();
+    } catch {
+      openDocumentTabs = [];
+      activeId = crypto.randomUUID();
+      activeDocumentKind = "none";
+      persistOpenDocumentSession();
+      showLanding();
+    }
+  }
+
   async function activateOpenDocumentTab(id, alreadyFlushed = false) {
     const tab = openDocumentTabs.find((item) => item.id === id);
     if (!tab) return;
@@ -2007,6 +2065,7 @@
     activeId = tab.id;
     activeDocumentKind = "pdf";
     activePdfFile = tab.file;
+    persistOpenDocumentSession();
     setTitle(tab.title);
     setWorkspaceMode("pdf");
     $("#editor-card").classList.remove("landing");
@@ -2038,6 +2097,7 @@
     if (closingActive && !(await flushActiveDocument())) { notify("Save the open document before closing its tab."); return; }
     const next = closingActive ? openDocumentTabs[index - 1] || openDocumentTabs[index + 1] : undefined;
     openDocumentTabs.splice(index, 1);
+    persistOpenDocumentSession();
     if (closingActive && activeDocumentKind === "pdf") {
       if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
       $("#pdf-frame")?.remove();
@@ -3969,7 +4029,7 @@
   }, { passive: true });
   renderRibbon(); setupAssistantDrag(); countWords();
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
-  openDatabase().then(() => { setSaveStatus("Saved"); showLanding(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
+  openDatabase().then(() => { setSaveStatus("Saved"); return restoreOpenDocumentTabs(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
 })();
 
 
