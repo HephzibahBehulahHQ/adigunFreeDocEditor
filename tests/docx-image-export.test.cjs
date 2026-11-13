@@ -53,8 +53,8 @@ const fontText = { nodeType: Node.TEXT_NODE, nodeValue: "Georgia type" };
 const fontSpan = { nodeType: 1, tagName: "SPAN", children: [fontText], childNodes: [fontText], style: { fontFamily: "Georgia" }, getAttribute(name) { return ({ "data-font-family": "Georgia", "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" })[name] || null; } };
 const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), verticalTable] }] };
 const page = { classList: { contains() { return false; } } };
-const factory = new Function("Node", "editor", "title", "atob", "$", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip };`);
-const { makeWordPackage, makeStoredZip } = factory(Node, root, () => "Image export QA", atob, () => page);
+const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumbersEnabled", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip, setPageNumbers(value) { pageNumbersEnabled = value; } };`);
+const { makeWordPackage, makeStoredZip, setPageNumbers } = factory(Node, root, () => "Image export QA", atob, () => page, true);
 const result = makeWordPackage(root);
 assert.deepEqual(result.unsupported, []);
 const zipBlob = makeStoredZip(result.files);
@@ -74,7 +74,11 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
     entries.set(name, buffer.subarray(dataStart, dataStart + size));
     offset = dataStart + size;
   }
-  assert.equal(entries.size, 9, "one deduplicated media part is included");
+  assert.equal(entries.size, 10, "one deduplicated media part and one page-number footer are included");
+  assert.match(entries.get("word/footer1.xml").toString("utf8"), /w:fldSimple w:instr="PAGE"/);
+  assert.match(entries.get("word/document.xml").toString("utf8"), /w:footerReference w:type="default" r:id="rId\d+"/);
+  assert.match(entries.get("word/_rels/document.xml.rels").toString("utf8"), /relationships\/footer" Target="footer1.xml"/);
+  assert.match(entries.get("[Content_Types].xml").toString("utf8"), /PartName="\/word\/footer1.xml"/);
   assert.deepEqual(entries.get("word/media/image1.png"), Buffer.from(png, "base64"));
   const documentXml = entries.get("word/document.xml").toString("utf8");
   assert.equal((documentXml.match(/<wp:inline/g) || []).length, 2);
