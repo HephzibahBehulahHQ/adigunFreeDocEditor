@@ -50,6 +50,7 @@ jobs:
           node tests/zoom-target-size.test.cjs
           node tests/document-ruler-target-size.test.cjs
           node tests/docx-revision-warning.test.cjs
+          node tests/find-checkbox-target-size.test.cjs
       - name: Package application
         run: |
           mkdir -p _site/assets/vendor
