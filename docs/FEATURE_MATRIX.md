@@ -20,13 +20,13 @@ Status is specific to the current first workspace slice.
 | HTML export | Implemented | Downloads the current editable document as an HTML file. |
 | Local document overview | Implemented | Extracts sentences from the current document; not an AI summary. |
 | DOCX export | Partial | Creates a real OOXML `.docx` package; maps headings, supported font families, colors/highlights, paragraph/line spacing and indentation, emphasis, web links, lists, tables, header rows, horizontal and vertical cell spans, PNG/JPEG/GIF images and page setup. WebP/SVG images, tracked revisions and advanced styles are not preserved. |
-| DOCX import | Partial | Mammoth converts semantic structure in-browser; allow-listed HTML is sanitized. Headings, lists, tables and safe inline raster images can be edited. Word page layout, advanced styles, revisions and full fidelity are not preserved. |
+| DOCX import | Partial | Mammoth converts semantic structure in-browser; allow-listed HTML is sanitized. Headings, lists, tables and safe inline raster images can be edited. Word page layout, advanced styles, unaligned or unsupported revisions, and full fidelity are not preserved; simple paragraph revisions are mapped when converted text aligns exactly. |
 | PDF annotation, modification or conversion | Not implemented | No PDF editing/conversion engine is included. |
 | Hosted AI, translation or rewriting | Not implemented | No provider or backend is configured; no simulated results. |
 | Accounts, cloud sync or shared documents | Not implemented | No identity or remote persistence service exists in this repository. |
 | Find and replace | Implemented | Searches editable document text, navigates matches, and replaces one or all matches. Replace all is disabled above 5,000 matches to keep large edits bounded. |
 | Strikethrough formatting | Implemented | Applies to selected text and persists through the local document model, DOCX import and DOCX export. |
 | Document comments | Partial | Quote- and context-anchored comments are saved with the local document; comments can be resolved and reopened. Comments are not exported to DOCX. |
-| Track changes and review history | Partial | Opt-in local tracking captures plain text insertions and same-paragraph deletions, with author/time metadata and per-change or bulk accept/reject actions. Revisions persist when reopened and export as OOXML `w:ins`/`w:del` with author/date. Formatting, multi-paragraph edits, and imported DOCX revision preservation are not supported. |
+| Track changes and review history | Partial | Opt-in local tracking captures plain text insertions and same-paragraph deletions, with author/time metadata and per-change or bulk accept/reject actions. Revisions persist when reopened and export as OOXML `w:ins`/`w:del` with author/date. Formatting and multi-paragraph edits are not tracked; simple imported DOCX revisions are reviewable when paragraph alignment is exact. |
 
 
