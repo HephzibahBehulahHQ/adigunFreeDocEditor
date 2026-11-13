@@ -11,7 +11,7 @@ assert.match(html, /id="open-document-tabs" hidden/);
 assert.match(html, /id="open-document-tab-list" role="toolbar" aria-label="Open documents"/);
 assert.match(html, /id="new-document-tab"[^>]*aria-label="Create a new document"/);
 assert.match(source, /function renderOpenDocumentTabs\(\)/);
-assert.ok(source.includes('documentTabList.querySelector(".open-document-tab-item.active")?.scrollIntoView({ block: "nearest", inline: "nearest" }'));
+assert.match(source, /documentTabList\.querySelector\("\.open-document-tab-item\.active"\)\?\.scrollIntoView\(\{ block: "nearest", inline: "nearest" \}\)/);
 assert.match(source, /function markActiveDocumentTabDirty\(\)/);
 assert.match(source, /item\.dirty \? `\$\{item\.title\} · Unsaved changes` : item\.title/);
 assert.match(source, /item\.dirty \? `\$\{item\.title\}, unsaved changes` : item\.title/);
@@ -31,13 +31,12 @@ assert.match(source, /function serializeOpenDocumentSession\(tabs, currentId\)/)
 assert.match(source, /function parseOpenDocumentSession\(raw\)/);
 assert.match(source, /async function restoreOpenDocumentTabs\(\)/);
 assert.match(source, /return restoreOpenDocumentTabs\(\)/);
-assert.match(source, /activeDocumentKind === "document" \\? activeId : null/);
-assert.match(source, /item\\.kind === "document"/);
-assert.doesNotMatch(source.match(/function serializeOpenDocumentSession\\(tabs, currentId\\)[\\s\\S]*?\\n  function parseOpenDocumentSession/)[0], /title|content|file/);
+assert.match(source, /activeDocumentKind === "document" \? activeId : null/);
+assert.match(source, /item\.kind === "document"/);
+assert.doesNotMatch(source.match(/function serializeOpenDocumentSession\(tabs, currentId\)[\s\S]*?\n  function parseOpenDocumentSession/)[0], /title|content|file/);
 assert.match(css, /\.open-document-tab-list\{display:flex;flex:1;min-width:0;align-items:stretch;gap:4px;overflow-x:auto/);
 assert.match(css, /\.open-document-tab-dirty\{display:inline-block;width:6px;height:6px/);
 assert.match(css, /\.open-document-tab:focus-visible[\s\S]*\.new-document-tab:focus-visible/);
-
 
 function extractFunction(name, nextName) {
   const start = source.indexOf(`function ${name}(`);
@@ -47,7 +46,7 @@ function extractFunction(name, nextName) {
   return source.slice(start, end);
 }
 
-const sessionFunctions = `${extractFunction("serializeOpenDocumentSession", "parseOpenDocumentSession")}\\n${extractFunction("parseOpenDocumentSession", "readOpenDocumentSession")}`;
+const sessionFunctions = `${extractFunction("serializeOpenDocumentSession", "parseOpenDocumentSession")}\n${extractFunction("parseOpenDocumentSession", "readOpenDocumentSession")}`;
 const { serializeOpenDocumentSession, parseOpenDocumentSession } = new Function(`${sessionFunctions}; return { serializeOpenDocumentSession, parseOpenDocumentSession };`)();
 const serialized = serializeOpenDocumentSession([
   { id: "doc-a", title: "Sensitive title", kind: "document", content: "Private content" },
