@@ -54,6 +54,7 @@ jobs:
           node tests/navigation-current.test.cjs
           node tests/ribbon-tabs.test.cjs
           node tests/mobile-menu-keyboard.test.cjs
+          node tests/mobile-menu-outside-click.test.cjs
       - name: Package application
         run: |
           mkdir -p _site/assets/vendor
