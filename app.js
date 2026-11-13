@@ -2617,11 +2617,36 @@
   $("#assistant-review").addEventListener("click", useAssistantReview);
   $("#close-adigun").addEventListener("click", () => toggleAssistant(false));
   $("#minimize-adigun").addEventListener("click", () => { assistant.classList.toggle("minimized"); $("#minimize-adigun").setAttribute("aria-label", assistant.classList.contains("minimized") ? "Restore Adigun" : "Minimize Adigun"); });
-  $(".ribbon-tabs").addEventListener("click", (event) => {
-    const tab = event.target.closest("[data-tab]"); if (!tab) return;
+  function activateRibbonTab(tab) {
+    if (!tab) return;
     activeTab = tab.dataset.tab;
-    document.querySelectorAll(".ribbon-tab").forEach((item) => item.classList.toggle("selected", item === tab));
+    document.querySelectorAll(".ribbon-tab").forEach((item) => {
+      const selected = item === tab;
+      item.classList.toggle("selected", selected);
+      item.setAttribute("aria-selected", String(selected));
+      item.tabIndex = selected ? 0 : -1;
+    });
+    $("#ribbon-tools").setAttribute("aria-labelledby", tab.id);
     renderRibbon();
+  }
+  $(".ribbon-tabs").addEventListener("click", (event) => {
+    const tab = event.target.closest("[data-tab]");
+    if (tab) activateRibbonTab(tab);
+  });
+  $(".ribbon-tabs").addEventListener("keydown", (event) => {
+    const tabs = Array.from(document.querySelectorAll(".ribbon-tab"));
+    const current = event.target.closest("[data-tab]");
+    const index = tabs.indexOf(current);
+    if (index < 0) return;
+    let nextIndex;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    tabs[nextIndex].focus();
+    activateRibbonTab(tabs[nextIndex]);
   });
   $(".sidebar").addEventListener("click", (event) => {
     const button = event.target.closest("[data-view]"); if (!button) return;
