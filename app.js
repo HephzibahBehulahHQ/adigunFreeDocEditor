@@ -819,17 +819,17 @@
     meeting: {
       title: "Meeting notes",
       name: "Meeting notes",
-      content: "<h1>Meeting notes</h1><p><strong>Date:</strong> [Add date] &nbsp; <strong>Attendees:</strong> [Add names]</p><h2>Agenda</h2><ul><li>[Add agenda item]</li></ul><h2>Notes</h2><p>[Capture key discussion points]</p><h2>Decisions</h2><ul><li>[Record a decision]</li></ul><h2>Action items</h2><ul><li>[Task] — [Owner] — [Due date]</li></ul>",
+      content: "<h1>Meeting notes</h1><p><strong>Date:</strong> [Date] · <strong>Attendees:</strong> [Names]<br><strong>Agenda:</strong> [Topics]<br><strong>Notes:</strong> [Discussion]<br><strong>Decisions:</strong> [Decision]<br><strong>Actions:</strong> [Task — owner — due date]</p>",
     },
     project: {
       title: "Project brief",
       name: "Project brief",
-      content: "<h1>Project brief</h1><p><strong>Owner:</strong> [Name] &nbsp; <strong>Date:</strong> [Add date]</p><h2>Objective</h2><p>[What outcome should this project achieve?]</p><h2>Scope</h2><p><strong>Included:</strong> [Add scope]</p><p><strong>Excluded:</strong> [Add exclusions]</p><h2>Deliverables</h2><ul><li>[Add deliverable]</li></ul><h2>Milestones</h2><ul><li>[Milestone] — [Target date]</li></ul><h2>Risks and open questions</h2><p>[Add known risks or questions]</p>",
+      content: "<h1>Project brief</h1><p><strong>Owner:</strong> [Name] · <strong>Date:</strong> [Date]<br><strong>Objective:</strong> [Outcome]<br><strong>Scope and deliverables:</strong> [Add details]<br><strong>Milestones:</strong> [Milestone — target date]<br><strong>Risks and questions:</strong> [Add details]</p>",
     },
     letter: {
       title: "Formal letter",
       name: "Formal letter",
-      content: "<p>[Your name]<br>[Your address]<br>[City, postal code]</p><p>[Date]</p><p>[Recipient name]<br>[Recipient address]</p><p><strong>Subject: [Add subject]</strong></p><p>Dear [Recipient name],</p><p>[Write your message here.]</p><p>Yours sincerely,</p><p>[Your name]</p>",
+      content: "<h1>Formal letter</h1><p>[Your name] · [Address] · [Date]<br>To: [Recipient name] · Subject: [Subject]<br><br>Dear [Recipient name],<br>[Write your message here.]<br><br>Yours sincerely,<br>[Your name]</p>",
     },
   };
 
