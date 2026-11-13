@@ -20,7 +20,7 @@ function text(value) { return { nodeType: 3, nodeValue: value, textContent: valu
 function element(localName, attrs = {}, children = [], namespaceURI = wordNs) {
   const node = { nodeType: 1, localName, nodeName: "w:" + localName, namespaceURI, childNodes: children };
   node.getAttributeNS = (ns, name) => ns === namespaceURI ? (attrs[name] ?? null) : null;
-  node.getAttribute = (name) => attrs[name.split(":").pop()] ?? null;
+  node.getAttribute = (name) => attrs[name] ?? attrs[name.split(":").pop()] ?? null;
   node.getElementsByTagNameNS = (ns, name) => {
     const found = [];
     const visit = (current) => {
@@ -50,8 +50,8 @@ const documentXml = element("document", {}, [
   ])]),
 ]);
 const commentsXml = element("comments", {}, [
-  element("comment", { id: "1", author: "Ada Reviewer", date: "2026-11-12T10:00:00Z", paraId: "A1B2C3D4" }, [
-    element("p", {}, [element("r", {}, [element("t", {}, [text("Please verify & approve.")])])]),
+  element("comment", { id: "1", author: "Ada Reviewer", date: "2026-11-12T10:00:00Z" }, [
+    element("p", { "w14:paraId": "A1B2C3D4" }, [element("r", {}, [element("t", {}, [text("Please verify & approve.")])])]),
   ]),
   element("comment", { id: "2", author: "Missing anchor", date: "2026-11-12T10:01:00Z" }, [
     element("p", {}, [element("r", {}, [element("t", {}, [text("This range no longer exists.")])])]),
