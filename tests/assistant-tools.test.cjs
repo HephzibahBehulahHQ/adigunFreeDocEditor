@@ -28,17 +28,19 @@ class Classes {
 const assistant = { classList: new Classes(), attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
 const assistButton = { attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
 const appShell = { classList: new Classes() };
+const assistantResizeHandle = { addEventListener() {}, setAttribute() {}, setPointerCapture() {} };
 const editor = { contentEditable: "false" };
 const notices = [];
 let findOpenedWhileAssistantHidden = false;
 let reviewOpened = false;
 let ribbonRenders = 0;
 const script = `let activeTab = "home";\n${source.slice(start, end)}\nreturn { useAssistantFind, useAssistantReview, getActiveTab: () => activeTab };`;
-const api = new Function("window", "$", "assistant", "appShell", "editor", "activePdfFile", "openFindDialog", "renderRibbon", "showReviewPanel", "notify", script)(
+const api = new Function("window", "$", "assistant", "appShell", "assistantResizeHandle", "editor", "activePdfFile", "openFindDialog", "renderRibbon", "showReviewPanel", "notify", script)(
   { matchMedia: (query) => ({ matches: query === "(max-width: 900px)" }), addEventListener() {} },
-  (selector) => selector === "#assist-button" ? assistButton : appShell,
+  (selector) => selector === "#assist-button" ? assistButton : selector === "#assistant-dock-resize" ? assistantResizeHandle : appShell,
   assistant,
   appShell,
+  assistantResizeHandle,
   editor,
   undefined,
   () => { findOpenedWhileAssistantHidden = assistant.classList.contains("hidden"); },
