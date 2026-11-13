@@ -28,4 +28,6 @@ jobs:
           node tests/table-editing.test.cjs
           node tests/document-ruler.test.cjs
           node tests/conversion-text.test.cjs
+          node tests/responsive-panels.test.cjs
+          node tests/tablet-layout.test.cjs
 
