@@ -852,6 +852,7 @@
 
   function saveDocument(force = false, immediate = false) {
     clearTimeout(saveTimer);
+    const tabRevision = activeDocumentKind === "document" ? markActiveDocumentTabDirty() : undefined;
     if (!autosave && !force) { setSaveStatus("Autosave off"); return false; }
     if (!database) { setSaveStatus("Local save unavailable"); return false; }
     setSaveStatus("Saving…", true);
@@ -867,7 +868,12 @@
       try { tx = database.transaction("documents", "readwrite"); }
       catch { if (activeId === documentId) setSaveStatus("Save failed"); resolve(false); return; }
       tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, trackChanges: trackChangesEnabled, layout: { paper: paperSize, orientation: pageOrientation, margins: pageMargins, customMarginsMm: pageCustomMarginsMm, pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText }, updatedAt, kind: "document" });
-      tx.oncomplete = () => { if (activeId === documentId) { setSaveStatus("Saved", false, updatedAt); countWords(); } resolve(true); };
+      tx.oncomplete = () => {
+        const savedTab = openDocumentTabs.find((item) => item.id === documentId);
+        if (savedTab && savedTab.revision === tabRevision) { savedTab.dirty = false; renderOpenDocumentTabs(); }
+        if (activeId === documentId) { setSaveStatus("Saved", false, updatedAt); countWords(); }
+        resolve(true);
+      };
       tx.onerror = () => { if (activeId === documentId) { setSaveStatus("Save failed"); notify("Could not save this document on your device."); } resolve(false); };
       tx.onabort = () => resolve(false);
     });
@@ -881,6 +887,15 @@
     $("#stage-title").textContent = title();
     const tab = activeDocumentKind === "none" ? undefined : openDocumentTabs.find((item) => item.id === activeId);
     if (tab && tab.title !== title()) { tab.title = title(); renderOpenDocumentTabs(); }
+  }
+
+  function markActiveDocumentTabDirty() {
+    const tab = openDocumentTabs.find((item) => item.id === activeId);
+    if (!tab) return undefined;
+    tab.revision = (tab.revision || 0) + 1;
+    tab.dirty = true;
+    renderOpenDocumentTabs();
+    return tab.revision;
   }
 
   function renderOpenDocumentTabs() {
@@ -898,7 +913,14 @@
       tab.setAttribute("aria-pressed", String(item.id === activeId && item.kind === activeDocumentKind));
       tab.tabIndex = item.id === activeId && item.kind === activeDocumentKind ? 0 : -1;
       tab.textContent = item.title;
-      tab.title = item.title;
+      tab.title = item.dirty ? `${item.title} · Unsaved changes` : item.title;
+      tab.setAttribute("aria-label", item.dirty ? `${item.title}, unsaved changes` : item.title);
+      if (item.dirty) {
+        const marker = document.createElement("span");
+        marker.className = "open-document-tab-dirty";
+        marker.setAttribute("aria-hidden", "true");
+        tab.append(marker);
+      }
       const close = document.createElement("button");
       close.className = "open-document-tab-close";
       close.type = "button";
