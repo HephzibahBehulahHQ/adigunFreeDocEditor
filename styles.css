@@ -289,3 +289,4 @@
 @media(max-width:900px){.editor-layout.has-outline{grid-template-columns:minmax(0,1fr)}.document-outline.visible:not(.mobile-open){display:none}.document-outline.visible.mobile-open{display:block;position:static;grid-column:1}.outline-toggle:not([hidden]){display:inline-flex}}
 
 button:disabled{cursor:not-allowed;opacity:.48}
+@media(min-width:901px){.workspace.mode-no-document-title .topbar{display:none}}
