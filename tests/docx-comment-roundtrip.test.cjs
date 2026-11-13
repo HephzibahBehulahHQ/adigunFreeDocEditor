@@ -141,5 +141,25 @@ assert.equal(exported.omittedCommentCount, 0);
   assert.deepEqual(imported.comments.map((comment) => comment.resolved), [true, false]);
   assert.deepEqual(imported.comments.map((comment) => comment.body), ["Check & revise <this>", "Follow up"]);
   assert.deepEqual(imported.comments.map((comment) => comment.createdAt), sourceComments.map((comment) => comment.createdAt));
-  process.stdout.write("DOCX comment round-trip passed: exported OOXML ZIP imported both anchored comments with author, date, body, and resolved state.\n");
+  const fixturePrefix = "Sentence from an external file: ";
+  const independentFiles = {
+    "[Content_Types].xml": '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/commentsExtended.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"/></Types>',
+    "_rels/.rels": '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+    "word/_rels/document.xml.rels": '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdComments" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/><Relationship Id="rIdCommentsEx" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="commentsExtended.xml"/></Relationships>',
+    "word/document.xml": '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t xml:space="preserve">' + fixturePrefix + '</w:t></w:r><w:commentRangeStart w:id="4"/><w:r><w:t>original source</w:t></w:r><w:commentRangeEnd w:id="4"/><w:r><w:commentReference w:id="4"/></w:r><w:r><w:t>.</w:t></w:r></w:p></w:body></w:document>',
+    "word/comments.xml": '<?xml version="1.0"?><w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:comment w:id="4" w:author="External Word Author" w:initials="EWA" w:date="2025-04-03T09:30:00Z"><w:p w14:paraId="11223344"><w:pPr><w:pStyle w:val="CommentText"/></w:pPr><w:r><w:t>Review &amp; verify this citation.</w:t></w:r></w:p></w:comment></w:comments>',
+    "word/commentsExtended.xml": '<?xml version="1.0"?><w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"><w15:commentEx w15:paraId="11223344" w15:done="1"/></w15:commentsEx>',
+  };
+  const independentBuffer = await api.makeStoredZip(independentFiles).arrayBuffer();
+  const independentArchive = api.inspectDocxArchive(independentBuffer);
+  const independent = await api.readDocxReviewComments(independentBuffer, independentArchive, fixturePrefix + "original source.");
+  assert.equal(independent.total, 1);
+  assert.equal(independent.omitted, 0);
+  assert.equal(independent.comments.length, 1);
+  assert.equal(independent.comments[0].quote, "original source");
+  assert.equal(independent.comments[0].author, "External Word Author");
+  assert.equal(independent.comments[0].body, "Review & verify this citation.");
+  assert.equal(independent.comments[0].createdAt, Date.parse("2025-04-03T09:30:00Z"));
+  assert.equal(independent.comments[0].resolved, true);
+  process.stdout.write("DOCX comment round-trip passed: exporter round-trip and independent WordprocessingML DOCX fixture imported.\n");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
