@@ -7,6 +7,7 @@
   const ribbon = $("#ribbon-tools");
   const assistant = $("#adigun-window");
   const filePicker = $("#file-picker");
+  const conversionFilePicker = $("#conversion-file-picker");
   const acceptedFileTypes = filePicker.accept;
   const imagePicker = $("#image-picker");
   const documentModel = window.AdigunDocumentModel;
@@ -27,6 +28,9 @@
   let pageNumbersEnabled = false;
   let pageHeaderText = "";
   let pageFooterText = "";
+  let conversionSourceFile;
+  let conversionOutputBlob;
+  let conversionOutputName = "";
   let tableInsertionRange;
   let imageInsertionRange;
   let reviewComments = [];
@@ -613,6 +617,9 @@
 
   function setWorkspaceMode(mode) {
     const isDocument = mode === "document";
+    const isConversion = mode === "conversion";
+    $("#conversion-workspace").hidden = !isConversion;
+    if (!isConversion) { editor.hidden = false; $(".page-footer").hidden = false; }
     $("#document-ruler").hidden = !isDocument;
     if (!isDocument) $("#editor-card").classList.remove("paper-layout");
     editor.contentEditable = String(isDocument);
@@ -631,6 +638,7 @@
     $("#export-html").hidden = mode === "list" || mode === "landing";
     $("#export-docx").hidden = !isDocument;
     $("#export-html").lastElementChild.textContent = mode === "pdf" ? "Download PDF" : "Export HTML";
+    if (isConversion) { editor.hidden = true; $(".page-footer").hidden = true; }
     updateParagraphRuler();
   }
 
@@ -710,6 +718,121 @@
       container.innerHTML = `<div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div><button class="landing-all" type="button" id="landing-all">View all</button></div><ul class="landing-document-list">${rows}</ul>`;
     } catch {
       container.innerHTML = '<div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div></div><p class="landing-recents-empty">Saved documents could not be loaded in this browser.</p>';
+    }
+  }
+
+  function showConversionWorkspace() {
+    setWorkspaceMode("conversion");
+    $("#editor-card").classList.remove("landing", "pdf-preview");
+    $("#stage-title").textContent = "Convert files";
+    setTitle("Convert files");
+    $("#file-kind").textContent = "Runs locally in this browser";
+    $("#page-count").textContent = "DOCX, TXT, Markdown, HTML → HTML or Word";
+    $("#word-count").textContent = "Choose a source file";
+    renderConversionState();
+  }
+
+  function renderConversionState() {
+    const selected = conversionSourceFile;
+    $("#conversion-source-name").textContent = selected ? selected.name : "No source selected";
+    $("#conversion-source-type").textContent = selected ? selected.name.split(".").pop().toUpperCase() : "Choose DOCX, TXT, Markdown, or HTML";
+    $("#conversion-run").disabled = !selected;
+    $("#conversion-progress").textContent = selected ? "Ready to convert." : "Select a local file to begin.";
+    clearConversionResult();
+  }
+
+  function clearConversionResult() {
+    conversionOutputBlob = undefined;
+    conversionOutputName = "";
+    $("#conversion-download").disabled = true;
+    $("#conversion-result-name").textContent = "";
+    $("#conversion-warning").hidden = true;
+    $("#conversion-warning").textContent = "";
+    $("#conversion-preview").hidden = true;
+    $("#conversion-preview").removeAttribute("srcdoc");
+  }
+
+  function selectConversionSource(file) {
+    if (!file) return;
+    const extension = file.name.split(".").pop().toLowerCase();
+    if (!(["docx", "txt", "md", "markdown", "html", "htm"].includes(extension))) {
+      notify("Convert supports DOCX, TXT, Markdown, and HTML sources. PDF is view-only.");
+      return;
+    }
+    conversionSourceFile = file;
+    renderConversionState();
+  }
+
+  function conversionHTMLFromText(text) {
+    return String(text).replace(/\r\n?/g, "\n").split("\n").map((line) => "<p>" + (escapeHTML(line) || "<br>") + "</p>").join("") || "<p><br></p>";
+  }
+
+  async function runConversion() {
+    if (!conversionSourceFile) return;
+    const file = conversionSourceFile;
+    const extension = file.name.split(".").pop().toLowerCase();
+    const target = $("#conversion-target").value;
+    const warnings = [];
+    $("#conversion-run").disabled = true;
+    clearConversionResult();
+    $("#conversion-progress").textContent = "Reading source file…";
+    try {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      let html;
+      if (extension === "docx") {
+        if (file.size > 20 * 1024 * 1024) throw new Error("Word documents must be 20 MB or smaller.");
+        if (!window.mammoth?.convertToHtml) throw new Error("The local Word import module did not load. Reload the page and try again.");
+        const arrayBuffer = await file.arrayBuffer();
+        inspectDocxArchive(arrayBuffer);
+        const converted = await window.mammoth.convertToHtml({ arrayBuffer });
+        const sanitized = sanitizeDocxHtml(converted.value);
+        html = sanitized.html || "<p><br></p>";
+        const warningCount = converted.messages.filter((message) => message.type === "warning").length;
+        if (warningCount) warnings.push(warningCount + " Word compatibility warning" + (warningCount === 1 ? "" : "s") + ".");
+        if (sanitized.removed) warnings.push(sanitized.removed + " unsupported or unsafe item" + (sanitized.removed === 1 ? " was" : "s were") + " omitted.");
+        warnings.push("Word page layout and advanced formatting are not retained in this conversion.");
+      } else {
+        if (file.size > 12 * 1024 * 1024) throw new Error("Text and HTML sources must be 12 MB or smaller.");
+        const text = await file.text();
+        const plain = ["html", "htm"].includes(extension) ? new DOMParser().parseFromString(text, "text/html").body.innerText : text;
+        html = conversionHTMLFromText(plain);
+        if (["md", "markdown"].includes(extension)) warnings.push("Markdown is preserved as plain text; its formatting is not rendered.");
+        else if (["html", "htm"].includes(extension)) warnings.push("HTML is converted to plain text; source formatting is not preserved.");
+      }
+      $("#conversion-progress").textContent = "Building a preview and downloadable output…";
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const preview = document.createElement("div");
+      preview.innerHTML = html;
+      const previewDocument = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:15px/1.6 Arial,sans-serif;color:#182035;padding:24px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{border-collapse:collapse;max-width:100%}td,th{border:1px solid #c6cdd8;padding:6px}</style></head><body>' + html + "</body></html>";
+      if (target === "docx") {
+        const wordPackage = makeWordPackage(preview, { paper: defaultPageLayout.paper, orientation: defaultPageLayout.orientation, margins: defaultPageLayout.margins, pageNumbers: false, header: "", footer: "" });
+        if (wordPackage.unsupported.length) {
+          warnings.push("Word output omits unsupported content: " + wordPackage.unsupported.join(", ") + ".");
+          if (!window.confirm("This conversion cannot preserve: " + wordPackage.unsupported.join(", ") + ". Continue and download a reduced Word file?")) {
+            $("#conversion-progress").textContent = "Conversion cancelled; no file was downloaded.";
+            return;
+          }
+        }
+        conversionOutputBlob = makeStoredZip(wordPackage.files);
+        conversionOutputName = safeFilename(file.name.replace(/\.[^.]+$/, "")) + ".docx";
+        warnings.push("Word output uses the new-document page setup defaults.");
+      } else {
+        conversionOutputBlob = new Blob([previewDocument], { type: "text/html;charset=utf-8" });
+        conversionOutputName = safeFilename(file.name.replace(/\.[^.]+$/, "")) + ".html";
+      }
+      $("#conversion-preview").srcdoc = previewDocument;
+      $("#conversion-preview").hidden = false;
+      $("#conversion-result-name").textContent = conversionOutputName;
+      $("#conversion-download").disabled = false;
+      if (warnings.length) {
+        $("#conversion-warning").textContent = warnings.join(" ");
+        $("#conversion-warning").hidden = false;
+      }
+      $("#conversion-progress").textContent = "Conversion complete. Review the preview, then download the output.";
+    } catch (error) {
+      $("#conversion-progress").textContent = "Conversion failed: " + error.message;
+    } finally {
+      $("#conversion-run").disabled = !conversionSourceFile;
     }
   }
 
@@ -1630,7 +1753,8 @@
     return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
   }
 
-  function makeWordPackage(source = editor) {
+  function makeWordPackage(source = editor, pageLayout = null) {
+    const exportLayout = pageLayout || { paper: $("#editor-card").classList.contains("paper-letter") ? "letter" : "a4", orientation: $("#editor-card").classList.contains("landscape") ? "landscape" : "portrait", margins: $("#editor-card").classList.contains("margin-narrow") ? "narrow" : $("#editor-card").classList.contains("margin-wide") ? "wide" : "normal", pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText };
     const relationships = [];
     const hyperlinkIds = new Map();
     const imageIds = new Map();
@@ -1735,11 +1859,11 @@
     }
 
     const body = [];
-    const letterPaper = $("#editor-card").classList.contains("paper-letter");
-    const landscapePaper = $("#editor-card").classList.contains("landscape");
+    const letterPaper = exportLayout.paper === "letter";
+    const landscapePaper = exportLayout.orientation === "landscape";
     let tablePageWidth = letterPaper ? 12240 : 11906;
     if (landscapePaper) tablePageWidth = letterPaper ? 15840 : 16838;
-    const tableMarginTwips = $("#editor-card").classList.contains("margin-narrow") ? 720 : $("#editor-card").classList.contains("margin-wide") ? 2880 : 1440;
+    const tableMarginTwips = exportLayout.margins === "narrow" ? 720 : exportLayout.margins === "wide" ? 2880 : 1440;
     const tableContentWidth = tablePageWidth - tableMarginTwips * 2;
 
     function addParagraph(element, listKind = "", listLevel = 0, output = body) {
@@ -1878,15 +2002,15 @@
     walkBlocks(source);
     if (!body.length) body.push("<w:p><w:r><w:t></w:t></w:r></w:p>");
 
-    const isLetter = $("#editor-card").classList.contains("paper-letter");
-    const landscape = $("#editor-card").classList.contains("landscape");
+    const isLetter = exportLayout.paper === "letter";
+    const landscape = exportLayout.orientation === "landscape";
     let width = isLetter ? 12240 : 11906;
     let height = isLetter ? 15840 : 16838;
     if (landscape) [width, height] = [height, width];
-    const verticalMarginTwips = $("#editor-card").classList.contains("margin-narrow") ? 720 : 1440;
-    const horizontalMarginTwips = $("#editor-card").classList.contains("margin-narrow") ? 720 : $("#editor-card").classList.contains("margin-wide") ? 2880 : 1440;
-    const hasHeader = Boolean(pageHeaderText);
-    const hasFooter = Boolean(pageFooterText || pageNumbersEnabled);
+    const verticalMarginTwips = exportLayout.margins === "narrow" ? 720 : 1440;
+    const horizontalMarginTwips = exportLayout.margins === "narrow" ? 720 : exportLayout.margins === "wide" ? 2880 : 1440;
+    const hasHeader = Boolean(exportLayout.header);
+    const hasFooter = Boolean(exportLayout.footer || exportLayout.pageNumbers);
     const headerRelationshipId = hasHeader ? `rId${nextRelationship++}` : "";
     const footerRelationshipId = hasFooter ? `rId${nextRelationship++}` : "";
     const headerReference = hasHeader ? `<w:headerReference w:type="default" r:id="${headerRelationshipId}"/>` : "";
@@ -1903,8 +2027,8 @@
     const coreProperties = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${wordXmlText(title())}</dc:title><dc:creator>adigunFreeDocEditor</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
     const appProperties = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>adigunFreeDocEditor</Application></Properties>';
     const files = { "[Content_Types].xml": contentTypes, "_rels/.rels": rootRelationships, "word/document.xml": documentXml, "word/styles.xml": stylesXml, "word/numbering.xml": numberingXml, "word/_rels/document.xml.rels": documentRelationships, "docProps/core.xml": coreProperties, "docProps/app.xml": appProperties };
-    if (hasHeader) files["word/header1.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t xml:space="preserve">${wordXmlText(pageHeaderText)}</w:t></w:r></w:p></w:hdr>`;
-    if (hasFooter) files["word/footer1.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr>${pageFooterText ? `<w:r><w:t xml:space="preserve">${wordXmlText(pageFooterText)}${pageNumbersEnabled ? " · " : ""}</w:t></w:r>` : ""}${pageNumbersEnabled ? '<w:fldSimple w:instr="PAGE"><w:r><w:t>1</w:t></w:r></w:fldSimple>' : ""}</w:p></w:ftr>`;
+    if (hasHeader) files["word/header1.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t xml:space="preserve">${wordXmlText(exportLayout.header)}</w:t></w:r></w:p></w:hdr>`;
+    if (hasFooter) files["word/footer1.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr>${pageFooterText ? `<w:r><w:t xml:space="preserve">${wordXmlText(exportLayout.footer)}${exportLayout.pageNumbers ? " · " : ""}</w:t></w:r>` : ""}${exportLayout.pageNumbers ? '<w:fldSimple w:instr="PAGE"><w:r><w:t>1</w:t></w:r></w:fldSimple>' : ""}</w:p></w:ftr>`;
     for (const image of images) files[`word/media/${image.fileName}`] = image.bytes;
     return { files, unsupported: [...unsupported] };
   }
@@ -2070,6 +2194,11 @@
   $("#open-document").addEventListener("click", () => { setMobileMenu(false); openFilePicker(); });
   $("#mobile-menu").addEventListener("click", () => setMobileMenu(!$("#workspace-nav").classList.contains("mobile-open")));
   filePicker.addEventListener("change", () => { const file = filePicker.files[0]; filePicker.accept = acceptedFileTypes; filePicker.value = ""; if (file) importFile(file); });
+  conversionFilePicker.addEventListener("change", () => { const file = conversionFilePicker.files[0]; conversionFilePicker.value = ""; if (file) selectConversionSource(file); });
+  $("#conversion-select-source").addEventListener("click", () => conversionFilePicker.click());
+  $("#conversion-target").addEventListener("change", clearConversionResult);
+  $("#conversion-run").addEventListener("click", runConversion);
+  $("#conversion-download").addEventListener("click", () => { if (conversionOutputBlob) { download(conversionOutputBlob, conversionOutputName); notify("Converted file downloaded."); } });
   filePicker.addEventListener("cancel", () => { filePicker.accept = acceptedFileTypes; });
   imagePicker.addEventListener("change", () => { insertLocalImage(imagePicker.files[0]); imagePicker.value = ""; });
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
@@ -2143,6 +2272,7 @@
       $("#default-margins").value = defaultPageLayout.margins;
       $("#settings-dialog").showModal();
     }
+    else if (button.dataset.view === "convert") showConversionWorkspace();
     else showDocumentList(button.dataset.view);
   });
   editor.addEventListener("click", (event) => {
