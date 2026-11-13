@@ -51,7 +51,7 @@ const api = new Function("window", "$", "assistant", "renderReviewComments", [
 api.showReviewPanel(true);
 assert.equal(nodes["#review-comments"].hidden, false, "opening Review displays the review panel");
 assert.equal(assistant.classList.contains("hidden"), true, "opening Review closes Adigun on compact layouts");
-assert.equal(nodes["#assistant-launcher"].classList.contains("visible"), true, "closing Adigun leaves its launcher available");
+assert.equal(nodes["#assist-button"].attributes["aria-expanded"], "false", "closing Adigun updates the remaining workspace toggle");
 
 api.toggleAssistant(true);
 assert.equal(nodes["#review-comments"].hidden, true, "opening Adigun closes Review on compact layouts");
