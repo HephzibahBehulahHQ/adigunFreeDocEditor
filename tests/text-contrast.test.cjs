@@ -28,6 +28,7 @@ for (const surface of ["#151d2b", "#0e1623"]) {
 assert.match(css, /\.save-state\{[^}]*color:var\(--muted\)/);
 assert.match(css, /\.save-time\{color:var\(--muted\)/);
 assert.doesNotMatch(css, /color:#(?:718096|708094)\b/i, "muted labels use the theme-aware contrast token");
+assert.doesNotMatch(css, /(?<![-\\w])color:#(?:69758a|727c8e|728096|778399|788497|7b8698|7c8797|7d8798|7e8999|808ba0|8290a4|8591a2|8691a2|8993a4|8a94a5|8b8797|98a2b2|9aa5b7)\\b/i, "measured low-contrast light-theme text colors have been removed");
 
 process.stdout.write("Text contrast tests passed: muted labels meet 4.5:1 in both themes.\n");
 
