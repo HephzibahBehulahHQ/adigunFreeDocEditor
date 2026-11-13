@@ -53,8 +53,8 @@ const fontText = { nodeType: Node.TEXT_NODE, nodeValue: "Georgia type" };
 const fontSpan = { nodeType: 1, tagName: "SPAN", children: [fontText], childNodes: [fontText], style: { fontFamily: "Georgia" }, getAttribute(name) { return ({ "data-font-family": "Georgia", "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" })[name] || null; } };
 const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), verticalTable] }] };
 const page = { classList: { contains() { return false; } } };
-const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumbersEnabled", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip, setPageNumbers(value) { pageNumbersEnabled = value; } };`);
-const { makeWordPackage, makeStoredZip, setPageNumbers } = factory(Node, root, () => "Image export QA", atob, () => page, true);
+const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumbersEnabled", "pageHeaderText", "pageFooterText", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip, setPageNumbers(value) { pageNumbersEnabled = value; }, setHeaderFooter(header, footer) { pageHeaderText = header; pageFooterText = footer; } };`);
+const { makeWordPackage, makeStoredZip, setPageNumbers, setHeaderFooter } = factory(Node, root, () => "Image export QA", atob, () => page, true, "Project & scope", "Confidential");
 const result = makeWordPackage(root);
 assert.deepEqual(result.unsupported, []);
 const zipBlob = makeStoredZip(result.files);
@@ -74,8 +74,12 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
     entries.set(name, buffer.subarray(dataStart, dataStart + size));
     offset = dataStart + size;
   }
-  assert.equal(entries.size, 10, "one deduplicated media part and one page-number footer are included");
+  assert.equal(entries.size, 11, "one deduplicated media part, header, and footer are included");
+  assert.match(entries.get("word/header1.xml").toString("utf8"), /Project &amp; scope/);
+  assert.match(entries.get("word/footer1.xml").toString("utf8"), /Confidential/);
   assert.match(entries.get("word/footer1.xml").toString("utf8"), /w:fldSimple w:instr="PAGE"/);
+  assert.match(entries.get("word/_rels/document.xml.rels").toString("utf8"), /relationships\/header" Target="header1.xml"/);
+  assert.match(entries.get("[Content_Types].xml").toString("utf8"), /PartName="\/word\/header1.xml"/);
   assert.match(entries.get("word/document.xml").toString("utf8"), /w:footerReference w:type="default" r:id="rId\d+"/);
   assert.match(entries.get("word/_rels/document.xml.rels").toString("utf8"), /relationships\/footer" Target="footer1.xml"/);
   assert.match(entries.get("[Content_Types].xml").toString("utf8"), /PartName="\/word\/footer1.xml"/);
@@ -97,9 +101,14 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
   assert.equal((entries.get("word/_rels/document.xml.rels").toString("utf8").match(/relationships\/image/g) || []).length, 1);
   assert.match(entries.get("[Content_Types].xml").toString("utf8"), /Extension="png" ContentType="image\/png"/);
   setPageNumbers(false);
-  const withoutPageNumbers = makeWordPackage(root);
-  assert.equal(Object.hasOwn(withoutPageNumbers.files, "word/footer1.xml"), false, "footer is omitted when page numbering is off");
-  assert.doesNotMatch(withoutPageNumbers.files["word/document.xml"], /w:footerReference/);
+  const withHeaderFooterNoPageNumber = makeWordPackage(root);
+  assert.equal(Object.hasOwn(withHeaderFooterNoPageNumber.files, "word/footer1.xml"), true, "text footer remains when page numbering is off");
+  assert.doesNotMatch(withHeaderFooterNoPageNumber.files["word/footer1.xml"], /w:fldSimple/);
+  setHeaderFooter("", "");
+  const withoutHeaderFooter = makeWordPackage(root);
+  assert.equal(Object.hasOwn(withoutHeaderFooter.files, "word/header1.xml"), false, "header is omitted when empty");
+  assert.equal(Object.hasOwn(withoutHeaderFooter.files, "word/footer1.xml"), false, "footer is omitted when empty and numbering is off");
+  assert.doesNotMatch(withoutHeaderFooter.files["word/document.xml"], /w:(?:header|footer)Reference/);
   process.stdout.write("DOCX export tests passed: page fields, PNG media, DrawingML, formatting, dimensions, alt text and vertical table merges.\n");
 }).catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1; });
 
