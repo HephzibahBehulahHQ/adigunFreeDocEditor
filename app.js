@@ -349,6 +349,7 @@
     const unchanged = oldSheets.length === pages.length && pages.every((items, index) =>
       items.length === oldSheets[index].childNodes.length && items.every((node, childIndex) => node === oldSheets[index].childNodes[childIndex]));
     if (unchanged) { renderPageNavigation(); return; }
+    const savedSelection = captureEditorSelection();
     $("#editor-card").classList.add("paper-layout");
     const fragment = document.createDocumentFragment();
     pages.forEach((items, index) => {
@@ -361,7 +362,6 @@
       fragment.append(sheet);
     });
     updatePageNumberLabels([...fragment.children], pages.length);
-    const savedSelection = captureEditorSelection();
     editor.replaceChildren(fragment);
     restoreEditorSelection(savedSelection);
     renderPageNavigation();
