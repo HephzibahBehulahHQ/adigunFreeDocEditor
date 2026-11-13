@@ -83,7 +83,7 @@ const selectionState = {
 const selectionEditor = { contains: (node) => node === selectionNode };
 const selectionApi = new Function("window", "editor",
   source.slice(source.indexOf("  function captureEditorSelection()"), source.indexOf("  function normalizeReviewComments(")) +
-  "\\nreturn { captureEditorSelection, restoreEditorSelection };")(
+  "return { captureEditorSelection, restoreEditorSelection };")(
   { getSelection: () => selectionState },
   selectionEditor
 );
