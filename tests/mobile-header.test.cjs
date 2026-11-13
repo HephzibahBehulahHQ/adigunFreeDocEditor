@@ -13,10 +13,13 @@ for (const id of ["mobile-menu", "save-document", "undo", "redo", "export-docx",
   assert.match(html, new RegExp(`id="${id}"`), `${id} remains available in the compact header`);
 }
 
-const mobileRules = css.slice(css.lastIndexOf("@media(max-width:700px){"));
+const mobileRules = css.split("@media(max-width:700px){").slice(1).join("\n");
 assert.match(mobileRules, /\.sidebar\{justify-content:flex-start\}/);
 assert.match(mobileRules, /\.product-name\{display:flex/);
 assert.match(mobileRules, /\.mobile-brand\{display:none\}/);
+assert.match(mobileRules, /\.workspace\.mode-no-document-title \.topbar\{height:0/);
+assert.match(mobileRules, /\.workspace\.mode-no-document-title \.topbar-actions\{position:fixed/);
+assert.match(mobileRules, /\.workspace\.mode-no-document-title \.mobile-menu-button\{color:#fff\}/);
 assert.match(mobileRules, /@media\(max-width:420px\)\{[\s\S]*?\.document-title\{width:min\(110px,28vw\)/);
 assert.match(mobileRules, /\.icon-button\{width:26px\}/);
 
