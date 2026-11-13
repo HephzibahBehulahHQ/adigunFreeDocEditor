@@ -33,6 +33,8 @@
   let findMatchTotal = 0;
   let currentFindIndex = -1;
   let replacingAllMatches = false;
+  let paragraphRulerBlocks = [];
+  let paragraphRulerRange = null;
   const FIND_MATCH_LIMIT = 5000;
   let autosave = localStorage.getItem("adigun-autosave") !== "false";
   let theme = localStorage.getItem("adigun-theme") === "dark" ? "dark" : "light";
@@ -1162,13 +1164,14 @@
 
   function setParagraphIndent(level) {
     const selection = window.getSelection();
-    if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) {
+    const hasEditorSelection = Boolean(selection?.rangeCount && editor.contains(selection.anchorNode));
+    const blocks = (hasEditorSelection ? selectedParagraphBlocks() : paragraphRulerBlocks)
+      .filter((block) => editor.contains(block));
+    const range = hasEditorSelection ? selection.getRangeAt(0).cloneRange() : paragraphRulerRange?.cloneRange();
+    if (!blocks.length || !range) {
       notify("Place the cursor in a paragraph or select paragraph text first.");
       return;
     }
-    const range = selection.getRangeAt(0).cloneRange();
-    const blocks = selectedParagraphBlocks();
-    if (!blocks.length) { notify("Place the cursor in a paragraph or select paragraph text first."); return; }
     const indentLevel = Math.max(0, Math.min(4, Math.round(Number(level) || 0)));
     for (const block of blocks) {
       if (indentLevel) {
@@ -1179,9 +1182,11 @@
         block.style.marginLeft = "";
       }
     }
+    paragraphRulerBlocks = blocks;
+    paragraphRulerRange = range;
     editor.focus();
     selection.removeAllRanges();
-    selection.addRange(range);
+    if (editor.contains(range.startContainer) && editor.contains(range.endContainer)) selection.addRange(range);
     updateRibbonSelection();
     countWords();
     saveDocument();
@@ -1190,7 +1195,15 @@
   function updateParagraphRuler() {
     const ruler = $("#paragraph-indent-ruler");
     if (!ruler) return;
-    const blocks = editor.contentEditable === "true" ? selectedParagraphBlocks() : [];
+    const selection = window.getSelection();
+    if (editor.contentEditable === "true" && selection?.rangeCount && editor.contains(selection.anchorNode)) {
+      const selectedBlocks = selectedParagraphBlocks();
+      if (selectedBlocks.length) {
+        paragraphRulerBlocks = selectedBlocks;
+        paragraphRulerRange = selection.getRangeAt(0).cloneRange();
+      }
+    }
+    const blocks = editor.contentEditable === "true" ? paragraphRulerBlocks.filter((block) => editor.contains(block)) : [];
     const levels = blocks.map((block) => Number(block.getAttribute("data-indent-level")) || 0);
     ruler.disabled = !levels.length;
     const mixed = levels.some((level) => level !== levels[0]);
