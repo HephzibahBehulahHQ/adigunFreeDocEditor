@@ -39,5 +39,6 @@ jobs:
           node tests/conversion-layout.test.cjs
           node tests/workspace-chrome.test.cjs
           node tests/review-navigation.test.cjs
+          node tests/review-target-size.test.cjs
 
 
