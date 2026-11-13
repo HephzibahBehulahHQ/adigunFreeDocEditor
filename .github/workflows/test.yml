@@ -27,4 +27,5 @@ jobs:
           node tests/docx-image-export.test.cjs
           node tests/table-editing.test.cjs
           node tests/document-ruler.test.cjs
+          node tests/conversion-text.test.cjs
 
