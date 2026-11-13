@@ -39,6 +39,7 @@ jobs:
           node tests/tablet-layout.test.cjs
           node tests/assistant-tools.test.cjs
           node tests/local-data-privacy.test.cjs
+          node tests/mobile-header.test.cjs
       - name: Package application
         run: |
           mkdir -p _site/assets/vendor
@@ -67,4 +68,5 @@ jobs:
         uses: actions/deploy-pages@v5
         with:
           artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+
 
