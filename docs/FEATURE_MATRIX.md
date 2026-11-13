@@ -19,7 +19,7 @@ Status is specific to the current first workspace slice.
 | PDF viewing and download | Implemented | Browser PDF viewer; editing and page operations are not supported. |
 | HTML export | Implemented | Downloads the current editable document as an HTML file. |
 | Local document overview | Implemented | Extracts sentences from the current document; not an AI summary. |
-| DOCX export | Partial | Creates a real OOXML `.docx` package; maps headings, supported font families, colors/highlights, paragraph/line spacing and indentation, emphasis, web links, lists, tables, header rows, horizontal and vertical cell spans, PNG/JPEG/GIF images and page setup. WebP/SVG images, tracked revisions and advanced styles are not preserved. |
+| DOCX export | Partial | Creates a real OOXML `.docx` package; maps headings, supported font families, colors/highlights, paragraph/line spacing and indentation, emphasis, web links, lists, tables, header rows, horizontal and vertical cell spans, PNG/JPEG/GIF images, page setup, and tracked insertions/deletions as `w:ins`/`w:del` with author/date. WebP/SVG images and advanced styles are not preserved. |
 | DOCX import | Partial | Mammoth converts semantic structure in-browser; allow-listed HTML is sanitized. Headings, lists, tables and safe inline raster images can be edited. Word page layout, advanced styles, unaligned or unsupported revisions, and full fidelity are not preserved; simple paragraph revisions are mapped when converted text aligns exactly. |
 | PDF annotation, modification or conversion | Not implemented | No PDF editing/conversion engine is included. |
 | Hosted AI, translation or rewriting | Not implemented | No provider or backend is configured; no simulated results. |
