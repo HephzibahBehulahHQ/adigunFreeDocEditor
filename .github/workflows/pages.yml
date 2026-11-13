@@ -45,6 +45,7 @@ jobs:
           node tests/text-contrast.test.cjs
           node tests/conversion-layout.test.cjs
           node tests/workspace-chrome.test.cjs
+          node tests/review-navigation.test.cjs
       - name: Package application
         run: |
           mkdir -p _site/assets/vendor
