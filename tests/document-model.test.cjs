@@ -20,6 +20,8 @@ const source = element("div", {}, [
   element("table", {}, [element("tbody", {}, [element("tr", {}, [element("td", { colspan: 2, rowspan: 2 }, [element("p", {}, [text("Cell")])])])])]),
   element("span", { "data-font-family": "Georgia" }, [text("Georgia text")]),
   element("p", { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }, [text("Spaced paragraph")]),
+  element("ins", { "data-revision-id": "revision-1", "data-revision-author": "Reviewer", "data-revision-created-at": 1762992000000 }, [text("New words")]),
+  element("del", { "data-revision-id": "../unsafe", "data-revision-author": "x".repeat(100), "data-revision-created-at": -1 }, [text("Old words")]),
   element("p", { "data-indent-level": "5", "data-line-spacing": "4", "data-paragraph-spacing": "12pt" }, [text("Invalid spacing")]),
   element("span", { "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" }, [text("colored text")]),
   element("span", { "data-text-color": "#ABCDEF", "data-highlight-color": "url(javascript:alert(1))" }, [text("untrusted color")]),
@@ -44,6 +46,10 @@ assert.match(html, /rowspan="2"/);
 assert.match(html, /<span data-font-family="Georgia" style="font-family:Georgia">Georgia text<\/span>/);
 assert.match(html, /<p data-indent-level="2" data-line-spacing="1.5" data-paragraph-spacing="12" style="margin-left:72pt;line-height:1.5;margin-bottom:12pt">Spaced paragraph<\/p>/);
 assert.match(html, /<p>Invalid spacing<\/p>/);
+assert.match(html, /<ins data-revision-id="revision-1" data-revision-author="Reviewer" data-revision-created-at="1762992000000">New words<\/ins>/);
+assert.match(html, /<del>Old words<\/del>/);
+assert.doesNotMatch(html, /data-revision-id="\.\.\/unsafe"/);
+assert.doesNotMatch(html, /data-revision-author="[^"]{81,}"/);
 assert.match(html, /<span data-text-color="#C00000" data-highlight-color="#FFFF00" style="color:#C00000;background-color:#FFFF00">colored text<\/span>/);
 assert.match(html, /<span data-text-color="#C00000" data-highlight-color="#FFFF00" style="color:#C00000;background-color:#FFFF00">rgb colors<\/span>/);
 assert.match(html, /untrusted color/);
