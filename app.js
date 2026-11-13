@@ -2890,6 +2890,18 @@
     tabs[nextIndex].focus();
     activateRibbonTab(tabs[nextIndex]);
   });
+  function openSettings(activeItem) {
+    setMobileMenu(false);
+    setActiveNavigationItem(activeItem || document.querySelector('[data-view="settings"]'));
+    $("#autosave-toggle").checked = autosave;
+    $("#theme-toggle").checked = theme === "dark";
+    $("#default-paper").value = defaultPageLayout.paper;
+    $("#default-orientation").value = defaultPageLayout.orientation;
+    $("#default-margins").value = defaultPageLayout.margins;
+    $("#clear-local-data").disabled = !database;
+    refreshLocalDataCount();
+    $("#settings-dialog").showModal();
+  }
   $(".sidebar").addEventListener("click", (event) => {
     const button = event.target.closest("[data-view]"); if (!button) return;
     setMobileMenu(false);
@@ -2897,16 +2909,7 @@
     if (button.dataset.view === "templates") {
       $("#template-dialog").showModal();
     }
-    else if (button.dataset.view === "settings") {
-      $("#autosave-toggle").checked = autosave;
-      $("#theme-toggle").checked = theme === "dark";
-      $("#default-paper").value = defaultPageLayout.paper;
-      $("#default-orientation").value = defaultPageLayout.orientation;
-      $("#default-margins").value = defaultPageLayout.margins;
-      $("#clear-local-data").disabled = !database;
-      refreshLocalDataCount();
-      $("#settings-dialog").showModal();
-    }
+    else if (button.dataset.view === "settings") openSettings(button);
     else if (button.dataset.view === "convert") showConversionWorkspace();
     else showDocumentList(button.dataset.view);
   });
@@ -2976,7 +2979,7 @@
   $("#autosave-toggle").addEventListener("change", (event) => { autosave = event.target.checked; localStorage.setItem("adigun-autosave", String(autosave)); if (autosave) saveDocument(); else setSaveStatus("Autosave off"); });
   $("#theme-toggle").addEventListener("change", (event) => setTheme(event.target.checked ? "dark" : "light"));
   $("#spellcheck-language").addEventListener("change", (event) => setSpellcheckLanguage(event.target.value));
-  $("#spellcheck-language-indicator").addEventListener("click", () => document.querySelector('[data-view="settings"]')?.click());
+  $("#spellcheck-language-indicator").addEventListener("click", () => openSettings());
   $("#clear-local-data").addEventListener("click", () => {
     if (!database) { notify("Local document storage is unavailable in this browser."); return; }
     $("#clear-local-data-dialog").showModal();

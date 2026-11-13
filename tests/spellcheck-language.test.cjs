@@ -12,4 +12,8 @@ assert.match(app, /editor\.lang = spellcheckLanguage/);
 assert.match(app, /localStorage\.setItem\("adigun-spellcheck-language", spellcheckLanguage\)/);
 assert.match(app, /spellcheck-language"\)\.addEventListener\("change"/);
 assert.match(app, /spellcheck-language-indicator"\)\.addEventListener\("click"/);
+assert.ok(app.includes("function openSettings(activeItem) {"));
+assert.ok(app.includes('else if (button.dataset.view === "settings") openSettings(button);'));
+assert.ok(app.includes('$("#spellcheck-language-indicator").addEventListener("click", () => openSettings());'));
+assert.ok(!app.includes('$("#spellcheck-language-indicator").addEventListener("click", () => document.querySelector'));
 process.stdout.write("Spellcheck language settings tests passed.\\n");
