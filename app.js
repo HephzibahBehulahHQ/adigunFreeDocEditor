@@ -991,6 +991,11 @@
     button.setAttribute("aria-label", open ? "Close workspace menu" : "Open workspace menu");
   }
 
+  $("#close-workspace-menu").addEventListener("click", () => {
+    setMobileMenu(false);
+    $("#mobile-menu").focus();
+  });
+
   function openFilePicker(accept = acceptedFileTypes) {
     filePicker.value = "";
     filePicker.accept = accept;
