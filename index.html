@@ -153,6 +153,15 @@
         <div class="settings-foot"><span>Up to 50 rows and 20 columns.</span><button class="button button-outline" type="submit">Insert table</button></div>
       </form>
     </dialog>
+    <dialog class="settings-dialog" id="page-header-footer-dialog" aria-labelledby="page-header-footer-title">
+      <form method="dialog">
+        <div class="settings-head"><div><span class="eyebrow">PAGE SETUP</span><h2 id="page-header-footer-title">Header and footer</h2></div><button class="window-control" value="cancel" aria-label="Close header and footer settings">×</button></div>
+        <p class="table-dialog-note">Use centered plain text on each page. Page numbers remain independently controlled in the Layout ribbon.</p>
+        <label class="page-decoration-field" for="page-header-text">Header<input id="page-header-text" type="text" maxlength="180" autocomplete="off" placeholder="Optional document header" /></label>
+        <label class="page-decoration-field" for="page-footer-text">Footer<input id="page-footer-text" type="text" maxlength="180" autocomplete="off" placeholder="Optional document footer" /></label>
+        <div class="settings-foot"><span>Up to 180 characters each.</span><button class="button button-primary" id="apply-page-header-footer" value="apply">Apply</button></div>
+      </form>
+    </dialog>
     <script src="./assets/vendor/mammoth.browser.min.js" defer></script>
     <script src="./document-model.js" defer></script>
     <script src="./app.js" defer></script>
