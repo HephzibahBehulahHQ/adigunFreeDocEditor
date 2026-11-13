@@ -236,3 +236,10 @@
 
 .save-time{color:#708094;font-size:10px;font-variant-numeric:tabular-nums}
 .save-time::before{content:"·";margin-right:4px}
+
+.skip-link{position:fixed;top:8px;left:8px;z-index:20;transform:translateY(-160%);padding:10px 14px;border-radius:6px;background:var(--navy);color:#fff;font-size:13px;font-weight:700;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+.skip-link:focus-visible{transform:translateY(0)}
+:root{--focus-ring:#5635b8}
+[data-theme="dark"]{--focus-ring:#c4b5fd}
+:focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
+.document-title:focus-visible,.document-page:focus-visible,.outline-search:focus-visible,.table-size-fields input:focus-visible,.find-fields input:focus-visible,.break-navigation-item:focus-visible,#paragraph-indent-ruler:focus-visible,.page-decoration-field input:focus-visible,.landing-template:focus-visible,.assistant-tool:focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
