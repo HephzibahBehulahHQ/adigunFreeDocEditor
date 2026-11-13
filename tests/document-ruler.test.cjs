@@ -66,9 +66,10 @@ const paginationEnd = source.indexOf("  function normalizeReviewComments(", pagi
 assert.ok(paginationStart >= 0 && paginationEnd > paginationStart);
 const paginationSource = source.slice(paginationStart, paginationEnd);
 const captureCall = paginationSource.indexOf("const savedSelection = captureEditorSelection();");
+const moveCall = paginationSource.indexOf("items.forEach((node) => sheet.append(node));");
 const replaceCall = paginationSource.indexOf("editor.replaceChildren(fragment);");
 const restoreCall = paginationSource.indexOf("restoreEditorSelection(savedSelection);");
-assert.ok(captureCall >= 0 && captureCall < replaceCall && replaceCall < restoreCall, "pagination captures and restores the selection around reflow");
+assert.ok(captureCall >= 0 && captureCall < moveCall && moveCall < replaceCall && replaceCall < restoreCall, "pagination captures selection before moving nodes and restores it after reflow");
 
 const anchorNode = {};
 const focusNode = {};
