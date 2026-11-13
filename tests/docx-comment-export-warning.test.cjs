@@ -4,7 +4,7 @@ const path = require("node:path");
 
 const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
 const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
-const warningFunction = app.match(/function docxExportWarnings(unsupported, omittedCommentCount) \{[\s\S]*?\n  \}/)?.[0];
+const warningFunction = app.match(/function docxExportWarnings\(unsupported, omittedCommentCount\) \{[\s\S]*?\n  \}/)?.[0];
 assert.ok(warningFunction, "DOCX export should explain unsupported content and omitted comments");
 
 const getWarnings = new Function("return (" + warningFunction + ");")();
