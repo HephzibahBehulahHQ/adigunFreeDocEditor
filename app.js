@@ -50,6 +50,8 @@
   const FIND_MATCH_LIMIT = 5000;
   let autosave = localStorage.getItem("adigun-autosave") !== "false";
   let theme = localStorage.getItem("adigun-theme") === "dark" ? "dark" : "light";
+  const spellcheckLanguageOptions = new Map([["en-US", "English"], ["de-DE", "Deutsch"], ["fr-FR", "Français"], ["es-ES", "Español"]]);
+  let spellcheckLanguage = localStorage.getItem("adigun-spellcheck-language") || "en-US";
   const defaultPageLayout = (() => {
     try {
       const saved = JSON.parse(localStorage.getItem("adigun-page-defaults") || "{}");
@@ -170,7 +172,23 @@
     if (themeColor) themeColor.content = theme === "dark" ? "#0e1623" : "#0b1220";
   }
 
+  function setSpellcheckLanguage(value) {
+    spellcheckLanguage = spellcheckLanguageOptions.has(value) ? value : "en-US";
+    editor.lang = spellcheckLanguage;
+    localStorage.setItem("adigun-spellcheck-language", spellcheckLanguage);
+    const select = $("#spellcheck-language");
+    if (select) select.value = spellcheckLanguage;
+    const indicator = $("#spellcheck-language-indicator");
+    const label = spellcheckLanguageOptions.get(spellcheckLanguage);
+    if (indicator) {
+      indicator.textContent = label;
+      indicator.setAttribute("aria-label", `Spellcheck language: ${label}. Open settings.`);
+      indicator.title = `Spellcheck language: ${label}`;
+    }
+  }
+
   setTheme(theme);
+  setSpellcheckLanguage(spellcheckLanguage);
 
   function title() {
     return titleInput.value.trim() || "Untitled document";
@@ -2957,6 +2975,8 @@
   $("#apply-page-header-footer").addEventListener("click", () => setPageHeaderFooter($("#page-header-text").value, $("#page-footer-text").value));
   $("#autosave-toggle").addEventListener("change", (event) => { autosave = event.target.checked; localStorage.setItem("adigun-autosave", String(autosave)); if (autosave) saveDocument(); else setSaveStatus("Autosave off"); });
   $("#theme-toggle").addEventListener("change", (event) => setTheme(event.target.checked ? "dark" : "light"));
+  $("#spellcheck-language").addEventListener("change", (event) => setSpellcheckLanguage(event.target.value));
+  $("#spellcheck-language-indicator").addEventListener("click", () => document.querySelector('[data-view="settings"]')?.click());
   $("#clear-local-data").addEventListener("click", () => {
     if (!database) { notify("Local document storage is unavailable in this browser."); return; }
     $("#clear-local-data-dialog").showModal();
