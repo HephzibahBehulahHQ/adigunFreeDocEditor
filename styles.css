@@ -133,3 +133,9 @@
 @media(max-width:700px){.document-ruler{margin-left:28px}.editor-card.paper-layout #document-ruler{margin-left:28px}.editor-card.paper-layout.margin-wide #document-ruler{margin-left:30px}}
 
 .document-sheet.page-numbered::after{content:attr(data-page-number);position:absolute;left:0;right:0;bottom:28px;text-align:center;color:#718096;font:11px/1.2 Arial,sans-serif;pointer-events:none}
+
+.document-sheet::before{content:attr(data-page-header);position:absolute;top:30px;left:28px;right:28px;text-align:center;color:#718096;font:11px/1.2 Arial,sans-serif;pointer-events:none}
+.document-sheet.page-numbered::after,.document-sheet[data-page-footer]::after{content:attr(data-page-footer) attr(data-page-number);position:absolute;left:24px;right:24px;bottom:28px;text-align:center;color:#718096;font:11px/1.2 Arial,sans-serif;pointer-events:none}
+.page-decoration-field{display:flex;flex-direction:column;gap:6px;margin:14px 0;color:var(--ink);font-size:12px;font-weight:600}
+.page-decoration-field input{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font:inherit;font-weight:400}
+.page-decoration-field input:focus-visible{outline:2px solid var(--purple);outline-offset:2px}
