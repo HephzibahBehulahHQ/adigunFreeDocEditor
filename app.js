@@ -1117,6 +1117,7 @@
         const arrayBuffer = await file.arrayBuffer();
         const archiveEntry = inspectDocxArchive(arrayBuffer);
         const revisionCounts = await readDocxRevisionCounts(arrayBuffer, archiveEntry);
+        const importedPageLayout = await readDocxPageLayout(arrayBuffer, archiveEntry);
         const converted = await window.mammoth.convertToHtml({ arrayBuffer });
         const sanitized = sanitizeDocxHtml(converted.value);
         const revisionMapping = mapDocxRevisionsToHtml(sanitized.html, revisionCounts?.paragraphs);
@@ -1465,6 +1466,52 @@
     }
   }
 
+
+  async function readDocxPageLayout(buffer, archive) {
+    const xmlText = await readDocxZipPartText(buffer, archive, "word/document.xml");
+    if (!xmlText) return { layout: null, unsupported: false, unreadable: true };
+    try {
+      const xml = new DOMParser().parseFromString(xmlText, "application/xml");
+      if (xml.getElementsByTagName("parsererror").length) return { layout: null, unsupported: false, unreadable: true };
+      const ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+      const sections = Array.from(xml.getElementsByTagNameNS(ns, "sectPr"));
+      if (!sections.length) return { layout: null, unsupported: false, unreadable: false };
+      const attr = (node, name) => node?.getAttributeNS(ns, name) || node?.getAttribute("w:" + name) || "";
+      const near = (left, right) => Math.abs(left - right) <= 40;
+      const parseSection = (section) => {
+        const size = section.getElementsByTagNameNS(ns, "pgSz")[0];
+        const margins = section.getElementsByTagNameNS(ns, "pgMar")[0];
+        if (!size || !margins) return null;
+        const width = Number(attr(size, "w"));
+        const height = Number(attr(size, "h"));
+        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+        const landscape = attr(size, "orient") === "landscape" || width > height;
+        const shortSide = Math.min(width, height);
+        const longSide = Math.max(width, height);
+        let paper = "";
+        if (near(shortSide, 11906) && near(longSide, 16838)) paper = "a4";
+        else if (near(shortSide, 12240) && near(longSide, 15840)) paper = "letter";
+        if (!paper) return null;
+        const gutter = Number(attr(margins, "gutter") || 0);
+        const sides = ["top", "right", "bottom", "left"].map((name) => Number(attr(margins, name)));
+        if (gutter !== 0 || sides.some((value) => !Number.isFinite(value))) return null;
+        const presets = [["normal", 1440], ["narrow", 720], ["wide", 2160]];
+        const match = presets.find(([, value]) => sides.every((side) => near(side, value)));
+        if (!match) return null;
+        return { paper, orientation: landscape ? "landscape" : "portrait", margins: match[0] };
+      };
+      const layouts = sections.map(parseSection);
+      if (layouts.some((layout) => !layout)) return { layout: null, unsupported: true, unreadable: false };
+      const first = layouts[0];
+      if (layouts.some((layout) => layout.paper !== first.paper || layout.orientation !== first.orientation || layout.margins !== first.margins)) {
+        return { layout: null, unsupported: true, unreadable: false };
+      }
+      return { layout: first, unsupported: false, unreadable: false };
+    } catch {
+      return { layout: null, unsupported: false, unreadable: true };
+    }
+  }
+
   async function readDocxRevisionCounts(buffer, entry) {
     try {
       if (!entry || entry.expanded > 50 * 1024 * 1024) return null;
@@ -1707,7 +1754,7 @@
         $("#pdf-frame")?.remove();
         activePdfFile = undefined;
         activeId = crypto.randomUUID();
-        applyPageLayout();
+        applyPageLayout(importedPageLayout.layout || defaultPageLayout);
         reviewComments = normalizeReviewComments(importedCommentData.comments);
         showReviewPanel(false);
         setTitle(file.name.replace(/\.docx$/i, "") || file.name);
@@ -1731,6 +1778,8 @@
         if (sanitized.removed) notes.push(`${sanitized.removed} unsupported or unsafe item${sanitized.removed === 1 ? "" : "s"} omitted`);
         const revisionWarning = sourceRevisionLossWarning(revisionCounts, false, revisionMapping.preserved);
         if (revisionWarning) notes.push(revisionWarning);
+        if (importedPageLayout.unreadable) notes.push("Word page setup could not be read; new-document defaults were used");
+        else if (importedPageLayout.unsupported) notes.push("Custom or mixed Word page setup is not supported; new-document defaults were used");
         if (importedCommentData.unreadable) notes.push("Word comments could not be read");
         else if (importedCommentData.omitted) notes.push(importedCommentData.omitted + " Word comment" + (importedCommentData.omitted === 1 ? "" : "s") + " could not be imported because the anchor or text is missing, unsupported, or unmatched");
         notify(notes.length ? `DOCX imported. ${notes.join("; ")}. Layout and advanced formatting may differ.` : "DOCX imported as editable structure. Word page layout and advanced formatting may differ.");
