@@ -287,3 +287,5 @@
 .open-document-tab-dirty{display:inline-block;width:6px;height:6px;margin-left:6px;border-radius:50%;background:var(--purple);vertical-align:middle}
 @media(max-width:700px){.workspace.mode-no-document-title .topbar{height:0;padding:0;border:0;overflow:visible}.workspace.mode-no-document-title .topbar-actions{position:fixed;top:10px;right:12px;z-index:4}.workspace.mode-no-document-title .mobile-menu-button{color:#fff}}
 @media(max-width:900px){.editor-layout.has-outline{grid-template-columns:minmax(0,1fr)}.document-outline.visible:not(.mobile-open){display:none}.document-outline.visible.mobile-open{display:block;position:static;grid-column:1}.outline-toggle:not([hidden]){display:inline-flex}}
+
+button:disabled{cursor:not-allowed;opacity:.48}

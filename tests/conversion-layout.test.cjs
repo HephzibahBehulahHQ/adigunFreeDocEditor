@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const css = fs.readFileSync(path.join(__dirname, "..", "styles.css"), "utf8");
+const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 const sidebarWidth = Number(css.match(/\.app-shell\{[^}]*grid-template-columns:(\d+)px minmax/)?.[1]);
 const conversionPadding = Number(css.match(/\.conversion-workspace\{[^}]*padding:\d+px (\d+)px/)?.[1]);
 const grid = css.match(/\.conversion-grid\{[^}]*grid-template-columns:minmax\((\d+)px,[^)]*\) minmax\((\d+)px,[^)]*\);gap:(\d+)px/);
@@ -12,6 +13,8 @@ assert.ok(Number.isFinite(sidebarWidth), "desktop navigation width is declared")
 assert.ok(Number.isFinite(conversionPadding), "conversion workspace horizontal padding is declared");
 assert.ok(grid, "conversion cards declare minimum widths and a gap");
 assert.ok(Number.isFinite(breakpoint), "conversion layout has a responsive collapse breakpoint");
+assert.ok(css.split("\n").includes("button:disabled{cursor:not-allowed;opacity:.48}"));
+assert.match(html, /id="conversion-download"[^>]*disabled/);
 
 const minimumGridWidth = Number(grid[1]) + Number(grid[2]) + Number(grid[3]);
 const minimumDesktopViewport = sidebarWidth + conversionPadding * 2 + minimumGridWidth;
