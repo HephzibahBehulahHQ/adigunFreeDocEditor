@@ -245,3 +245,6 @@
 .document-title:focus-visible,.document-page:focus-visible,.outline-search:focus-visible,.table-size-fields input:focus-visible,.find-fields input:focus-visible,.break-navigation-item:focus-visible,#paragraph-indent-ruler:focus-visible,.page-decoration-field input:focus-visible,.landing-template:focus-visible,.assistant-tool:focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
 
 .workspace.mode-no-document-title #document-title,.workspace.mode-no-document-title #save-state{display:none}
+
+.tracked-revision-actions [data-revision-go]{margin-right:auto}
+.review-location-highlight{background:var(--purple-soft);border-radius:2px;outline:2px solid var(--focus-ring);outline-offset:1px}
