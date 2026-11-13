@@ -46,5 +46,6 @@ jobs:
           node tests/find-checkbox-target-size.test.cjs
           node tests/navigation-current.test.cjs
           node tests/ribbon-tabs.test.cjs
+          node tests/mobile-menu-keyboard.test.cjs
 
 
