@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const Node = { TEXT_NODE: 3, ELEMENT_NODE: 1 };
-const app = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
+const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
 const resolverStart = app.indexOf("  function resolveReviewCommentStart(");
 const resolverEnd = app.indexOf("  function reviewCommentRange(", resolverStart);
 const serializerStart = app.indexOf("  function wordXmlText(");
