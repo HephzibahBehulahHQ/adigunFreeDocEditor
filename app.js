@@ -1241,6 +1241,7 @@
     let documentEntry = null;
     let commentsEntry = null;
     let commentsExtendedEntry = null;
+    const partEntries = Object.create(null);
     for (let index = 0; index < count; index++) {
       if (cursor + 46 > directoryEnd || bytes.getUint32(cursor, true) !== 0x02014b50) throw new Error("The Word package directory is damaged.");
       const flags = bytes.getUint16(cursor + 8, true);
@@ -1258,14 +1259,16 @@
       if (expanded > 50 * 1024 * 1024) throw new Error("A file inside this Word package exceeds the 50 MB import limit.");
       expandedBytes += expanded;
       if (expandedBytes > 100 * 1024 * 1024) throw new Error("The uncompressed Word package exceeds the 100 MB safety limit.");
-      if (name === "word/document.xml") documentEntry = { method, compressed, expanded, localOffset: bytes.getUint32(cursor + 42, true) };
-      else if (name === "word/comments.xml") commentsEntry = { method, compressed, expanded, localOffset: bytes.getUint32(cursor + 42, true) };
-      else if (name === "word/commentsExtended.xml") commentsExtendedEntry = { method, compressed, expanded, localOffset: bytes.getUint32(cursor + 42, true) };
+      const partEntry = { method, compressed, expanded, localOffset: bytes.getUint32(cursor + 42, true) };
+      partEntries[name] = partEntry;
+      if (name === "word/document.xml") documentEntry = partEntry;
+      else if (name === "word/comments.xml") commentsEntry = partEntry;
+      else if (name === "word/commentsExtended.xml") commentsExtendedEntry = partEntry;
       cursor = next;
     }
     if (cursor !== directoryEnd || !documentEntry || !names.has("[Content_Types].xml")) throw new Error("This file is missing required Word document parts.");
     if (expandedBytes > Math.max(32 * 1024 * 1024, buffer.byteLength * 150)) throw new Error("The Word package expands beyond the safe import ratio.");
-    return Object.assign(documentEntry, { commentsEntry, commentsExtendedEntry });
+    return Object.assign(documentEntry, { commentsEntry, commentsExtendedEntry, partEntries });
   }
 
   function readWordRevisionParagraphs(parsed) {
@@ -1467,33 +1470,38 @@
   }
 
 
+
   async function readDocxPageLayout(buffer, archive) {
+    const empty = { layout: null, header: "", footer: "", pageNumbers: false, unsupported: false, unreadable: false };
     const xmlText = await readDocxZipPartText(buffer, archive, "word/document.xml");
-    if (!xmlText) return { layout: null, unsupported: false, unreadable: true };
+    if (!xmlText) return { ...empty, unreadable: true };
     try {
-      const xml = new DOMParser().parseFromString(xmlText, "application/xml");
-      if (xml.getElementsByTagName("parsererror").length) return { layout: null, unsupported: false, unreadable: true };
-      const ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-      const sections = Array.from(xml.getElementsByTagNameNS(ns, "sectPr"));
-      if (!sections.length) return { layout: null, unsupported: false, unreadable: false };
-      const attr = (node, name) => node?.getAttributeNS(ns, name) || node?.getAttribute("w:" + name) || "";
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(xmlText, "application/xml");
+      if (xml.getElementsByTagName("parsererror").length) return { ...empty, unreadable: true };
+      const wordNs = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+      const wordRelNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+      const packageRelNs = "http://schemas.openxmlformats.org/package/2006/relationships";
+      const attr = (node, ns, prefix, name) => node?.getAttributeNS(ns, name) || node?.getAttribute(prefix + ":" + name) || "";
       const near = (left, right) => Math.abs(left - right) <= 40;
+      const sections = Array.from(xml.getElementsByTagNameNS(wordNs, "sectPr"));
+      if (!sections.length) return empty;
       const parseSection = (section) => {
-        const size = section.getElementsByTagNameNS(ns, "pgSz")[0];
-        const margins = section.getElementsByTagNameNS(ns, "pgMar")[0];
+        const size = section.getElementsByTagNameNS(wordNs, "pgSz")[0];
+        const margins = section.getElementsByTagNameNS(wordNs, "pgMar")[0];
         if (!size || !margins) return null;
-        const width = Number(attr(size, "w"));
-        const height = Number(attr(size, "h"));
+        const width = Number(attr(size, wordNs, "w", "w"));
+        const height = Number(attr(size, wordNs, "w", "h"));
         if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
-        const landscape = attr(size, "orient") === "landscape" || width > height;
+        const landscape = attr(size, wordNs, "w", "orient") === "landscape" || width > height;
         const shortSide = Math.min(width, height);
         const longSide = Math.max(width, height);
         let paper = "";
         if (near(shortSide, 11906) && near(longSide, 16838)) paper = "a4";
         else if (near(shortSide, 12240) && near(longSide, 15840)) paper = "letter";
         if (!paper) return null;
-        const gutter = Number(attr(margins, "gutter") || 0);
-        const sides = ["top", "right", "bottom", "left"].map((name) => Number(attr(margins, name)));
+        const gutter = Number(attr(margins, wordNs, "w", "gutter") || 0);
+        const sides = ["top", "right", "bottom", "left"].map((name) => Number(attr(margins, wordNs, "w", name)));
         if (gutter !== 0 || sides.some((value) => !Number.isFinite(value))) return null;
         const presets = [["normal", 1440], ["narrow", 720], ["wide", 2160]];
         const match = presets.find(([, value]) => sides.every((side) => near(side, value)));
@@ -1501,14 +1509,138 @@
         return { paper, orientation: landscape ? "landscape" : "portrait", margins: match[0] };
       };
       const layouts = sections.map(parseSection);
-      if (layouts.some((layout) => !layout)) return { layout: null, unsupported: true, unreadable: false };
-      const first = layouts[0];
-      if (layouts.some((layout) => layout.paper !== first.paper || layout.orientation !== first.orientation || layout.margins !== first.margins)) {
-        return { layout: null, unsupported: true, unreadable: false };
+      let layout = null;
+      let unsupported = false;
+      if (layouts.some((value) => !value)) unsupported = true;
+      else {
+        layout = layouts[0];
+        if (layouts.some((value) => value.paper !== layout.paper || value.orientation !== layout.orientation || value.margins !== layout.margins)) {
+          layout = null;
+          unsupported = true;
+        }
       }
-      return { layout: first, unsupported: false, unreadable: false };
+
+      const referenceIds = { header: [], footer: [] };
+      for (const section of sections) {
+        for (const kind of ["header", "footer"]) {
+          for (const reference of Array.from(section.getElementsByTagNameNS(wordNs, kind + "Reference"))) {
+            const type = attr(reference, wordNs, "w", "type") || "default";
+            if (type !== "default") { unsupported = true; continue; }
+            const relationshipId = attr(reference, wordRelNs, "r", "id");
+            if (relationshipId) referenceIds[kind].push(relationshipId);
+          }
+        }
+      }
+      if (!referenceIds.header.length && !referenceIds.footer.length) return { ...empty, layout, unsupported };
+
+      const relationshipsName = "word/_rels/document.xml.rels";
+      const relationshipsEntry = archive?.partEntries?.[relationshipsName];
+      const relationshipsText = await readDocxZipPartText(buffer, relationshipsEntry, relationshipsName);
+      if (!relationshipsText) return { ...empty, layout, unsupported, unreadable: true };
+      const relationshipsXml = parser.parseFromString(relationshipsText, "application/xml");
+      if (relationshipsXml.getElementsByTagName("parsererror").length) return { ...empty, layout, unsupported, unreadable: true };
+      const relationships = new Map();
+      for (const relationship of Array.from(relationshipsXml.getElementsByTagNameNS(packageRelNs, "Relationship"))) {
+        const id = relationship.getAttribute("Id") || "";
+        const type = relationship.getAttribute("Type") || "";
+        const target = relationship.getAttribute("Target") || "";
+        const targetMode = relationship.getAttribute("TargetMode") || "";
+        if (id && target && targetMode !== "External") relationships.set(id, { type, target });
+      }
+      const resolvePartName = (target) => {
+        if (!target || target.includes("\\") || target.includes("\0")) return "";
+        const segments = target.startsWith("/") ? [] : ["word"];
+        for (const segment of target.split("/")) {
+          if (!segment || segment === ".") continue;
+          if (segment === "..") {
+            if (!segments.length) return "";
+            segments.pop();
+          } else segments.push(segment);
+        }
+        return segments.join("/");
+      };
+      const partTargets = {};
+      for (const kind of ["header", "footer"]) {
+        const ids = [...new Set(referenceIds[kind])];
+        if (ids.length > 1) { unsupported = true; continue; }
+        if (!ids.length) continue;
+        const relationship = relationships.get(ids[0]);
+        if (!relationship || !relationship.type.endsWith("/" + kind)) return { ...empty, layout, unsupported, unreadable: true };
+        const partName = resolvePartName(relationship.target);
+        if (!partName || !archive.partEntries?.[partName]) return { ...empty, layout, unsupported, unreadable: true };
+        partTargets[kind] = partName;
+      }
+      const readTextPart = async (kind, partName) => {
+        const partText = await readDocxZipPartText(buffer, archive.partEntries[partName], partName);
+        if (!partText) return { text: "", pageNumbers: false, unsupported: false, unreadable: true };
+        const parsed = parser.parseFromString(partText, "application/xml");
+        if (parsed.getElementsByTagName("parsererror").length) return { text: "", pageNumbers: false, unsupported: false, unreadable: true };
+        let pageNumbers = false;
+        let unsupportedField = false;
+        function paragraphText(paragraph) {
+          let text = "";
+          const fields = [];
+          function visit(node) {
+            for (const child of Array.from(node.childNodes || [])) {
+              if (child.nodeType !== 1) continue;
+              const localName = child.localName || String(child.nodeName || "").split(":").pop();
+              if (child.namespaceURI === wordNs && localName === "fldSimple") {
+                const instruction = (attr(child, wordNs, "w", "instr") || "").trim();
+                if (/\bPAGE\b/i.test(instruction)) pageNumbers = true;
+                else if (instruction) unsupportedField = true;
+                continue;
+              }
+              if (child.namespaceURI === wordNs && localName === "fldChar") {
+                const fieldType = attr(child, wordNs, "w", "fldCharType");
+                if (fieldType === "begin") fields.push({ instruction: "", page: false });
+                else if (fieldType === "separate" && fields.length) {
+                  const field = fields.at(-1);
+                  field.page = /\bPAGE\b/i.test(field.instruction);
+                  if (field.page) pageNumbers = true;
+                  else unsupportedField = true;
+                } else if (fieldType === "end" && fields.length) {
+                  const field = fields.pop();
+                  if (!field.page && /\bPAGE\b/i.test(field.instruction)) pageNumbers = true;
+                  else if (!field.page && field.instruction.trim()) unsupportedField = true;
+                }
+                continue;
+              }
+              if (child.namespaceURI === wordNs && localName === "instrText") {
+                if (fields.length) fields.at(-1).instruction += child.textContent || "";
+                else unsupportedField = true;
+                continue;
+              }
+              if (child.namespaceURI === wordNs && localName === "t") {
+                if (!fields.length) text += child.textContent || "";
+                continue;
+              }
+              if (child.namespaceURI === wordNs && localName === "tab") { if (!fields.length) text += " "; continue; }
+              if (child.namespaceURI === wordNs && (localName === "br" || localName === "cr")) { if (!fields.length) text += " "; continue; }
+              visit(child);
+            }
+          }
+          visit(paragraph);
+          return text;
+        }
+        const text = Array.from(parsed.getElementsByTagNameNS(wordNs, "p")).map(paragraphText).join(" ").replace(/\s+/g, " ").trim();
+        if (text.length > 180) unsupportedField = true;
+        return { text: text.slice(0, 180), pageNumbers, unsupported: unsupportedField, unreadable: false };
+      };
+      let header = { text: "", pageNumbers: false, unsupported: false, unreadable: false };
+      let footer = { text: "", pageNumbers: false, unsupported: false, unreadable: false };
+      if (partTargets.header) header = await readTextPart("header", partTargets.header);
+      if (partTargets.footer) footer = await readTextPart("footer", partTargets.footer);
+      unsupported ||= header.unsupported || footer.unsupported;
+      return {
+        layout,
+        header: header.text,
+        footer: footer.pageNumbers && footer.text.endsWith(" ·") ? footer.text.slice(0, -2).trim() : footer.text,
+        pageNumbers: footer.pageNumbers || header.pageNumbers,
+        unsupported,
+        unreadable: header.unreadable || footer.unreadable,
+      };
     } catch {
-      return { layout: null, unsupported: false, unreadable: true };
+      return { layout: null, header: "", footer: "", pageNumbers: false, unsupported: false, unreadable: true };
     }
   }
 
@@ -1754,7 +1886,7 @@
         $("#pdf-frame")?.remove();
         activePdfFile = undefined;
         activeId = crypto.randomUUID();
-        applyPageLayout(importedPageLayout.layout || defaultPageLayout);
+        applyPageLayout({ ...(importedPageLayout.layout || defaultPageLayout), header: importedPageLayout.header, footer: importedPageLayout.footer, pageNumbers: importedPageLayout.pageNumbers });
         reviewComments = normalizeReviewComments(importedCommentData.comments);
         showReviewPanel(false);
         setTitle(file.name.replace(/\.docx$/i, "") || file.name);
@@ -1779,7 +1911,7 @@
         const revisionWarning = sourceRevisionLossWarning(revisionCounts, false, revisionMapping.preserved);
         if (revisionWarning) notes.push(revisionWarning);
         if (importedPageLayout.unreadable) notes.push("Word page setup could not be read; new-document defaults were used");
-        else if (importedPageLayout.unsupported) notes.push("Custom or mixed Word page setup is not supported; new-document defaults were used");
+        else if (importedPageLayout.unsupported) notes.push("Some custom, mixed, or advanced Word page settings were not fully imported");
         if (importedCommentData.unreadable) notes.push("Word comments could not be read");
         else if (importedCommentData.omitted) notes.push(importedCommentData.omitted + " Word comment" + (importedCommentData.omitted === 1 ? "" : "s") + " could not be imported because the anchor or text is missing, unsupported, or unmatched");
         notify(notes.length ? `DOCX imported. ${notes.join("; ")}. Layout and advanced formatting may differ.` : "DOCX imported as editable structure. Word page layout and advanced formatting may differ.");

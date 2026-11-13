@@ -123,7 +123,7 @@ const sourceComments = [
   { quote: "alpha", start: 0, before: "", after: " beta", body: "Check & revise <this>", author: "Ada Reviewer", createdAt: Date.parse("2026-11-12T10:00:00Z"), resolved: true },
   { quote: "beta", start: 6, before: "alpha ", after: "", body: "Follow up", author: "Second Reviewer", createdAt: Date.parse("2026-11-12T10:01:00Z"), resolved: false },
 ];
-const exported = api.makeWordPackage(root, { paper: "a4", orientation: "portrait", margins: "normal", pageNumbers: false, header: "", footer: "" }, sourceComments);
+const exported = api.makeWordPackage(root, { paper: "a4", orientation: "portrait", margins: "normal", pageNumbers: true, header: "Round-trip header", footer: "Round-trip footer" }, sourceComments);
 assert.equal(exported.exportedCommentCount, 2);
 assert.equal(exported.omittedCommentCount, 0);
 
@@ -133,6 +133,9 @@ assert.equal(exported.omittedCommentCount, 0);
   const archive = api.inspectDocxArchive(buffer);
   const exportedLayout = await api.readDocxPageLayout(buffer, archive);
   assert.deepEqual(exportedLayout.layout, { paper: "a4", orientation: "portrait", margins: "normal" });
+  assert.equal(exportedLayout.header, "Round-trip header");
+  assert.equal(exportedLayout.footer, "Round-trip footer");
+  assert.equal(exportedLayout.pageNumbers, true);
   const imported = await api.readDocxReviewComments(buffer, archive, "alpha beta");
   assert.equal(Boolean(imported.unreadable), false);
   assert.equal(imported.total, 2);
@@ -147,8 +150,10 @@ assert.equal(exported.omittedCommentCount, 0);
   const independentFiles = {
     "[Content_Types].xml": '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/commentsExtended.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"/></Types>',
     "_rels/.rels": '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
-    "word/_rels/document.xml.rels": '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdComments" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/><Relationship Id="rIdCommentsEx" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="commentsExtended.xml"/></Relationships>',
-    "word/document.xml": '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t xml:space="preserve">' + fixturePrefix + '</w:t></w:r><w:commentRangeStart w:id="4"/><w:r><w:t>original source</w:t></w:r><w:commentRangeEnd w:id="4"/><w:r><w:commentReference w:id="4"/></w:r><w:r><w:t>.</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>',
+    "word/_rels/document.xml.rels": '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdComments" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/><Relationship Id="rIdCommentsEx" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="commentsExtended.xml"/><Relationship Id="rIdH" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rIdF" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>',
+    "word/document.xml": '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:r><w:t xml:space="preserve">' + fixturePrefix + '</w:t></w:r><w:commentRangeStart w:id="4"/><w:r><w:t>original source</w:t></w:r><w:commentRangeEnd w:id="4"/><w:r><w:commentReference w:id="4"/></w:r><w:r><w:t>.</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdH"/><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>',
+    "word/header1.xml": '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>External header</w:t></w:r></w:p></w:hdr>',
+    "word/footer1.xml": '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>External footer </w:t></w:r><w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p></w:ftr>',
     "word/comments.xml": '<?xml version="1.0"?><w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:comment w:id="4" w:author="External Word Author" w:initials="EWA" w:date="2025-04-03T09:30:00Z"><w:p w14:paraId="11223344"><w:pPr><w:pStyle w:val="CommentText"/></w:pPr><w:r><w:t>Review &amp; verify this citation.</w:t></w:r></w:p></w:comment></w:comments>',
     "word/commentsExtended.xml": '<?xml version="1.0"?><w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"><w15:commentEx w15:paraId="11223344" w15:done="1"/></w15:commentsEx>',
   };
@@ -156,6 +161,9 @@ assert.equal(exported.omittedCommentCount, 0);
   const independentArchive = api.inspectDocxArchive(independentBuffer);
   const independentLayout = await api.readDocxPageLayout(independentBuffer, independentArchive);
   assert.deepEqual(independentLayout.layout, { paper: "a4", orientation: "landscape", margins: "narrow" });
+  assert.equal(independentLayout.header, "External header");
+  assert.equal(independentLayout.footer, "External footer");
+  assert.equal(independentLayout.pageNumbers, true);
   const independent = await api.readDocxReviewComments(independentBuffer, independentArchive, fixturePrefix + "original source.");
   assert.equal(independent.total, 1);
   assert.equal(independent.omitted, 0);
