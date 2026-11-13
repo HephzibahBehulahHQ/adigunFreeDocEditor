@@ -19,6 +19,16 @@ assert.ok(serializerStart >= 0 && serializerEnd > serializerStart, "DOCX seriali
 assert.ok(zipWriterStart >= 0 && zipWriterEnd > zipWriterStart, "DOCX ZIP writer is present");
 assert.ok(archiveStart >= 0 && archiveEnd > archiveStart, "DOCX archive reader is present");
 assert.ok(mapperStart >= 0 && mapperEnd > mapperStart, "Word comment import reader is present");
+const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+const css = fs.readFileSync(path.join(__dirname, "..", "styles.css"), "utf8");
+assert.ok(app.includes('action: "custom-margins"'), "Layout exposes a custom margin action");
+assert.ok(html.includes('id="custom-margin-dialog"') && html.includes('id="custom-margin-top"'), "custom margin inputs have an accessible dialog");
+assert.ok(css.includes(".editor-card.margin-custom .document-sheet"), "custom values affect the editor page margins");
+
+assert.ok(app.includes('action: "custom-margins"'), "Layout exposes custom margins");
+assert.ok(app.includes('customMarginsMm: pageCustomMarginsMm'), "custom margins persist and export");
+assert.ok(html.includes('id="custom-margin-dialog"'), "custom margin inputs have an accessible dialog");
+
 
 const source = [
   app.slice(resolverStart, resolverEnd),
@@ -133,6 +143,13 @@ assert.equal(exported.omittedCommentCount, 0);
   const archive = api.inspectDocxArchive(buffer);
   const exportedLayout = await api.readDocxPageLayout(buffer, archive);
   assert.deepEqual(exportedLayout.layout, { paper: "a4", orientation: "portrait", margins: "normal" });
+  const customLayout = { paper: "letter", orientation: "landscape", margins: "custom", customMarginsMm: { top: 12.3, right: 20.5, bottom: 31.7, left: 8.2 }, pageNumbers: false, header: "", footer: "" };
+  const customPackage = api.makeWordPackage(root, customLayout, []);
+  const customBuffer = await api.makeStoredZip(customPackage.files).arrayBuffer();
+  const customArchive = api.inspectDocxArchive(customBuffer);
+  const customImported = await api.readDocxPageLayout(customBuffer, customArchive);
+  assert.deepEqual(customImported.layout, { paper: "letter", orientation: "landscape", margins: "custom", customMarginsMm: customLayout.customMarginsMm });
+
   assert.equal(exportedLayout.header, "Round-trip header");
   assert.equal(exportedLayout.footer, "Round-trip footer");
   assert.equal(exportedLayout.pageNumbers, true);
@@ -173,11 +190,17 @@ assert.equal(exported.omittedCommentCount, 0);
   assert.equal(independent.comments[0].body, "Review & verify this citation.");
   assert.equal(independent.comments[0].createdAt, Date.parse("2025-04-03T09:30:00Z"));
   assert.equal(independent.comments[0].resolved, true);
+  const customFiles = { ...independentFiles, "word/document.xml": independentFiles["word/document.xml"].replace('w:top="720" w:right="720" w:bottom="720" w:left="720"', 'w:top="900" w:right="1500" w:bottom="1200" w:left="600"') };
+  const customFixtureBuffer = await api.makeStoredZip(customFiles).arrayBuffer();
+  const customFixtureArchive = api.inspectDocxArchive(customFixtureBuffer);
+  const customFixtureLayout = await api.readDocxPageLayout(customFixtureBuffer, customFixtureArchive);
+  assert.deepEqual(customFixtureLayout.layout.customMarginsMm, { top: 15.9, right: 26.5, bottom: 21.2, left: 10.6 });
+  assert.equal(customFixtureLayout.layout.margins, "custom");
   const unsupportedFiles = { ...independentFiles, "word/document.xml": independentFiles["word/document.xml"].replace('w:w="16838"', 'w:w="10000"') };
   const unsupportedBuffer = await api.makeStoredZip(unsupportedFiles).arrayBuffer();
   const unsupportedArchive = api.inspectDocxArchive(unsupportedBuffer);
   const unsupportedLayout = await api.readDocxPageLayout(unsupportedBuffer, unsupportedArchive);
   assert.equal(unsupportedLayout.layout, null);
   assert.equal(unsupportedLayout.unsupported, true);
-  process.stdout.write("DOCX import tests passed: comments round-tripped and supported page setup was restored from app and independent WordprocessingML packages.\n");
+  process.stdout.write("DOCX import tests passed: comments and preset/custom page setup round-tripped across app and independent WordprocessingML packages.\n");
 })().catch((error) => { console.error(error); process.exitCode = 1; });

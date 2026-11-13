@@ -220,6 +220,20 @@
         <div class="settings-foot"><span>Up to 50 rows and 20 columns.</span><button class="button button-outline" type="submit">Insert table</button></div>
       </form>
     </dialog>
+    <dialog class="settings-dialog custom-margin-dialog" id="custom-margin-dialog" aria-labelledby="custom-margin-title">
+      <form method="dialog">
+        <div class="settings-head"><div><span class="eyebrow">PAGE SETUP</span><h2 id="custom-margin-title">Custom margins</h2></div><button class="window-control" value="cancel" aria-label="Close custom margins">×</button></div>
+        <p class="table-dialog-note">Set each page margin in millimeters. Values are saved with this document and used in Word exports.</p>
+        <div class="custom-margin-grid">
+          <label for="custom-margin-top">Top<input id="custom-margin-top" type="number" min="0" max="100" step="0.1" required /></label>
+          <label for="custom-margin-right">Right<input id="custom-margin-right" type="number" min="0" max="100" step="0.1" required /></label>
+          <label for="custom-margin-bottom">Bottom<input id="custom-margin-bottom" type="number" min="0" max="100" step="0.1" required /></label>
+          <label for="custom-margin-left">Left<input id="custom-margin-left" type="number" min="0" max="100" step="0.1" required /></label>
+        </div>
+        <p class="custom-margin-error" id="custom-margin-error" role="alert" aria-live="polite"></p>
+        <div class="settings-foot"><span>0–100 mm per side.</span><div><button class="button button-outline" value="cancel">Cancel</button> <button class="button button-primary" id="apply-custom-margins" type="button">Apply</button></div></div>
+      </form>
+    </dialog>
     <dialog class="settings-dialog" id="page-header-footer-dialog" aria-labelledby="page-header-footer-title">
       <form method="dialog">
         <div class="settings-head"><div><span class="eyebrow">PAGE SETUP</span><h2 id="page-header-footer-title">Header and footer</h2></div><button class="window-control" value="cancel" aria-label="Close header and footer settings">×</button></div>
