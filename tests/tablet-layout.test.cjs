@@ -21,6 +21,7 @@ assert.match(html, /id="mobile-menu"[^>]*aria-controls="workspace-nav"/);
 assert.match(tablet, /\.app-shell\{display:block\}/);
 assert.match(tablet, /\.sidebar\{[^}]*height:54px/);
 assert.match(tablet, /\.mobile-menu-button\{display:grid\}/);
+assert.match(tablet, /\.sidebar:not\(\.mobile-open\) \.nav-item\{display:none!important\}/);
 assert.match(tablet, /\.sidebar\.mobile-open \.nav-item\{display:flex!important/);
 assert.match(tablet, /\.ribbon-tabs\{[^}]*overflow-x:auto/);
 assert.match(tablet, /\.ribbon-tools\{height:52px/);
