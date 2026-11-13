@@ -52,6 +52,7 @@ jobs:
           node tests/docx-revision-warning.test.cjs
           node tests/find-checkbox-target-size.test.cjs
           node tests/navigation-current.test.cjs
+          node tests/ribbon-tabs.test.cjs
       - name: Package application
         run: |
           mkdir -p _site/assets/vendor
