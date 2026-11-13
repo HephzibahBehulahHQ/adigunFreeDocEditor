@@ -201,14 +201,14 @@
 .adigun-header{flex:none}
 .adigun-body{flex:1;min-height:0;overflow:auto}
 .assistant-quick-tools{margin:14px 0}
-.assistant-quick-tools h3{margin:0 0 7px;color:var(--navy);font-size:11px}
+.assistant-quick-tools h3{margin:0 0 7px;color:var(--navy);font-size:13px}
 .assistant-tool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
 .assistant-tool{display:flex;align-items:flex-start;gap:7px;min-width:0;min-height:64px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);text-align:left}
 .assistant-tool:hover{border-color:var(--purple);background:var(--purple-soft)}
 .assistant-tool-icon{display:grid;width:24px;height:24px;flex:none;place-items:center;border-radius:6px;background:var(--purple-soft);color:var(--navy);font-size:15px}
 .assistant-tool>span:last-child{display:flex;min-width:0;flex-direction:column;gap:4px}
-.assistant-tool strong{font-size:9px;line-height:1.3}
-.assistant-tool small{color:var(--muted);font-size:8px;line-height:1.3}
+.assistant-tool strong{font-size:12px;line-height:1.3}
+.assistant-tool small{color:var(--muted);font-size:11px;line-height:1.3}
 .assistant-tool:focus-visible{outline:3px solid var(--purple);outline-offset:2px}
 [data-theme="dark"] .assistant-tool{background:#101827;border-color:var(--line);color:var(--ink)}
 [data-theme="dark"] .assistant-tool:hover{background:#2b2540}
