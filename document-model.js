@@ -44,8 +44,8 @@
         if (["http:", "https:", "mailto:"].includes(url.protocol)) result.href = url.href;
       } catch { /* Invalid links are omitted from the document model. */ }
     }
-    if (["ins", "del"].includes(tag)) {
-      if (typeof attributes["data-revision-id"] === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(attributes["data-revision-id"])) result["data-revision-id"] = attributes["data-revision-id"];
+    if (["ins", "del"].includes(tag) && typeof attributes["data-revision-id"] === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(attributes["data-revision-id"])) {
+      result["data-revision-id"] = attributes["data-revision-id"];
       if (typeof attributes["data-revision-author"] === "string") result["data-revision-author"] = attributes["data-revision-author"].slice(0, 80);
       const createdAt = Number(attributes["data-revision-created-at"]);
       if (Number.isFinite(createdAt) && createdAt > 0 && createdAt <= 8640000000000000) result["data-revision-created-at"] = String(Math.floor(createdAt));
