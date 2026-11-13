@@ -376,21 +376,37 @@
       anchorOffset: selection.anchorOffset,
       focusNode: selection.focusNode,
       focusOffset: selection.focusOffset,
+      anchorTextOffset: editorOffset(selection.anchorNode, selection.anchorOffset),
+      focusTextOffset: editorOffset(selection.focusNode, selection.focusOffset),
     };
   }
 
   function restoreEditorSelection(savedSelection) {
     if (!savedSelection) return false;
     const isInsideEditor = (node) => node === editor || Boolean(node && editor.contains(node));
-    if (!isInsideEditor(savedSelection.anchorNode) || !isInsideEditor(savedSelection.focusNode)) return false;
     const selection = window.getSelection();
     if (!selection) return false;
+    if (savedSelection.anchorTextOffset >= 0 && savedSelection.focusTextOffset >= 0) {
+      const start = Math.min(savedSelection.anchorTextOffset, savedSelection.focusTextOffset);
+      const end = Math.max(savedSelection.anchorTextOffset, savedSelection.focusTextOffset);
+      const range = rangeAtTextOffsets(start, end);
+      if (range && typeof selection.setBaseAndExtent === "function") {
+        const backward = savedSelection.anchorTextOffset > savedSelection.focusTextOffset;
+        selection.setBaseAndExtent(
+          backward ? range.endContainer : range.startContainer,
+          backward ? range.endOffset : range.startOffset,
+          backward ? range.startContainer : range.endContainer,
+          backward ? range.startOffset : range.endOffset
+        );
+        return true;
+      }
+      if (range) { selection.removeAllRanges(); selection.addRange(range); return true; }
+    }
+    if (!isInsideEditor(savedSelection.anchorNode) || !isInsideEditor(savedSelection.focusNode)) return false;
     try {
       selection.setBaseAndExtent(savedSelection.anchorNode, savedSelection.anchorOffset, savedSelection.focusNode, savedSelection.focusOffset);
       return true;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   }
 
   function normalizeReviewComments(value) {

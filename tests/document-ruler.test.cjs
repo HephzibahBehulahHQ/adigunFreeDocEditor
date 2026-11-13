@@ -70,30 +70,39 @@ const replaceCall = paginationSource.indexOf("editor.replaceChildren(fragment);"
 const restoreCall = paginationSource.indexOf("restoreEditorSelection(savedSelection);");
 assert.ok(captureCall >= 0 && captureCall < replaceCall && replaceCall < restoreCall, "pagination captures and restores the selection around reflow");
 
-const selectionNode = {};
+const anchorNode = {};
+const focusNode = {};
 const outsideNode = {};
 const selectionState = {
   rangeCount: 1,
-  anchorNode: selectionNode,
-  anchorOffset: 2,
-  focusNode: selectionNode,
-  focusOffset: 5,
+  anchorNode,
+  anchorOffset: 3,
+  focusNode,
+  focusOffset: 2,
   setBaseAndExtent(...points) { this.restoredPoints = points; },
 };
-const selectionEditor = { contains: (node) => node === selectionNode };
-const selectionApi = new Function("window", "editor",
+const selectionEditor = { contains: (node) => node === anchorNode || node === focusNode };
+const editorOffset = (node, offset) => node === anchorNode ? 10 + offset : node === focusNode ? offset : -1;
+const rangeAtTextOffsets = (start, end) => ({
+  startContainer: focusNode, startOffset: start,
+  endContainer: anchorNode, endOffset: end - 10,
+});
+const selectionApi = new Function("window", "editor", "editorOffset", "rangeAtTextOffsets",
   source.slice(source.indexOf("  function captureEditorSelection()"), source.indexOf("  function normalizeReviewComments(")) +
   "return { captureEditorSelection, restoreEditorSelection };")(
   { getSelection: () => selectionState },
-  selectionEditor
+  selectionEditor,
+  editorOffset,
+  rangeAtTextOffsets
 );
 const savedSelection = selectionApi.captureEditorSelection();
-assert.deepEqual(savedSelection, { anchorNode: selectionNode, anchorOffset: 2, focusNode: selectionNode, focusOffset: 5 });
+assert.equal(savedSelection.anchorTextOffset, 13);
+assert.equal(savedSelection.focusTextOffset, 2);
 assert.equal(selectionApi.restoreEditorSelection(savedSelection), true);
-assert.deepEqual(selectionState.restoredPoints, [selectionNode, 2, selectionNode, 5]);
+assert.deepEqual(selectionState.restoredPoints, [anchorNode, 3, focusNode, 2], "backward selection direction is preserved");
 selectionState.anchorNode = outsideNode;
 selectionState.focusNode = outsideNode;
 assert.equal(selectionApi.captureEditorSelection(), null, "selection outside the editor is ignored");
-assert.equal(selectionApi.restoreEditorSelection({ anchorNode: outsideNode, focusNode: outsideNode, anchorOffset: 0, focusOffset: 0 }), false);
+assert.equal(selectionApi.restoreEditorSelection({ anchorNode: outsideNode, focusNode: outsideNode, anchorOffset: 0, focusOffset: 0, anchorTextOffset: -1, focusTextOffset: -1 }), false);
 
 process.stdout.write("Document ruler tests passed: ruler focus preserves selection, updates indentation, and resets correctly.\n");
