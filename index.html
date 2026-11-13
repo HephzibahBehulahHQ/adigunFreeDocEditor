@@ -16,6 +16,7 @@
         <p class="sidebar-caption">DOCUMENT WORKSPACE</p>
         <button class="nav-item primary-nav" id="new-document" type="button"><span class="nav-icon" aria-hidden="true">＋</span>New document</button>
         <button class="nav-item" id="open-document" type="button"><span class="nav-icon" aria-hidden="true">↥</span>Open a file</button>
+        <button class="nav-item" data-view="convert" type="button"><span class="nav-icon" aria-hidden="true">⇄</span>Convert files</button>
         <button class="nav-item active" data-view="recent" type="button"><span class="nav-icon" aria-hidden="true">◷</span>Recent</button>
         <button class="nav-item" data-view="documents" type="button"><span class="nav-icon" aria-hidden="true">▤</span>My documents</button>
         <button class="nav-item" data-view="trash" type="button"><span class="nav-icon" aria-hidden="true">⌫</span>Trash</button>
@@ -80,6 +81,23 @@
               </div>
               <article class="document-page" id="document" contenteditable="true" role="textbox" aria-label="Document content" aria-multiline="true" spellcheck="true"><p><br /></p></article>
               <footer class="page-footer"><span id="word-count">0 words</span><span class="page-footer-right"><span>English</span><span class="footer-divider"></span><button class="zoom-button zoom-fit" id="zoom-fit" type="button" aria-label="Fit document to width" title="Fit document to width">Fit</button><button class="zoom-button" id="zoom-out" type="button" aria-label="Zoom out">−</button><span id="zoom-value">100%</span><button class="zoom-button" id="zoom-in" type="button" aria-label="Zoom in">＋</button></span></footer>
+              <section class="conversion-workspace" id="conversion-workspace" aria-labelledby="conversion-title" hidden>
+                <header class="conversion-heading"><span class="eyebrow">LOCAL FILE TOOLS</span><h2 id="conversion-title">Convert a document</h2><p>Choose a DOCX, TXT, Markdown, or HTML file, review the result, and download an HTML or Word file. Processing stays in this browser.</p></header>
+                <div class="conversion-grid">
+                  <section class="conversion-card" aria-labelledby="conversion-source-title">
+                    <div class="conversion-step"><span>1</span><div><h3 id="conversion-source-title">Choose a source</h3><p>PDF is view-only and cannot be converted in this build.</p></div></div>
+                    <button class="button button-outline conversion-select" id="conversion-select-source" type="button">Choose source file</button>
+                    <div class="conversion-source-summary"><strong id="conversion-source-name">No source selected</strong><span id="conversion-source-type">Choose DOCX, TXT, Markdown, or HTML</span></div>
+                    <label class="conversion-target-label" for="conversion-target">Convert to</label>
+                    <select class="tool-select conversion-target" id="conversion-target"><option value="html">HTML document</option><option value="docx">Word document (.docx)</option></select>
+                    <div class="conversion-warning" id="conversion-warning" role="note" hidden></div>
+                    <div class="conversion-progress" id="conversion-progress" role="status" aria-live="polite">Select a local file to begin.</div>
+                    <div class="conversion-actions"><button class="button button-primary" id="conversion-run" type="button" disabled>Convert</button><button class="button button-outline" id="conversion-download" type="button" disabled>Download result</button></div>
+                    <p class="conversion-result-name" id="conversion-result-name"></p>
+                  </section>
+                  <section class="conversion-preview-card" aria-labelledby="conversion-preview-title"><div><span class="eyebrow">RESULT PREVIEW</span><h3 id="conversion-preview-title">Preview</h3></div><p class="conversion-preview-empty">Your converted file will appear here for review.</p><iframe class="conversion-preview" id="conversion-preview" title="Converted document preview" sandbox="" hidden></iframe></section>
+                </div>
+              </section>
             </div>
             <aside class="review-comments" id="review-comments" aria-label="Review comments" hidden>
               <div class="review-comments-head"><div><span class="eyebrow">REVIEW</span><h2>Comments</h2><span class="review-comment-count" id="review-comment-count" aria-live="polite">0 comments · 0 open</span></div><button class="window-control" id="close-review-comments" type="button" aria-label="Close review comments">×</button></div>
@@ -93,6 +111,7 @@
 
       <input class="sr-only" id="file-picker" type="file" accept=".docx,.txt,.md,.html,.htm,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html,application/pdf" />
       <input class="sr-only" id="image-picker" type="file" accept="image/png,image/jpeg,image/gif" />
+      <input class="sr-only" id="conversion-file-picker" type="file" accept=".docx,.txt,.md,.markdown,.html,.htm,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html" />
     </main>
     <section class="adigun-window" id="adigun-window" aria-label="Adigun assistant" aria-hidden="false">
       <header class="adigun-header" id="adigun-drag-handle">
