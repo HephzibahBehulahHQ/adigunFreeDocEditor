@@ -1081,6 +1081,7 @@
         if (warningCount) warnings.push(warningCount + " Word compatibility warning" + (warningCount === 1 ? "" : "s") + ".");
         if (sanitized.removed) warnings.push(sanitized.removed + " unsupported or unsafe item" + (sanitized.removed === 1 ? " was" : "s were") + " omitted.");
         warnings.push("Word page layout and advanced formatting are not retained in this conversion.");
+        warnings.push("Tracked changes from the source are not retained in this conversion.");
       } else {
         if (file.size > 12 * 1024 * 1024) throw new Error("Text and HTML sources must be 12 MB or smaller.");
         const text = await file.text();
@@ -1297,6 +1298,7 @@
         const notes = [];
         if (warningCount) notes.push(`${warningCount} Word compatibility warning${warningCount === 1 ? "" : "s"}`);
         if (sanitized.removed) notes.push(`${sanitized.removed} unsupported or unsafe item${sanitized.removed === 1 ? "" : "s"} omitted`);
+        notes.push("Tracked changes from the source are not preserved");
         notify(notes.length ? `DOCX imported. ${notes.join("; ")}. Layout and advanced formatting may differ.` : "DOCX imported as editable structure. Word page layout and advanced formatting may differ.");
       } catch (error) { notify(`Could not import this Word document: ${error.message}`); }
       return;
