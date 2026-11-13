@@ -877,6 +877,64 @@
     });
   }
 
+  function clearLocalDocumentStore(databaseHandle = database) {
+    return new Promise((resolve, reject) => {
+      if (!databaseHandle) { reject(new Error("Local document storage is unavailable.")); return; }
+      let transaction;
+      try {
+        transaction = databaseHandle.transaction("documents", "readwrite");
+        transaction.objectStore("documents").clear();
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error || new Error("Could not clear local documents."));
+      transaction.onabort = () => reject(transaction.error || new Error("Local document deletion was canceled."));
+    });
+  }
+
+  function refreshLocalDataCount() {
+    const count = $("#local-data-count");
+    if (!database) { count.textContent = "Local storage is unavailable in this browser."; return; }
+    count.textContent = "Checking local storage…";
+    getDocuments().then((documents) => {
+      const label = documents.length === 1 ? "saved record" : "saved records";
+      count.textContent = `${documents.length} ${label}, including items in Trash.`;
+    }).catch(() => { count.textContent = "Saved documents could not be counted."; });
+  }
+
+  async function deleteLocalDocuments() {
+    const confirmButton = $("#confirm-clear-local-data");
+    const cancelButton = $("#cancel-clear-local-data");
+    const closeButton = $("#cancel-clear-local-data-close");
+    if (!database) { notify("Local document storage is unavailable in this browser."); return; }
+    confirmButton.disabled = true;
+    cancelButton.disabled = true;
+    closeButton.disabled = true;
+    clearTimeout(saveTimer);
+    try {
+      await clearLocalDocumentStore(database);
+      saveTimer = undefined;
+      if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
+      activeId = crypto.randomUUID();
+      reviewComments = [];
+      trackChangesEnabled = false;
+      showReviewPanel(false);
+      $("#clear-local-data-dialog").close();
+      $("#settings-dialog").close();
+      document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === "recent"));
+      showLanding();
+      notify("Saved documents and Trash entries were deleted from this browser.");
+    } catch {
+      notify("Local documents could not be deleted. The transaction did not complete.");
+    } finally {
+      confirmButton.disabled = false;
+      cancelButton.disabled = false;
+      closeButton.disabled = false;
+    }
+  }
+
   function showLanding() {
     activePdfFile = undefined;
     setWorkspaceMode("landing");
@@ -2525,6 +2583,8 @@
       $("#default-paper").value = defaultPageLayout.paper;
       $("#default-orientation").value = defaultPageLayout.orientation;
       $("#default-margins").value = defaultPageLayout.margins;
+      $("#clear-local-data").disabled = !database;
+      refreshLocalDataCount();
       $("#settings-dialog").showModal();
     }
     else if (button.dataset.view === "convert") showConversionWorkspace();
@@ -2595,6 +2655,13 @@
   $("#apply-page-header-footer").addEventListener("click", () => setPageHeaderFooter($("#page-header-text").value, $("#page-footer-text").value));
   $("#autosave-toggle").addEventListener("change", (event) => { autosave = event.target.checked; localStorage.setItem("adigun-autosave", String(autosave)); if (autosave) saveDocument(); else setSaveStatus("Autosave off"); });
   $("#theme-toggle").addEventListener("change", (event) => setTheme(event.target.checked ? "dark" : "light"));
+  $("#clear-local-data").addEventListener("click", () => {
+    if (!database) { notify("Local document storage is unavailable in this browser."); return; }
+    $("#clear-local-data-dialog").showModal();
+  });
+  $("#cancel-clear-local-data").addEventListener("click", () => $("#clear-local-data-dialog").close());
+  $("#cancel-clear-local-data-close").addEventListener("click", () => $("#clear-local-data-dialog").close());
+  $("#confirm-clear-local-data").addEventListener("click", deleteLocalDocuments);
   function saveDefaultPageLayout() {
     defaultPageLayout.paper = $("#default-paper").value === "letter" ? "letter" : "a4";
     defaultPageLayout.orientation = $("#default-orientation").value === "landscape" ? "landscape" : "portrait";
