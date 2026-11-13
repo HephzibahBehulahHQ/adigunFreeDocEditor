@@ -38,6 +38,7 @@ jobs:
           node tests/text-contrast.test.cjs
           node tests/conversion-layout.test.cjs
           node tests/workspace-chrome.test.cjs
+          node tests/landing-copy.test.cjs
           node tests/review-navigation.test.cjs
           node tests/review-target-size.test.cjs
           node tests/zoom-target-size.test.cjs
