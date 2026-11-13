@@ -19,6 +19,7 @@
         <button class="nav-item" data-view="convert" type="button"><span class="nav-icon" aria-hidden="true">⇄</span>Convert files</button>
         <button class="nav-item active" data-view="recent" type="button"><span class="nav-icon" aria-hidden="true">◷</span>Recent</button>
         <button class="nav-item" data-view="documents" type="button"><span class="nav-icon" aria-hidden="true">▤</span>My documents</button>
+        <button class="nav-item" data-view="templates" type="button"><span class="nav-icon" aria-hidden="true">▧</span>Templates</button>
         <button class="nav-item" data-view="trash" type="button"><span class="nav-icon" aria-hidden="true">⌫</span>Trash</button>
         <div class="sidebar-divider"></div>
         <button class="nav-item" data-view="settings" type="button"><span class="nav-icon" aria-hidden="true">⚙</span>Settings</button>
@@ -131,6 +132,17 @@
       </div>
     </section>
     <button class="assistant-launcher" id="assistant-launcher" type="button" aria-label="Open Adigun assistant">✦</button>
+    <dialog class="settings-dialog template-dialog" id="template-dialog" aria-labelledby="template-dialog-title">
+      <div class="template-library">
+        <div class="settings-head"><div><span class="eyebrow">ON THIS DEVICE</span><h2 id="template-dialog-title">Choose a template</h2></div><button class="window-control" id="close-templates" type="button" aria-label="Close templates">×</button></div>
+        <p class="template-library-note">Start a new editable document from a local template. Your document stays in this browser.</p>
+        <div class="template-cards">
+          <button class="landing-template" type="button" data-template="meeting"><span class="landing-template-icon" aria-hidden="true">▤</span><strong>Meeting notes</strong><small>Agenda, decisions and action items</small></button>
+          <button class="landing-template" type="button" data-template="project"><span class="landing-template-icon" aria-hidden="true">◇</span><strong>Project brief</strong><small>Objective, scope and milestones</small></button>
+          <button class="landing-template" type="button" data-template="letter"><span class="landing-template-icon" aria-hidden="true">✉</span><strong>Formal letter</strong><small>Recipient, subject and message</small></button>
+        </div>
+      </div>
+    </dialog>
     <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
       <form method="dialog"><div class="settings-head"><div><span class="eyebrow">PREFERENCES</span><h2 id="settings-title">Settings</h2></div><button class="window-control" aria-label="Close settings">×</button></div>
         <label class="setting-row" for="autosave-toggle"><span><strong>Automatic saving</strong><small>Keep document changes in this browser as you work.</small></span><input id="autosave-toggle" type="checkbox" checked /></label>
