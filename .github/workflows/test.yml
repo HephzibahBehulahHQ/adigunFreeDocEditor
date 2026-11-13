@@ -34,5 +34,6 @@ jobs:
           node tests/local-data-privacy.test.cjs
           node tests/mobile-header.test.cjs
           node tests/save-status.test.cjs
+          node tests/keyboard-accessibility.test.cjs
 
 
