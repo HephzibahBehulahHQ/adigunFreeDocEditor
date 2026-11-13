@@ -662,9 +662,16 @@
     if (!selection?.rangeCount || !editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) return;
     const range = selection.getRangeAt(0).cloneRange();
     const startNode = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
-    if (startNode?.closest("[data-revision-id]") || range.cloneContents().querySelector?.("[data-revision-id]")) return;
+    const existingRevision = startNode?.closest("[data-revision-id]");
+    if (existingRevision) {
+      if (existingRevision.tagName.toLowerCase() === "del" && isInsert && range.collapsed) {
+        range.setStartAfter(existingRevision);
+        range.collapse(true);
+      } else return;
+    }
+    if (range.cloneContents().querySelector?.("[data-revision-id]")) return;
     const blockSelector = "p,h1,h2,h3,h4,h5,h6,li,td,th,blockquote,pre";
-    if (range.collapsed) {
+    if (range.collapsed && !isInsert) {
       const textNode = range.startContainer;
       if (textNode.nodeType !== Node.TEXT_NODE) return;
       if (isBackwardDelete && range.startOffset > 0) range.setStart(textNode, range.startOffset - 1);
