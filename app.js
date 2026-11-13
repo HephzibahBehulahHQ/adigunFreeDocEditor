@@ -2640,11 +2640,25 @@
     return new Blob([...chunks, ...central, end], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   }
 
-  function docxExportWarningMessage(unsupported, commentCount) {
+  function docxExportWarnings(unsupported, commentCount) {
     const warnings = [];
     if (unsupported.length) warnings.push(`This Word copy cannot preserve: ${unsupported.join(", ")}.`);
-    if (commentCount > 0) warnings.push(`This Word copy will omit ${commentCount} local ${commentCount === 1 ? "comment" : "comments"}. They remain saved in this browser.`);
-    return warnings.length ? `${warnings.join("\n\n")}\n\nContinue with Word export? The document saved in this browser will remain unchanged.` : "";
+    if (commentCount > 0) warnings.push(`This Word copy will omit ${commentCount} local ${commentCount === 1 ? "comment" : "comments"}.`);
+    return warnings;
+  }
+  function confirmDocxExport(warnings) {
+    const dialog = $("#docx-export-warning-dialog");
+    const list = $("#docx-export-warning-list");
+    list.replaceChildren(...warnings.map((warning) => {
+      const item = document.createElement("li");
+      item.textContent = warning;
+      return item;
+    }));
+    dialog.returnValue = "";
+    return new Promise((resolve) => {
+      dialog.addEventListener("close", () => resolve(dialog.returnValue === "export"), { once: true });
+      dialog.showModal();
+    });
   }
   async function exportDocx() {
     if (activePdfFile) { notify("Open an editable document before exporting a Word file."); return; }
@@ -2654,8 +2668,8 @@
       for (const image of source.querySelectorAll("img")) if (typeof image.decode === "function") await image.decode();
     } catch { notify("Wait for the document images to finish loading, then export again."); return; }
     const wordPackage = makeWordPackage(source);
-    const warning = docxExportWarningMessage(wordPackage.unsupported, reviewComments.length);
-    if (warning && !window.confirm(warning)) return;
+    const warnings = docxExportWarnings(wordPackage.unsupported, reviewComments.length);
+    if (warnings.length && !(await confirmDocxExport(warnings))) return;
     download(makeStoredZip(wordPackage.files), `${safeFilename(title())}.docx`);
     notify(wordPackage.unsupported.length ? `Word file saved. Check unsupported content: ${wordPackage.unsupported.join(", ")}.` : "Word document downloaded with supported tables, images and page setup.");
   }
