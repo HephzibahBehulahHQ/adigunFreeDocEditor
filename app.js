@@ -24,6 +24,7 @@
   let paperSize = "a4";
   let pageCanvasDimensions = "";
   let pageMargins = "normal";
+  let pageNumbersEnabled = false;
   let tableInsertionRange;
   let imageInsertionRange;
   let reviewComments = [];
@@ -93,7 +94,7 @@
       [{ label: "Insert row above", action: "table-row-above", icon: "▤ Row ↑" }, { label: "Insert row below", action: "table-row-below", icon: "▤ Row ↓" }, { label: "Insert column left", action: "table-column-left", icon: "▥ Col ←" }, { label: "Insert column right", action: "table-column-right", icon: "▥ Col →" }, { label: "Delete row", action: "table-row-delete", icon: "⌫ Row" }, { label: "Delete column", action: "table-column-delete", icon: "⌫ Col" }, { label: "Delete table", action: "table-delete", icon: "⌫ Table" }, { label: "Merge adjacent cells", action: "table-merge", icon: "▦ Merge" }, { label: "Merge cells vertically", action: "table-merge-vertical", icon: "▤ Merge ↓" }, { label: "Split merged cell", action: "table-split", icon: "▦ Split" }],
     ],
     layout: [
-      [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }],
+      [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }, { label: "Page numbers", action: "page-numbers", icon: "＃ Pages" }],
     ],
     review: [
       [{ label: "Add comment", action: "add-comment", icon: "▧ Comment" }, { label: "Review comments", action: "show-comments", icon: "☷ Comments" }],
@@ -267,6 +268,7 @@
     flush();
     if (!pages.length) pages.push([]);
     const oldSheets = existing.filter((child) => child.classList?.contains("document-sheet"));
+    updatePageNumberLabels(oldSheets, pages.length);
     const unchanged = oldSheets.length === pages.length && pages.every((items, index) =>
       items.length === oldSheets[index].childNodes.length && items.every((node, childIndex) => node === oldSheets[index].childNodes[childIndex]));
     if (unchanged) { renderPageNavigation(); return; }
@@ -281,6 +283,7 @@
       items.forEach((node) => sheet.append(node));
       fragment.append(sheet);
     });
+    updatePageNumberLabels([...fragment.children], pages.length);
     editor.replaceChildren(fragment);
     renderPageNavigation();
     $("#page-count").textContent = `${pages.length} ${pages.length === 1 ? "page" : "pages"}`;
@@ -595,7 +598,7 @@
     const content = documentModel.fromDOM(editor);
     saveTimer = setTimeout(() => {
       const tx = database.transaction("documents", "readwrite");
-      tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, layout: { paper: paperSize, orientation: pageOrientation, margins: pageMargins }, updatedAt: Date.now(), kind: "document" });
+      tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, layout: { paper: paperSize, orientation: pageOrientation, margins: pageMargins, pageNumbers: pageNumbersEnabled }, updatedAt: Date.now(), kind: "document" });
       tx.oncomplete = () => { if (activeId === documentId) { setSaveStatus("Saved"); countWords(); } };
       tx.onerror = () => { if (activeId === documentId) { setSaveStatus("Save failed"); notify("Could not save this document on your device."); } };
     }, 280);
@@ -978,7 +981,7 @@
         } else {
           control = document.createElement("button");
           control.type = "button"; control.className = "tool-button"; control.dataset.action = tool.action; control.textContent = tool.action === "orientation" && pageOrientation === "landscape" ? "▭ Landscape" : tool.icon; control.title = tool.label; control.setAttribute("aria-label", tool.label);
-          if (tool.pressed) control.setAttribute("aria-pressed", "false");
+          if (tool.pressed || tool.action === "page-numbers") control.setAttribute("aria-pressed", tool.action === "page-numbers" ? String(pageNumbersEnabled) : "false");
           control.addEventListener("click", () => runTool(tool.action, control));
         }
         section.append(control);
@@ -1473,6 +1476,7 @@
 
   function runTool(action, button) {
     switch (action) {
+      case "page-numbers": setPageNumbers(!pageNumbersEnabled, button); break;
       case "indent": applyParagraphIndent(1); break;
       case "outdent": applyParagraphIndent(-1); break;
       case "table-row-above": insertTableRow("above"); break;
@@ -1545,6 +1549,7 @@
 
   function applyPageLayout(layout = defaultPageLayout) {
     paperSize = layout.paper === "letter" ? "letter" : "a4";
+    pageNumbersEnabled = Boolean(layout.pageNumbers);
     pageOrientation = layout.orientation === "landscape" ? "landscape" : "portrait";
     pageMargins = ["narrow", "wide"].includes(layout.margins) ? layout.margins : "normal";
     const card = $("#editor-card");
@@ -1556,11 +1561,29 @@
     const marginsSelect = ribbon.querySelector('[data-tool="margins"]');
     if (paperSelect) paperSelect.value = paperSize;
     if (marginsSelect) marginsSelect.value = pageMargins;
+    const pageNumbersButton = ribbon.querySelector('[data-action="page-numbers"]');
+    if (pageNumbersButton) pageNumbersButton.setAttribute("aria-pressed", String(pageNumbersEnabled));
     const orientationButton = ribbon.querySelector('[data-action="orientation"]');
     if (orientationButton) orientationButton.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape";
     pageCanvasDimensions = "";
     applyPaperCanvasMinimumHeight();
     scheduleEditorPagination();
+  }
+
+  function setPageNumbers(enabled, button) {
+    pageNumbersEnabled = Boolean(enabled);
+    if (button) button.setAttribute("aria-pressed", String(pageNumbersEnabled));
+    scheduleEditorPagination();
+    saveDocument();
+  }
+
+  function updatePageNumberLabels(sheets, total = sheets.length) {
+    sheets.forEach((sheet, index) => {
+      sheet.classList.toggle("page-numbered", pageNumbersEnabled);
+      if (pageNumbersEnabled) sheet.dataset.pageNumber = `${index + 1} / ${total}`;
+      else delete sheet.dataset.pageNumber;
+      sheet.setAttribute("aria-label", `Page ${index + 1}${pageNumbersEnabled ? ` of ${total}` : ""}`);
+    });
   }
 
   function setPaper(size) {
@@ -1839,16 +1862,20 @@
     if (landscape) [width, height] = [height, width];
     const verticalMarginTwips = $("#editor-card").classList.contains("margin-narrow") ? 720 : 1440;
     const horizontalMarginTwips = $("#editor-card").classList.contains("margin-narrow") ? 720 : $("#editor-card").classList.contains("margin-wide") ? 2880 : 1440;
-    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join("")}<w:sectPr><w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="${verticalMarginTwips}" w:right="${horizontalMarginTwips}" w:bottom="${verticalMarginTwips}" w:left="${horizontalMarginTwips}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+    const footerRelationshipId = pageNumbersEnabled ? `rId${nextRelationship++}` : "";
+    const footerReference = pageNumbersEnabled ? `<w:footerReference w:type="default" r:id="${footerRelationshipId}"/>` : "";
+    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join("")}<w:sectPr>${footerReference}<w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="${verticalMarginTwips}" w:right="${horizontalMarginTwips}" w:bottom="${verticalMarginTwips}" w:left="${horizontalMarginTwips}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
     const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style></w:styles>';
     const numberingXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="multilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="multilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>';
-    const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>';
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>${pageNumbersEnabled ? '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' : ""}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`;
     const rootRelationships = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>';
+    if (pageNumbersEnabled) relationships.push(`<Relationship Id="${footerRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`);
     const documentRelationships = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>${relationships.join("")}</Relationships>`;
     const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const coreProperties = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${wordXmlText(title())}</dc:title><dc:creator>adigunFreeDocEditor</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
     const appProperties = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>adigunFreeDocEditor</Application></Properties>';
     const files = { "[Content_Types].xml": contentTypes, "_rels/.rels": rootRelationships, "word/document.xml": documentXml, "word/styles.xml": stylesXml, "word/numbering.xml": numberingXml, "word/_rels/document.xml.rels": documentRelationships, "docProps/core.xml": coreProperties, "docProps/app.xml": appProperties };
+    if (pageNumbersEnabled) files["word/footer1.xml"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:fldSimple w:instr="PAGE"><w:r><w:t>1</w:t></w:r></w:fldSimple></w:r></w:p></w:ftr>';
     for (const image of images) files[`word/media/${image.fileName}`] = image.bytes;
     return { files, unsupported: [...unsupported] };
   }
