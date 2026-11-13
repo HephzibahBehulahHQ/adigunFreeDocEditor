@@ -694,9 +694,15 @@
       }
     }
     if (isInsert) {
-      const insertion = createTrackedRevision("ins", value);
-      range.insertNode(insertion);
-      range.setStartAfter(insertion);
+      const previousNode = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer.childNodes[range.startOffset - 1] : null;
+      if (previousNode?.tagName?.toLowerCase() === "ins" && previousNode.dataset.revisionAuthor === "You") {
+        previousNode.append(document.createTextNode(value));
+        range.setStartAfter(previousNode);
+      } else {
+        const insertion = createTrackedRevision("ins", value);
+        range.insertNode(insertion);
+        range.setStartAfter(insertion);
+      }
       range.collapse(true);
     }
     selection.removeAllRanges();
