@@ -606,6 +606,15 @@
     return [...editor.querySelectorAll("ins[data-revision-id], del[data-revision-id]")];
   }
 
+  function goToTrackedRevision(id) {
+    const revision = trackedRevisionNodes().find((item) => item.dataset.revisionId === id);
+    if (!revision) return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    revision.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" });
+    revision.classList.add("review-location-highlight");
+    window.setTimeout(() => revision.classList.remove("review-location-highlight"), 1800);
+  }
+
   function renderTrackedChanges() {
     const list = $("#tracked-revision-list");
     if (!list) return;
@@ -627,6 +636,11 @@
       quote.textContent = revision.textContent || "(empty text)";
       const actions = document.createElement("div");
       actions.className = "tracked-revision-actions";
+      const go = document.createElement("button");
+      go.type = "button";
+      go.dataset.revisionGo = revision.dataset.revisionId;
+      go.textContent = "Go to text";
+      actions.append(go);
       for (const [action, text] of [["accept", "Accept"], ["reject", "Reject"]]) {
         const button = document.createElement("button");
         button.type = "button";
@@ -2761,6 +2775,8 @@
   });
   $("#review-search").addEventListener("input", (event) => { reviewSearch = event.target.value; renderReviewComments(); });
   $("#tracked-revision-list").addEventListener("click", (event) => {
+    const go = event.target.closest("[data-revision-go]");
+    if (go) { goToTrackedRevision(go.dataset.revisionGo); return; }
     const button = event.target.closest("[data-revision-action]");
     if (button && ["accept", "reject"].includes(button.dataset.revisionAction)) resolveTrackedRevision(button.dataset.revisionId, button.dataset.revisionAction);
   });
