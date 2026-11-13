@@ -74,7 +74,7 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
     entries.set(name, buffer.subarray(dataStart, dataStart + size));
     offset = dataStart + size;
   }
-  assert.equal(entries.size, 10, "one deduplicated media part and one page-number footer are included");
+  assert.equal(entries.size, 11, "one deduplicated media part, header, and footer are included");
   assert.match(entries.get("word/header1.xml").toString("utf8"), /Project &amp; scope/);
   assert.match(entries.get("word/footer1.xml").toString("utf8"), /Confidential/);
   assert.match(entries.get("word/footer1.xml").toString("utf8"), /w:fldSimple w:instr="PAGE"/);
