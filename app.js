@@ -34,6 +34,8 @@
   let tableInsertionRange;
   let imageInsertionRange;
   let reviewComments = [];
+  let reviewFilter = "all";
+  let reviewSearch = "";
   let pendingReviewAnchor;
   let reviewHighlightTimer;
   let findMatches = [];
@@ -502,7 +504,11 @@
     list.replaceChildren();
     const openCount = reviewComments.filter((comment) => !comment.resolved).length;
     $("#review-comment-count").textContent = `${reviewComments.length} comments · ${openCount} open`;
-    const sorted = [...reviewComments].sort((a, b) => b.createdAt - a.createdAt);
+    const query = reviewSearch.trim().toLocaleLowerCase();
+    const sorted = [...reviewComments]
+      .filter((comment) => reviewFilter === "all" || (reviewFilter === "resolved") === comment.resolved)
+      .filter((comment) => !query || `${comment.quote} ${comment.body} ${comment.author}`.toLocaleLowerCase().includes(query))
+      .sort((a, b) => b.createdAt - a.createdAt);
     for (const comment of sorted) {
       const card = document.createElement("article");
       card.className = "review-comment";
@@ -537,7 +543,11 @@
       if (comment.resolved) card.classList.add("resolved");
       list.append(card);
     }
-    $("#review-comments-empty").hidden = reviewComments.length > 0;
+    const empty = $("#review-comments-empty");
+    empty.hidden = sorted.length > 0;
+    empty.textContent = reviewComments.length
+      ? "No comments match these filters."
+      : "Select text and use Review → Add comment to start a discussion.";
     updateReviewHighlights();
   }
 
@@ -2393,6 +2403,14 @@
   $("#close-comment").addEventListener("click", closeCommentDialog);
   $("#comment-dialog").addEventListener("close", () => { pendingReviewAnchor = null; });
   $("#close-review-comments").addEventListener("click", () => showReviewPanel(false));
+  $("#review-filter-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-review-filter]");
+    if (!button) return;
+    reviewFilter = button.dataset.reviewFilter;
+    for (const item of $("#review-filter-list").querySelectorAll("[data-review-filter]")) item.setAttribute("aria-pressed", String(item === button));
+    renderReviewComments();
+  });
+  $("#review-search").addEventListener("input", (event) => { reviewSearch = event.target.value; renderReviewComments(); });
   $("#review-comment-list").addEventListener("click", (event) => {
     const go = event.target.closest("[data-comment-go]");
     if (go) { goToReviewComment(go.dataset.commentGo); return; }
