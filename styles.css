@@ -227,9 +227,12 @@
   .product-mark{font-size:16px}
   .topbar{gap:4px;padding:0 8px}
   .topbar-title{gap:6px}
-  .document-title{width:min(96px,30vw);padding:5px 4px;font-size:11px}
+  .document-title{width:min(80px,24vw);padding:5px 4px;font-size:11px}
   .topbar-actions{gap:2px}
   .icon-button{width:26px}
   .button-outline{padding:5px}
 }
 
+
+.save-time{color:#708094;font-size:10px;font-variant-numeric:tabular-nums}
+.save-time::before{content:"·";margin-right:4px}
