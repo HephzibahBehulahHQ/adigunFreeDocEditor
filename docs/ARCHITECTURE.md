@@ -4,7 +4,7 @@ The repository initially contained the product specification, mockup, custom-dom
 
 ## Runtime boundaries
 
-- `index.html` defines the accessible application shell, workspace, entry screen, editor surface, and Adigun panel. On wide screens, the open local tools panel occupies a dedicated right rail; narrower screens retain the floating panel layout.
+- `index.html` defines the accessible application shell, workspace, entry screen, editor surface, and Adigun panel. On wide screens, the open local tools panel occupies a dedicated, pointer- and keyboard-resizable right rail; narrower screens retain the floating panel layout.
 - `styles.css` defines responsive layout and maps the verified HB brand tokens.
 - `app.js` owns document state, toolbar actions, browser-local persistence, file import/export and the local extractive overview.
 - `document-model.js` normalizes editable content to a versioned JSON tree with an allow-list for nodes and attributes, including font-family, text-color, highlight-color, line-spacing, paragraph-spacing and indent-level allow-lists. IndexedDB stores this model; older HTML records are migrated on open, and HTML/DOCX exports serialize through the model.

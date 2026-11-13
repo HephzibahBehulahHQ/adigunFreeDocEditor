@@ -7,6 +7,7 @@
   const ribbon = $("#ribbon-tools");
   const appShell = $(".app-shell");
   const assistant = $("#adigun-window");
+  const assistantResizeHandle = $("#assistant-dock-resize");
   const filePicker = $("#file-picker");
   const conversionFilePicker = $("#conversion-file-picker");
   const acceptedFileTypes = filePicker.accept;
@@ -18,6 +19,11 @@
   let lastSavedFor = activeId;
   let lastSavedAt = null;
   let activeTab = "home";
+  let assistantDockWidth = 310;
+  try {
+    const savedAssistantWidth = Number(localStorage.getItem("adigun-assistant-dock-width"));
+    if (Number.isFinite(savedAssistantWidth) && savedAssistantWidth >= 260 && savedAssistantWidth <= 480) assistantDockWidth = savedAssistantWidth;
+  } catch { /* Keep the default width when local preferences are unavailable. */ }
   let saveTimer;
   let editorPaginationTimer;
   let toastTimer;
@@ -3240,9 +3246,49 @@
     const docked = !assistant.classList.contains("hidden") && window.matchMedia("(min-width: 1200px)").matches;
     appShell.classList.toggle("assistant-docked", docked);
     assistant.classList.toggle("docked", docked);
+    if (docked) setAssistantDockWidth(assistantDockWidth, false);
   }
 
   window.addEventListener("resize", updateAssistantLayout);
+
+  function setAssistantDockWidth(width, persist = true) {
+    const maximum = Math.max(260, Math.min(480, window.innerWidth - 720));
+    assistantDockWidth = Math.min(maximum, Math.max(260, Math.round(width)));
+    appShell.style.setProperty("--assistant-docked-width", `${assistantDockWidth}px`);
+    assistantResizeHandle.setAttribute("aria-valuemax", String(maximum));
+    assistantResizeHandle.setAttribute("aria-valuenow", String(assistantDockWidth));
+    if (persist) {
+      try { localStorage.setItem("adigun-assistant-dock-width", String(assistantDockWidth)); }
+      catch { /* The current session can resize even when preferences cannot be stored. */ }
+    }
+  }
+
+  let assistantResizeStart;
+  assistantResizeHandle.addEventListener("pointerdown", (event) => {
+    if (!appShell.classList.contains("assistant-docked")) return;
+    event.preventDefault();
+    assistantResizeStart = { pointerId: event.pointerId, x: event.clientX, width: assistantDockWidth };
+    assistantResizeHandle.setPointerCapture(event.pointerId);
+  });
+  assistantResizeHandle.addEventListener("pointermove", (event) => {
+    if (assistantResizeStart?.pointerId !== event.pointerId) return;
+    setAssistantDockWidth(assistantResizeStart.width + assistantResizeStart.x - event.clientX);
+  });
+  const finishAssistantResize = (event) => {
+    if (assistantResizeStart?.pointerId === event.pointerId) assistantResizeStart = undefined;
+  };
+  assistantResizeHandle.addEventListener("pointerup", finishAssistantResize);
+  assistantResizeHandle.addEventListener("pointercancel", finishAssistantResize);
+  assistantResizeHandle.addEventListener("keydown", (event) => {
+    if (!appShell.classList.contains("assistant-docked")) return;
+    const step = event.shiftKey ? 40 : 12;
+    if (event.key === "ArrowLeft") setAssistantDockWidth(assistantDockWidth + step);
+    else if (event.key === "ArrowRight") setAssistantDockWidth(assistantDockWidth - step);
+    else if (event.key === "Home") setAssistantDockWidth(260);
+    else if (event.key === "End") setAssistantDockWidth(480);
+    else return;
+    event.preventDefault();
+  });
 
   function useAssistantFind() {
     if (window.matchMedia("(max-width: 900px)").matches) toggleAssistant(false);

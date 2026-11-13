@@ -35,19 +35,21 @@ const nodes = {
   "#assist-button": element(),
   ".app-shell": element(),
 };
+const assistantResizeHandle = { addEventListener() {}, setAttribute() {}, setPointerCapture() {} };
 nodes["#review-comments"].hidden = true;
 const assistant = element();
 const window = { matchMedia: (query) => ({ matches: query === "(max-width: 900px)" }), addEventListener() {} };
 const appShell = nodes[".app-shell"];
-const api = new Function("window", "$", "assistant", "appShell", "renderReviewComments", [
+const api = new Function("window", "$", "assistant", "appShell", "assistantResizeHandle", "renderReviewComments", [
   source.slice(reviewStart, reviewEnd),
   source.slice(assistantStart, assistantEnd),
   "return { showReviewPanel, showOutlinePanel, toggleAssistant };",
 ].join("\n"))(
   window,
-  (selector) => nodes[selector],
+  (selector) => selector === "#assistant-dock-resize" ? assistantResizeHandle : nodes[selector],
   assistant,
   appShell,
+  assistantResizeHandle,
   () => {},
 );
 
