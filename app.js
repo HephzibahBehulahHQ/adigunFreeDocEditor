@@ -518,8 +518,9 @@
     return true;
   }
 
-  function reviewCommentRange(comment, text = editorText()) {
+  function resolveReviewCommentStart(comment, text) {
     const quote = comment.quote;
+    if (!quote) return -1;
     let start = comment.start;
     if (text.slice(start, start + quote.length) !== quote) {
       const matches = [];
@@ -537,11 +538,16 @@
           return beforeMatch + afterMatch;
         };
         const ranked = matches.map((index) => ({ index, score: score(index) })).sort((a, b) => b.score - a.score);
-        if (ranked[0].score === 0 || ranked[0].score === ranked[1].score) return null;
+        if (ranked[0].score === 0 || ranked[0].score === ranked[1].score) return -1;
         start = ranked[0].index;
-      } else return null;
+      } else return -1;
     }
-    return rangeAtTextOffsets(start, start + quote.length);
+    return start >= 0 && start + quote.length <= text.length ? start : -1;
+  }
+
+  function reviewCommentRange(comment, text = editorText()) {
+    const start = resolveReviewCommentStart(comment, text);
+    return start < 0 ? null : rangeAtTextOffsets(start, start + comment.quote.length);
   }
 
   function updateReviewHighlights() {
@@ -2326,7 +2332,7 @@
     return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
   }
 
-  function makeWordPackage(source = editor, pageLayout = null) {
+  function makeWordPackage(source = editor, pageLayout = null, comments = []) {
     const exportLayout = pageLayout || { paper: $("#editor-card").classList.contains("paper-letter") ? "letter" : "a4", orientation: $("#editor-card").classList.contains("landscape") ? "landscape" : "portrait", margins: $("#editor-card").classList.contains("margin-narrow") ? "narrow" : $("#editor-card").classList.contains("margin-wide") ? "wide" : "normal", pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText };
     const relationships = [];
     const hyperlinkIds = new Map();
@@ -2346,17 +2352,77 @@
     let nextDrawing = 1;
     let nextRevision = 1;
 
+    const sourceTextNodes = [];
+    const collectSourceText = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) { sourceTextNodes.push(node); return; }
+      for (const child of [...(node.childNodes || node.children || [])]) collectSourceText(child);
+    };
+    collectSourceText(source);
+    const sourceText = sourceTextNodes.map((node) => node.nodeValue).join("");
+    const commentEvents = new Map();
+    const exportedComments = [];
+    let omittedCommentCount = 0;
+    const addCommentEvent = (offset, event) => {
+      if (!commentEvents.has(offset)) commentEvents.set(offset, []);
+      commentEvents.get(offset).push(event);
+    };
+    for (const comment of comments) {
+      const start = resolveReviewCommentStart(comment, sourceText);
+      const quote = String(comment.quote || "");
+      if (start < 0 || !quote) { omittedCommentCount++; continue; }
+      const id = exportedComments.length;
+      const end = start + quote.length;
+      exportedComments.push({ ...comment, id, start, end });
+      addCommentEvent(start, { type: "start", id });
+      addCommentEvent(end, { type: "end", id });
+    }
+    for (const events of commentEvents.values()) {
+      events.sort((first, second) => (first.type === "end" ? 0 : 1) - (second.type === "end" ? 0 : 1) || first.id - second.id);
+    }
+    let serializedTextOffset = 0;
+
+    function consumeCommentEvents(offset, predicate = () => true) {
+      const events = commentEvents.get(offset) || [];
+      const selected = events.filter(predicate);
+      if (selected.length) {
+        const remaining = events.filter((event) => !selected.includes(event));
+        if (remaining.length) commentEvents.set(offset, remaining);
+        else commentEvents.delete(offset);
+      }
+      return selected.map((event) => event.type === "start"
+        ? '<w:commentRangeStart w:id="' + event.id + '"/>'
+        : '<w:commentRangeEnd w:id="' + event.id + '"/><w:r><w:commentReference w:id="' + event.id + '"/></w:r>').join("");
+    }
+
+    function serializeTextRun(value, marks) {
+      const text = value.replace(/\s+/g, " ");
+      if (!text) return "";
+      const preserve = /^\s|\s$/.test(value) ? ' xml:space="preserve"' : "";
+      const fontFamily = marks.fontFamily;
+      const color = marks.textColor ? marks.textColor.slice(1) : "";
+      const highlight = marks.highlightColor ? exportableHighlightColors.get(marks.highlightColor) : "";
+      const properties = [fontFamily && '<w:rFonts w:ascii="' + wordXmlText(fontFamily) + '" w:hAnsi="' + wordXmlText(fontFamily) + '"/>', color && '<w:color w:val="' + wordXmlText(color) + '"/>', highlight && '<w:highlight w:val="' + highlight + '"/>', marks.bold && "<w:b/>", marks.italic && "<w:i/>", marks.underline && '<w:u w:val="single"/>', marks.strike && "<w:strike/>"].filter(Boolean).join("");
+      const textTag = marks.revisionType === "deletion" ? "w:delText" : "w:t";
+      return '<w:r>' + (properties ? "<w:rPr>" + properties + "</w:rPr>" : "") + "<" + textTag + preserve + ">" + wordXmlText(text) + "</" + textTag + "></w:r>";
+    }
+
     function serializeInline(node, marks = {}) {
       if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.nodeValue.replace(/\s+/g, " ");
-        if (!text) return "";
-        const preserve = /^\s|\s$/.test(node.nodeValue) ? ' xml:space="preserve"' : "";
-        const fontFamily = marks.fontFamily;
-        const color = marks.textColor ? marks.textColor.slice(1) : "";
-        const highlight = marks.highlightColor ? exportableHighlightColors.get(marks.highlightColor) : "";
-        const properties = [fontFamily && `<w:rFonts w:ascii="${wordXmlText(fontFamily)}" w:hAnsi="${wordXmlText(fontFamily)}"/>`, color && `<w:color w:val="${wordXmlText(color)}"/>`, highlight && `<w:highlight w:val="${highlight}"/>`, marks.bold && "<w:b/>", marks.italic && "<w:i/>", marks.underline && '<w:u w:val="single"/>', marks.strike && "<w:strike/>"].filter(Boolean).join("");
-        const textTag = marks.revisionType === "deletion" ? "w:delText" : "w:t";
-        return `<w:r>${properties ? `<w:rPr>${properties}</w:rPr>` : ""}<${textTag}${preserve}>${wordXmlText(text)}</${textTag}></w:r>`;
+        const rawText = node.nodeValue;
+        const nodeStart = serializedTextOffset;
+        const nodeEnd = nodeStart + rawText.length;
+        const interiorOffsets = [...commentEvents.keys()].filter((offset) => offset > nodeStart && offset < nodeEnd).sort((a, b) => a - b);
+        let output = consumeCommentEvents(nodeStart, (event) => event.type === "start");
+        let cursor = nodeStart;
+        for (const offset of interiorOffsets) {
+          output += serializeTextRun(rawText.slice(cursor - nodeStart, offset - nodeStart), marks);
+          output += consumeCommentEvents(offset);
+          cursor = offset;
+        }
+        output += serializeTextRun(rawText.slice(cursor - nodeStart), marks);
+        output += consumeCommentEvents(nodeEnd, (event) => event.type === "end" || nodeEnd === sourceText.length && event.type === "start");
+        serializedTextOffset = nodeEnd;
+        return output;
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return "";
       const tag = node.tagName.toLowerCase();
@@ -2583,7 +2649,39 @@
       }
     }
     walkBlocks(source);
+    const incompleteCommentIds = new Set([...commentEvents.values()].flat().map((event) => event.id));
+    if (incompleteCommentIds.size) {
+      for (const id of incompleteCommentIds) {
+        const rangeMarker = new RegExp('<w:commentRange(?:Start|End) w:id="' + id + '"/>', "g");
+        const reference = new RegExp('<w:r><w:commentReference w:id="' + id + '"/></w:r>', "g");
+        for (let index = 0; index < body.length; index++) body[index] = body[index].replace(rangeMarker, "").replace(reference, "");
+      }
+      for (let index = exportedComments.length - 1; index >= 0; index--) {
+        if (incompleteCommentIds.has(exportedComments[index].id)) exportedComments.splice(index, 1);
+      }
+      omittedCommentCount += incompleteCommentIds.size;
+    }
     if (!body.length) body.push("<w:p><w:r><w:t></w:t></w:r></w:p>");
+    let nextCommentParagraphId = 0;
+    const commentParagraph = (line) => {
+      const paragraphId = (0xC0000000 + nextCommentParagraphId++).toString(16).toUpperCase();
+      return { paragraphId, xml: '<w:p w14:paraId="' + paragraphId + '"><w:r><w:t xml:space="preserve">' + wordXmlText(line) + "</w:t></w:r></w:p>" };
+    };
+    const commentsXml = exportedComments.length
+      ? '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">' + exportedComments.map((comment) => {
+          const authorText = String(comment.author || "You").slice(0, 80);
+          const author = wordXmlText(authorText);
+          const initials = wordXmlText(authorText.trim().split(/\s+/).map((part) => part[0] || "").join("").slice(0, 9));
+          const timestamp = new Date(Number(comment.createdAt));
+          const date = Number.isNaN(timestamp.getTime()) ? new Date().toISOString() : timestamp.toISOString();
+          const paragraphs = String(comment.body || "").replace(/\r\n?/g, "\n").split("\n").map(commentParagraph);
+          comment.lastParagraphId = paragraphs.at(-1)?.paragraphId || "C0000000";
+          return '<w:comment w:id="' + comment.id + '" w:author="' + author + '" w:initials="' + initials + '" w:date="' + date + '">' + paragraphs.map((paragraph) => paragraph.xml).join("") + "</w:comment>";
+        }).join("") + "</w:comments>"
+      : "";
+    const commentsExtendedXml = exportedComments.length
+      ? '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">' + exportedComments.map((comment) => '<w15:commentEx w15:paraId="' + comment.lastParagraphId + '" w15:done="' + (comment.resolved ? "1" : "0") + '"/>').join("") + "</w15:commentsEx>"
+      : "";
 
     const isLetter = exportLayout.paper === "letter";
     const landscape = exportLayout.orientation === "landscape";
@@ -2598,22 +2696,30 @@
     const footerRelationshipId = hasFooter ? `rId${nextRelationship++}` : "";
     const headerReference = hasHeader ? `<w:headerReference w:type="default" r:id="${headerRelationshipId}"/>` : "";
     const footerReference = hasFooter ? `<w:footerReference w:type="default" r:id="${footerRelationshipId}"/>` : "";
+    const commentsRelationshipId = exportedComments.length ? `rId${nextRelationship++}` : "";
+    const commentsExtendedRelationshipId = exportedComments.length ? `rId${nextRelationship++}` : "";
     const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join("")}<w:sectPr>${headerReference}${footerReference}<w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="${verticalMarginTwips}" w:right="${horizontalMarginTwips}" w:bottom="${verticalMarginTwips}" w:left="${horizontalMarginTwips}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
     const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style></w:styles>';
     const numberingXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="multilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="multilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>';
-    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>${hasHeader ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : ""}${hasFooter ? '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' : ""}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`;
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>${exportedComments.length ? '<Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/commentsExtended.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"/>' : ""}${hasHeader ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : ""}${hasFooter ? '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' : ""}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`;
     const rootRelationships = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>';
     if (hasHeader) relationships.push(`<Relationship Id="${headerRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>`);
     if (hasFooter) relationships.push(`<Relationship Id="${footerRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`);
+    if (commentsRelationshipId) relationships.push(`<Relationship Id="${commentsRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/>`);
+    if (commentsExtendedRelationshipId) relationships.push(`<Relationship Id="${commentsExtendedRelationshipId}" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="commentsExtended.xml"/>`);
     const documentRelationships = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>${relationships.join("")}</Relationships>`;
     const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const coreProperties = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${wordXmlText(title())}</dc:title><dc:creator>adigunFreeDocEditor</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
     const appProperties = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>adigunFreeDocEditor</Application></Properties>';
     const files = { "[Content_Types].xml": contentTypes, "_rels/.rels": rootRelationships, "word/document.xml": documentXml, "word/styles.xml": stylesXml, "word/numbering.xml": numberingXml, "word/_rels/document.xml.rels": documentRelationships, "docProps/core.xml": coreProperties, "docProps/app.xml": appProperties };
+    if (exportedComments.length) {
+      files["word/comments.xml"] = commentsXml;
+      files["word/commentsExtended.xml"] = commentsExtendedXml;
+    }
     if (hasHeader) files["word/header1.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t xml:space="preserve">${wordXmlText(exportLayout.header)}</w:t></w:r></w:p></w:hdr>`;
     if (hasFooter) files["word/footer1.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr>${exportLayout.footer ? `<w:r><w:t xml:space="preserve">${wordXmlText(exportLayout.footer)}${exportLayout.pageNumbers ? " · " : ""}</w:t></w:r>` : ""}${exportLayout.pageNumbers ? '<w:fldSimple w:instr="PAGE"><w:r><w:t>1</w:t></w:r></w:fldSimple>' : ""}</w:p></w:ftr>`;
     for (const image of images) files[`word/media/${image.fileName}`] = image.bytes;
-    return { files, unsupported: [...unsupported] };
+    return { files, unsupported: [...unsupported], exportedCommentCount: exportedComments.length, omittedCommentCount };
   }
 
   function makeStoredZip(files) {
@@ -2640,10 +2746,10 @@
     return new Blob([...chunks, ...central, end], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   }
 
-  function docxExportWarnings(unsupported, commentCount) {
+  function docxExportWarnings(unsupported, omittedCommentCount) {
     const warnings = [];
-    if (unsupported.length) warnings.push(`This Word copy cannot preserve: ${unsupported.join(", ")}.`);
-    if (commentCount > 0) warnings.push(`This Word copy will omit ${commentCount} local ${commentCount === 1 ? "comment" : "comments"}.`);
+    if (unsupported.length) warnings.push("This Word copy cannot preserve: " + unsupported.join(", ") + ".");
+    if (omittedCommentCount > 0) warnings.push("This Word copy cannot match " + omittedCommentCount + " local " + (omittedCommentCount === 1 ? "comment" : "comments") + " to selected text, so they will be omitted.");
     return warnings;
   }
   function confirmDocxExport(warnings) {
@@ -2667,11 +2773,15 @@
     try {
       for (const image of source.querySelectorAll("img")) if (typeof image.decode === "function") await image.decode();
     } catch { notify("Wait for the document images to finish loading, then export again."); return; }
-    const wordPackage = makeWordPackage(source);
-    const warnings = docxExportWarnings(wordPackage.unsupported, reviewComments.length);
+    const wordPackage = makeWordPackage(source, null, reviewComments);
+    const warnings = docxExportWarnings(wordPackage.unsupported, wordPackage.omittedCommentCount);
     if (warnings.length && !(await confirmDocxExport(warnings))) return;
-    download(makeStoredZip(wordPackage.files), `${safeFilename(title())}.docx`);
-    notify(wordPackage.unsupported.length ? `Word file saved. Check unsupported content: ${wordPackage.unsupported.join(", ")}.` : "Word document downloaded with supported tables, images and page setup.");
+    download(makeStoredZip(wordPackage.files), safeFilename(title()) + ".docx");
+    const commentSummary = wordPackage.exportedCommentCount ? " " + wordPackage.exportedCommentCount + " local " + (wordPackage.exportedCommentCount === 1 ? "comment" : "comments") + " included." : "";
+    const exportSummary = wordPackage.unsupported.length
+      ? "Word file saved. Check unsupported content: " + wordPackage.unsupported.join(", ") + "."
+      : "Word document downloaded with supported tables, images and page setup.";
+    notify(exportSummary + commentSummary);
   }
 
   function exportHTML() {

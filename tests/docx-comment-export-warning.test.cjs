@@ -4,21 +4,21 @@ const path = require("node:path");
 
 const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
 const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
-const warningFunction = app.match(/function docxExportWarnings\(unsupported, commentCount\) \{[\s\S]*?\n  \}/)?.[0];
+const warningFunction = app.match(/function docxExportWarnings(unsupported, omittedCommentCount) \{[\s\S]*?\n  \}/)?.[0];
 assert.ok(warningFunction, "DOCX export should explain unsupported content and omitted comments");
 
 const getWarnings = new Function("return (" + warningFunction + ");")();
 assert.deepEqual(getWarnings([], 0), []);
 
 const singleComment = getWarnings([], 1);
-assert.match(singleComment[0], /omit 1 local comment/);
+assert.match(singleComment[0], /cannot match 1 local comment/);
 
 const unsupported = getWarnings(["advanced styles"], 0);
 assert.match(unsupported[0], /cannot preserve: advanced styles/);
 
 const combined = getWarnings(["advanced styles"], 2);
 assert.match(combined[0], /cannot preserve: advanced styles/);
-assert.match(combined[1], /omit 2 local comments/);
+assert.match(combined[1], /cannot match 2 local comments/);
 
 assert.match(app, /function confirmDocxExport\(warnings\)/);
 assert.match(app, /dialog\.showModal\(\)/);
