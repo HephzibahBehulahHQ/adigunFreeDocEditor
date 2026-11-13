@@ -126,6 +126,13 @@
       <div class="adigun-body">
         <div class="assistant-offline"><span class="offline-indicator"></span><div><strong>Local tools ready</strong><p>These tools read the open document in your browser. No AI provider is connected.</p></div></div>
         <div class="insight-grid" aria-live="polite"><div><strong id="insight-words">0</strong><span>Words</span></div><div><strong id="insight-characters">0</strong><span>Characters</span></div><div><strong id="insight-reading">&lt;1 min</strong><span>Reading time</span></div></div>
+        <section class="assistant-quick-tools" aria-labelledby="assistant-quick-tools-title">
+          <h3 id="assistant-quick-tools-title">Quick tools</h3>
+          <div class="assistant-tool-grid">
+            <button class="assistant-tool" id="assistant-find" type="button"><span class="assistant-tool-icon" aria-hidden="true">⌕</span><span><strong>Find and replace</strong><small>Search this document</small></span></button>
+            <button class="assistant-tool" id="assistant-review" type="button"><span class="assistant-tool-icon" aria-hidden="true">▧</span><span><strong>Review</strong><small>Comments and changes</small></span></button>
+          </div>
+        </section>
         <button class="overview-button" id="build-overview" type="button">Build a quick overview</button>
         <p class="overview-note">Extracts key sentences from this document. It does not use or imitate AI.</p>
         <div class="overview-result" id="overview-result" hidden></div>

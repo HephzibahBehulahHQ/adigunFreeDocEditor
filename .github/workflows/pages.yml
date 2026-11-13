@@ -36,7 +36,7 @@ jobs:
           node tests/document-model.test.cjs
           node tests/docx-image-export.test.cjs
           node tests/responsive-panels.test.cjs
-          node tests/tablet-layout.test.cjs
+          node tests/assistant-tools.test.cjs
       - name: Package application
         run: |
           mkdir -p _site/assets/vendor
