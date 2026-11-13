@@ -97,10 +97,18 @@
 .editor-card.landscape .document-sheet{min-height:var(--paper-min-height,560px)}
 .editor-card.margin-narrow .document-sheet{padding:48px}
 .editor-card.margin-wide .document-sheet{padding:96px 192px}
+.editor-card.margin-custom .document-sheet{padding:var(--page-margin-top,25.4mm) var(--page-margin-right,25.4mm) var(--page-margin-bottom,25.4mm) var(--page-margin-left,25.4mm)}
+.custom-margin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
+.custom-margin-grid label{display:flex;flex-direction:column;gap:5px;color:var(--ink);font-size:11px}
+.custom-margin-grid input{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit}
+.custom-margin-error{min-height:18px;margin:0;color:#b42318;font-size:11px}
+.custom-margin-dialog .settings-foot{align-items:center}
+@media(max-width:480px){.custom-margin-grid{gap:9px}.custom-margin-grid input{min-width:0}}
 .document-sheet:focus{outline:1px solid #d8dce8}
 @media(max-width:700px){
   .document-sheet{padding:38px 28px}
   .editor-card.margin-wide .document-sheet{padding:48px 30px}
+  .editor-card.margin-custom .document-sheet{padding:min(var(--page-margin-top),38px) min(var(--page-margin-right),28px) min(var(--page-margin-bottom),55px) min(var(--page-margin-left),28px)}
 }
 
 .settings-dialog{max-height:calc(100vh - 24px);overflow:auto}

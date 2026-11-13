@@ -27,6 +27,7 @@
   let paperSize = "a4";
   let pageCanvasDimensions = "";
   let pageMargins = "normal";
+  let pageCustomMarginsMm = { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 };
   let pageNumbersEnabled = false;
   let pageHeaderText = "";
   let pageFooterText = "";
@@ -107,7 +108,7 @@
       [{ label: "Insert row above", action: "table-row-above", icon: "▤ Row ↑" }, { label: "Insert row below", action: "table-row-below", icon: "▤ Row ↓" }, { label: "Insert column left", action: "table-column-left", icon: "▥ Col ←" }, { label: "Insert column right", action: "table-column-right", icon: "▥ Col →" }, { label: "Delete row", action: "table-row-delete", icon: "⌫ Row" }, { label: "Delete column", action: "table-column-delete", icon: "⌫ Col" }, { label: "Delete table", action: "table-delete", icon: "⌫ Table" }, { label: "Merge adjacent cells", action: "table-merge", icon: "▦ Merge" }, { label: "Merge cells vertically", action: "table-merge-vertical", icon: "▤ Merge ↓" }, { label: "Split merged cell", action: "table-split", icon: "▦ Split" }],
     ],
     layout: [
-      [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"]] }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }, { label: "Header & footer", action: "page-header-footer", icon: "↕ Header / footer" }, { label: "Page numbers", action: "page-numbers", icon: "＃ Pages" }],
+      [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"], ["custom", "Custom"]] }, { label: "Custom margins", action: "custom-margins", icon: "↔ Custom margins" }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }, { label: "Header & footer", action: "page-header-footer", icon: "↕ Header / footer" }, { label: "Page numbers", action: "page-numbers", icon: "＃ Pages" }],
     ],
     review: [
       [{ label: "Track changes", action: "track-changes", icon: "▤ Track changes" }, { label: "Add comment", action: "add-comment", icon: "▧ Comment" }, { label: "Review comments", action: "show-comments", icon: "☷ Comments" }],
@@ -849,7 +850,7 @@
     saveTimer = setTimeout(() => {
       const updatedAt = Date.now();
       const tx = database.transaction("documents", "readwrite");
-      tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, trackChanges: trackChangesEnabled, layout: { paper: paperSize, orientation: pageOrientation, margins: pageMargins, pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText }, updatedAt, kind: "document" });
+      tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, trackChanges: trackChangesEnabled, layout: { paper: paperSize, orientation: pageOrientation, margins: pageMargins, customMarginsMm: pageCustomMarginsMm, pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText }, updatedAt, kind: "document" });
       tx.oncomplete = () => { if (activeId === documentId) { setSaveStatus("Saved", false, updatedAt); countWords(); } };
       tx.onerror = () => { if (activeId === documentId) { setSaveStatus("Save failed"); notify("Could not save this document on your device."); } };
     }, 280);
@@ -1517,11 +1518,12 @@
         if (!paper) return null;
         const gutter = Number(attr(margins, wordNs, "w", "gutter") || 0);
         const sides = ["top", "right", "bottom", "left"].map((name) => Number(attr(margins, wordNs, "w", name)));
-        if (gutter !== 0 || sides.some((value) => !Number.isFinite(value))) return null;
+        if (gutter !== 0 || sides.some((value) => !Number.isFinite(value) || value < 0 || value > 5669) || sides[1] + sides[3] >= width - 567 || sides[0] + sides[2] >= height - 567) return null;
         const presets = [["normal", 1440], ["narrow", 720], ["wide", 2160]];
         const match = presets.find(([, value]) => sides.every((side) => near(side, value)));
-        if (!match) return null;
-        return { paper, orientation: landscape ? "landscape" : "portrait", margins: match[0] };
+        const parsed = { paper, orientation: landscape ? "landscape" : "portrait", margins: match?.[0] || "custom" };
+        if (!match) parsed.customMarginsMm = Object.fromEntries(["top", "right", "bottom", "left"].map((side, index) => [side, Math.round(sides[index] * 25.4 / 1440 * 10) / 10]));
+        return parsed;
       };
       const layouts = sections.map(parseSection);
       let layout = null;
@@ -1529,7 +1531,7 @@
       if (layouts.some((value) => !value)) unsupported = true;
       else {
         layout = layouts[0];
-        if (layouts.some((value) => value.paper !== layout.paper || value.orientation !== layout.orientation || value.margins !== layout.margins)) {
+        if (layouts.some((value) => value.paper !== layout.paper || value.orientation !== layout.orientation || value.margins !== layout.margins || (value.margins === "custom" && JSON.stringify(value.customMarginsMm) !== JSON.stringify(layout.customMarginsMm)))) {
           layout = null;
           unsupported = true;
         }
@@ -2539,6 +2541,7 @@
         notify(trackChangesEnabled ? "Track changes on. Text insertions and deletions will be reviewable." : "Track changes off.");
         break;
       case "page-header-footer": openPageHeaderFooterDialog(); break;
+      case "custom-margins": openCustomMarginsDialog(); break;
       case "indent": applyParagraphIndent(1); break;
       case "outdent": applyParagraphIndent(-1); break;
       case "table-row-above": insertTableRow("above"); break;
@@ -2609,18 +2612,74 @@
     editor.style.minHeight = "";
   }
 
+  function normalizeCustomMarginsMm(value) {
+    const normalized = {};
+    for (const side of ["top", "right", "bottom", "left"]) {
+      const number = Number(value?.[side]);
+      normalized[side] = Number.isFinite(number) ? Math.round(Math.min(100, Math.max(0, number)) * 10) / 10 : 25.4;
+    }
+    return normalized;
+  }
+
+  function applyPageMarginClasses(card = $("#editor-card")) {
+    card.classList.toggle("margin-narrow", pageMargins === "narrow");
+    card.classList.toggle("margin-wide", pageMargins === "wide");
+    card.classList.toggle("margin-custom", pageMargins === "custom");
+    if (pageMargins === "custom") {
+      for (const [side, millimeters] of Object.entries(pageCustomMarginsMm)) card.style.setProperty(`--page-margin-${side}`, `${millimeters}mm`);
+    } else {
+      for (const side of ["top", "right", "bottom", "left"]) card.style.removeProperty(`--page-margin-${side}`);
+    }
+  }
+
+  function openCustomMarginsDialog() {
+    const values = pageMargins === "custom" ? pageCustomMarginsMm : {
+      top: pageMargins === "narrow" ? 12.7 : 25.4,
+      right: pageMargins === "narrow" ? 12.7 : pageMargins === "wide" ? 50.8 : 25.4,
+      bottom: pageMargins === "narrow" ? 12.7 : 25.4,
+      left: pageMargins === "narrow" ? 12.7 : pageMargins === "wide" ? 50.8 : 25.4,
+    };
+    for (const side of ["top", "right", "bottom", "left"]) $(`#custom-margin-${side}`).value = Number(values[side]).toFixed(1);
+    $("#custom-margin-error").textContent = "";
+    $("#custom-margin-dialog").showModal();
+  }
+
+  function applyCustomMargins() {
+    const values = Object.fromEntries(["top", "right", "bottom", "left"].map((side) => [side, Number($(`#custom-margin-${side}`).value)]));
+    if (Object.values(values).some((value) => !Number.isFinite(value) || value < 0 || value > 100)) {
+      $("#custom-margin-error").textContent = "Enter each margin from 0 to 100 mm.";
+      return;
+    }
+    let paperWidth = paperSize === "letter" ? 215.9 : 210;
+    let paperHeight = paperSize === "letter" ? 279.4 : 297;
+    if (pageOrientation === "landscape") [paperWidth, paperHeight] = [paperHeight, paperWidth];
+    if (values.left + values.right >= paperWidth - 10 || values.top + values.bottom >= paperHeight - 10) {
+      $("#custom-margin-error").textContent = "Margins must leave at least 10 mm of space for document content.";
+      return;
+    }
+    pageCustomMarginsMm = normalizeCustomMarginsMm(values);
+    pageMargins = "custom";
+    applyPageMarginClasses();
+    const marginsSelect = ribbon.querySelector('[data-tool="margins"]');
+    if (marginsSelect) marginsSelect.value = "custom";
+    $("#custom-margin-dialog").close("apply");
+    scheduleEditorPagination();
+    saveDocument();
+    notify("Custom page margins applied.");
+  }
+
   function applyPageLayout(layout = defaultPageLayout) {
     paperSize = layout.paper === "letter" ? "letter" : "a4";
     pageNumbersEnabled = Boolean(layout.pageNumbers);
     pageHeaderText = typeof layout.header === "string" ? layout.header.slice(0, 180) : "";
     pageFooterText = typeof layout.footer === "string" ? layout.footer.slice(0, 180) : "";
     pageOrientation = layout.orientation === "landscape" ? "landscape" : "portrait";
-    pageMargins = ["narrow", "wide"].includes(layout.margins) ? layout.margins : "normal";
+    pageMargins = ["narrow", "wide", "custom"].includes(layout.margins) ? layout.margins : "normal";
+    pageCustomMarginsMm = normalizeCustomMarginsMm(layout.customMarginsMm);
     const card = $("#editor-card");
     card.classList.toggle("paper-letter", paperSize === "letter");
     card.classList.toggle("landscape", pageOrientation === "landscape");
-    card.classList.toggle("margin-narrow", pageMargins === "narrow");
-    card.classList.toggle("margin-wide", pageMargins === "wide");
+    applyPageMarginClasses(card);
     const paperSelect = ribbon.querySelector('[data-tool="paper"]');
     const marginsSelect = ribbon.querySelector('[data-tool="margins"]');
     if (paperSelect) paperSelect.value = paperSize;
@@ -2678,9 +2737,14 @@
   }
 
   function setPageMargins(value) {
+    if (value === "custom") {
+      openCustomMarginsDialog();
+      const marginsSelect = ribbon.querySelector('[data-tool="margins"]');
+      if (marginsSelect) marginsSelect.value = pageMargins;
+      return;
+    }
     pageMargins = ["narrow", "wide"].includes(value) ? value : "normal";
-    $("#editor-card").classList.toggle("margin-narrow", pageMargins === "narrow");
-    $("#editor-card").classList.toggle("margin-wide", pageMargins === "wide");
+    applyPageMarginClasses();
     scheduleEditorPagination();
     saveDocument();
   }
@@ -3045,8 +3109,11 @@
     let width = isLetter ? 12240 : 11906;
     let height = isLetter ? 15840 : 16838;
     if (landscape) [width, height] = [height, width];
-    const verticalMarginTwips = exportLayout.margins === "narrow" ? 720 : 1440;
-    const horizontalMarginTwips = exportLayout.margins === "narrow" ? 720 : exportLayout.margins === "wide" ? 2880 : 1440;
+    const customMargins = exportLayout.margins === "custom" ? Object.fromEntries(["top", "right", "bottom", "left"].map((side) => [side, Math.round(Math.min(100, Math.max(0, Number(exportLayout.customMarginsMm?.[side]) || 0)) * 1440 / 25.4)])) : null;
+    const topMarginTwips = customMargins ? customMargins.top : exportLayout.margins === "narrow" ? 720 : 1440;
+    const rightMarginTwips = customMargins ? customMargins.right : exportLayout.margins === "narrow" ? 720 : exportLayout.margins === "wide" ? 2880 : 1440;
+    const bottomMarginTwips = customMargins ? customMargins.bottom : exportLayout.margins === "narrow" ? 720 : 1440;
+    const leftMarginTwips = customMargins ? customMargins.left : exportLayout.margins === "narrow" ? 720 : exportLayout.margins === "wide" ? 2880 : 1440;
     const hasHeader = Boolean(exportLayout.header);
     const hasFooter = Boolean(exportLayout.footer || exportLayout.pageNumbers);
     const headerRelationshipId = hasHeader ? `rId${nextRelationship++}` : "";
@@ -3055,7 +3122,7 @@
     const footerReference = hasFooter ? `<w:footerReference w:type="default" r:id="${footerRelationshipId}"/>` : "";
     const commentsRelationshipId = exportedComments.length ? `rId${nextRelationship++}` : "";
     const commentsExtendedRelationshipId = exportedComments.length ? `rId${nextRelationship++}` : "";
-    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join("")}<w:sectPr>${headerReference}${footerReference}<w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="${verticalMarginTwips}" w:right="${horizontalMarginTwips}" w:bottom="${verticalMarginTwips}" w:left="${horizontalMarginTwips}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join("")}<w:sectPr>${headerReference}${footerReference}<w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="${topMarginTwips}" w:right="${rightMarginTwips}" w:bottom="${bottomMarginTwips}" w:left="${leftMarginTwips}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
     const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style></w:styles>';
     const numberingXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="multilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="multilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>';
     const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>${exportedComments.length ? '<Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/commentsExtended.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"/>' : ""}${hasHeader ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : ""}${hasFooter ? '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' : ""}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`;
@@ -3130,7 +3197,7 @@
     try {
       for (const image of source.querySelectorAll("img")) if (typeof image.decode === "function") await image.decode();
     } catch { notify("Wait for the document images to finish loading, then export again."); return; }
-    const wordPackage = makeWordPackage(source, null, reviewComments);
+    const wordPackage = makeWordPackage(source, { paper: paperSize, orientation: pageOrientation, margins: pageMargins, customMarginsMm: pageCustomMarginsMm, pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText }, reviewComments);
     const warnings = docxExportWarnings(wordPackage.unsupported, wordPackage.omittedCommentCount);
     if (warnings.length && !(await confirmDocxExport(warnings))) return;
     download(makeStoredZip(wordPackage.files), safeFilename(title()) + ".docx");
@@ -3495,6 +3562,7 @@
   });
   $("#cancel-table").addEventListener("click", () => $("#table-dialog").close());
   $("#apply-page-header-footer").addEventListener("click", () => setPageHeaderFooter($("#page-header-text").value, $("#page-footer-text").value));
+  $("#apply-custom-margins").addEventListener("click", applyCustomMargins);
   $("#autosave-toggle").addEventListener("change", (event) => { autosave = event.target.checked; localStorage.setItem("adigun-autosave", String(autosave)); if (autosave) saveDocument(); else setSaveStatus("Autosave off"); });
   $("#theme-toggle").addEventListener("change", (event) => setTheme(event.target.checked ? "dark" : "light"));
   $("#spellcheck-language").addEventListener("change", (event) => setSpellcheckLanguage(event.target.value));
