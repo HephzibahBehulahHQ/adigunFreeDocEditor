@@ -8,6 +8,8 @@
   const appShell = $(".app-shell");
   const assistant = $("#adigun-window");
   const assistantResizeHandle = $("#assistant-dock-resize");
+  const documentTabStrip = $("#open-document-tabs");
+  const documentTabList = $("#open-document-tab-list");
   const filePicker = $("#file-picker");
   const conversionFilePicker = $("#conversion-file-picker");
   const acceptedFileTypes = filePicker.accept;
@@ -19,6 +21,9 @@
   let lastSavedFor = activeId;
   let lastSavedAt = null;
   let activeTab = "home";
+  let activeDocumentKind = "none";
+  let activeWorkspaceMode = "landing";
+  let openDocumentTabs = [];
   let assistantDockWidth = 310;
   try {
     const savedAssistantWidth = Number(localStorage.getItem("adigun-assistant-dock-width"));
@@ -845,27 +850,77 @@
     element?.scrollIntoView({ block: "center", behavior: "auto" });
   }
 
-  function saveDocument(force = false) {
+  function saveDocument(force = false, immediate = false) {
     clearTimeout(saveTimer);
-    if (!autosave && !force) { setSaveStatus("Autosave off"); return; }
-    if (!database) { setSaveStatus("Local save unavailable"); return; }
+    if (!autosave && !force) { setSaveStatus("Autosave off"); return false; }
+    if (!database) { setSaveStatus("Local save unavailable"); return false; }
     setSaveStatus("Saving…", true);
     const documentId = activeId;
     const documentTitle = title();
+    const openTab = openDocumentTabs.find((item) => item.id === documentId);
+    if (openTab && openTab.title !== documentTitle) { openTab.title = documentTitle; renderOpenDocumentTabs(); }
     const savedComments = reviewComments.map((comment) => ({ ...comment }));
     const content = documentModel.fromDOM(editor);
-    saveTimer = setTimeout(() => {
+    const persist = () => new Promise((resolve) => {
       const updatedAt = Date.now();
-      const tx = database.transaction("documents", "readwrite");
+      let tx;
+      try { tx = database.transaction("documents", "readwrite"); }
+      catch { if (activeId === documentId) setSaveStatus("Save failed"); resolve(false); return; }
       tx.objectStore("documents").put({ id: documentId, title: documentTitle, content, contentFormat: documentModel.format, reviewComments: savedComments, trackChanges: trackChangesEnabled, layout: { paper: paperSize, orientation: pageOrientation, margins: pageMargins, customMarginsMm: pageCustomMarginsMm, pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText }, updatedAt, kind: "document" });
-      tx.oncomplete = () => { if (activeId === documentId) { setSaveStatus("Saved", false, updatedAt); countWords(); } };
-      tx.onerror = () => { if (activeId === documentId) { setSaveStatus("Save failed"); notify("Could not save this document on your device."); } };
-    }, 280);
+      tx.oncomplete = () => { if (activeId === documentId) { setSaveStatus("Saved", false, updatedAt); countWords(); } resolve(true); };
+      tx.onerror = () => { if (activeId === documentId) { setSaveStatus("Save failed"); notify("Could not save this document on your device."); } resolve(false); };
+      tx.onabort = () => resolve(false);
+    });
+    if (immediate) { saveTimer = undefined; return persist(); }
+    saveTimer = setTimeout(persist, 280);
+    return undefined;
   }
 
   function setTitle(value) {
     titleInput.value = value || "Untitled document";
     $("#stage-title").textContent = title();
+    const tab = activeDocumentKind === "none" ? undefined : openDocumentTabs.find((item) => item.id === activeId);
+    if (tab && tab.title !== title()) { tab.title = title(); renderOpenDocumentTabs(); }
+  }
+
+  function renderOpenDocumentTabs() {
+    documentTabList.replaceChildren();
+    const visible = openDocumentTabs.length > 0 && activeDocumentKind !== "none" && activeWorkspaceMode !== "landing" && activeWorkspaceMode !== "list";
+    documentTabStrip.hidden = !visible;
+    for (const item of openDocumentTabs) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "open-document-tab-item";
+      wrapper.setAttribute("aria-selected", String(item.id === activeId && item.kind === activeDocumentKind));
+      const tab = document.createElement("button");
+      tab.className = "open-document-tab";
+      tab.type = "button";
+      tab.id = `open-document-tab-${item.id}`;
+      tab.dataset.documentTab = item.id;
+      tab.setAttribute("aria-pressed", String(item.id === activeId && item.kind === activeDocumentKind));
+      tab.tabIndex = 0;
+      tab.textContent = item.title;
+      tab.title = item.title;
+      const close = document.createElement("button");
+      close.className = "open-document-tab-close";
+      close.type = "button";
+      close.dataset.closeDocumentTab = item.id;
+      close.setAttribute("aria-label", `Close ${item.title}`);
+      close.textContent = "×";
+      wrapper.append(tab, close);
+      documentTabList.append(wrapper);
+    }
+  }
+
+  function registerOpenDocumentTab(tab) {
+    const existing = openDocumentTabs.find((item) => item.id === tab.id);
+    if (existing) Object.assign(existing, tab);
+    else openDocumentTabs.push(tab);
+    renderOpenDocumentTabs();
+  }
+
+  async function flushActiveDocument() {
+    if (activeDocumentKind !== "document") return true;
+    return (await saveDocument(true, true)) === true;
   }
 
   function setWorkspaceMode(mode) {
@@ -893,6 +948,8 @@
     $("#export-docx").hidden = !isDocument;
     $("#export-html").lastElementChild.textContent = mode === "pdf" ? "Download PDF" : "Export HTML";
     if (isConversion) { editor.hidden = true; $(".page-footer").hidden = true; }
+    activeWorkspaceMode = mode;
+    renderOpenDocumentTabs();
     updateParagraphRuler();
   }
 
@@ -952,11 +1009,13 @@
     },
   };
 
-  function createDocument(template) {
+  async function createDocument(template) {
+    if (!(await flushActiveDocument())) { notify("Save the open document before creating another."); return; }
     activePdfFile = undefined;
     if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
     $("#pdf-frame")?.remove();
     activeId = crypto.randomUUID();
+    activeDocumentKind = "document";
     applyPageLayout();
     reviewComments = [];
     trackChangesEnabled = false;
@@ -964,6 +1023,7 @@
     showReviewPanel(false);
     renderReviewComments();
     setTitle(template?.title || "Untitled document");
+    registerOpenDocumentTab({ id: activeId, title: title(), kind: "document" });
     setWorkspaceMode("document");
     $("#file-kind").textContent = "New document";
     $("#editor-card").classList.remove("pdf-preview");
@@ -1023,6 +1083,9 @@
     try {
       await clearLocalDocumentStore(database);
       saveTimer = undefined;
+      openDocumentTabs = [];
+      activeDocumentKind = "none";
+      renderOpenDocumentTabs();
       if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
       activeId = crypto.randomUUID();
       reviewComments = [];
@@ -1043,6 +1106,9 @@
   }
 
   function showLanding() {
+    if (activeDocumentKind === "document") saveDocument(true, true);
+    activeDocumentKind = "none";
+    renderOpenDocumentTabs();
     activePdfFile = undefined;
     setWorkspaceMode("landing");
     setTitle("Workspace");
@@ -1080,7 +1146,6 @@
     setWorkspaceMode("conversion");
     $("#editor-card").classList.remove("landing", "pdf-preview");
     $("#stage-title").textContent = "Convert files";
-    setTitle("Convert files");
     $("#file-kind").textContent = "Runs locally in this browser";
     $("#page-count").textContent = "DOCX, TXT, Markdown, HTML → HTML or Word";
     $("#word-count").textContent = "Choose a source file";
@@ -1217,6 +1282,9 @@
     $("#document-list-empty").hidden = matchCount !== 0;
   }
   async function showDocumentList(view) {
+    if (!(await flushActiveDocument())) { notify("Save the open document before opening this list."); return; }
+    activeDocumentKind = "none";
+    renderOpenDocumentTabs();
     activePdfFile = undefined;
     $("#pdf-frame")?.remove();
     $("#editor-card").classList.remove("pdf-preview");
@@ -1858,32 +1926,96 @@
     return { html: safeRoot.innerHTML, removed };
   }
 
-  function openSaved(id) {
+  async function openSaved(id, alreadyFlushed = false) {
+    if (id === activeId && activeDocumentKind === "document") { setWorkspaceMode("document"); return; }
+    if (!alreadyFlushed && !(await flushActiveDocument())) { notify("Save the open document before switching tabs."); return; }
+    if (!database) { notify("Local document storage is unavailable in this browser."); return; }
+    const previousMode = activeWorkspaceMode;
+    let doc;
+    try {
+      doc = await new Promise((resolve, reject) => {
+        const request = database.transaction("documents", "readonly").objectStore("documents").get(id);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    } catch { notify("This saved document could not be opened."); return; }
+    if (!doc || doc.deleted) { notify("This saved document is unavailable."); return; }
     activePdfFile = undefined;
     $("#pdf-frame")?.remove();
     $("#editor-card").classList.remove("pdf-preview");
     if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
-    database.transaction("documents", "readonly").objectStore("documents").get(id).onsuccess = (event) => {
-      const doc = event.target.result;
-      if (!doc) return;
-      activeId = doc.id;
-      applyPageLayout(doc.layout);
-      reviewComments = normalizeReviewComments(doc.reviewComments);
-      trackChangesEnabled = Boolean(doc.trackChanges);
-      updateRibbonSelection();
-      showReviewPanel(false);
-      setTitle(doc.title);
-      setSaveStatus("Saved", false, doc.updatedAt);
-      setWorkspaceMode("document");
-      $("#editor-card").classList.remove("landing");
-      $("#file-kind").textContent = "Saved on this device";
-      const content = typeof doc.content === "string" ? documentModel.fromHTML(doc.content) : documentModel.normalize(doc.content);
-      editor.innerHTML = documentModel.toHTML(content) || "<p><br></p>";
-      editor.hidden = false;
-      renderReviewComments();
-      countWords();
-      notify("Document opened.");
-    };
+    activeId = doc.id;
+    activeDocumentKind = "document";
+    applyPageLayout(doc.layout);
+    reviewComments = normalizeReviewComments(doc.reviewComments);
+    trackChangesEnabled = Boolean(doc.trackChanges);
+    updateRibbonSelection();
+    showReviewPanel(false);
+    setTitle(doc.title);
+    registerOpenDocumentTab({ id: doc.id, title: doc.title, kind: "document" });
+    setSaveStatus("Saved", false, doc.updatedAt);
+    setWorkspaceMode("document");
+    $("#editor-card").classList.remove("landing");
+    $("#file-kind").textContent = "Saved on this device";
+    const content = typeof doc.content === "string" ? documentModel.fromHTML(doc.content) : documentModel.normalize(doc.content);
+    editor.innerHTML = documentModel.toHTML(content) || "<p><br></p>";
+    editor.hidden = false;
+    renderReviewComments();
+    countWords();
+    notify("Document opened.");
+  }
+
+  async function activateOpenDocumentTab(id, alreadyFlushed = false) {
+    const tab = openDocumentTabs.find((item) => item.id === id);
+    if (!tab) return;
+    if (tab.kind === "document") { await openSaved(id, alreadyFlushed); return; }
+    if (!alreadyFlushed && !(await flushActiveDocument())) { notify("Save the open document before switching tabs."); return; }
+    if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
+    $("#pdf-frame")?.remove();
+    activeId = tab.id;
+    activeDocumentKind = "pdf";
+    activePdfFile = tab.file;
+    setTitle(tab.title);
+    setWorkspaceMode("pdf");
+    $("#editor-card").classList.remove("landing");
+    $("#editor-card").classList.add("pdf-preview");
+    $("#file-kind").textContent = "PDF preview · original file";
+    $("#page-count").textContent = "Original PDF";
+    $("#word-count").textContent = "PDF preview";
+    $("#insight-words").textContent = "—";
+    $("#insight-characters").textContent = "—";
+    $("#insight-reading").textContent = "—";
+    $("#export-html").lastElementChild.textContent = "Download PDF";
+    pdfUrl = URL.createObjectURL(tab.file);
+    const frame = document.createElement("iframe");
+    frame.id = "pdf-frame";
+    frame.title = `PDF preview: ${tab.title}`;
+    frame.src = `${pdfUrl}#toolbar=1&navpanes=0`;
+    $("#editor-card").insertBefore(frame, $(".page-footer"));
+    editor.hidden = true;
+    $(".ribbon-tabs").hidden = true;
+    ribbon.hidden = true;
+    renderOpenDocumentTabs();
+  }
+
+  async function closeOpenDocumentTab(id) {
+    const index = openDocumentTabs.findIndex((item) => item.id === id);
+    if (index < 0) return;
+    const closingActive = id === activeId && activeDocumentKind !== "none";
+    if (closingActive && !(await flushActiveDocument())) { notify("Save the open document before closing its tab."); return; }
+    const next = closingActive ? openDocumentTabs[index - 1] || openDocumentTabs[index + 1] : undefined;
+    openDocumentTabs.splice(index, 1);
+    if (closingActive && activeDocumentKind === "pdf") {
+      if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
+      $("#pdf-frame")?.remove();
+    }
+    renderOpenDocumentTabs();
+    if (next) { await activateOpenDocumentTab(next.id, true); return; }
+    if (closingActive) {
+      activeDocumentKind = "none";
+      activeId = crypto.randomUUID();
+      showLanding();
+    }
   }
 
   async function importFile(file) {
@@ -1906,14 +2038,17 @@
         const commentTargetText = new DOMParser().parseFromString("<main>" + revisionMapping.html + "</main>", "text/html").querySelector("main")?.textContent || "";
         const importedCommentData = await readDocxReviewComments(arrayBuffer, archiveEntry, commentTargetText);
         if (revisionMapping.html.length > 12 * 1024 * 1024) throw new Error("The editable document exceeds the 12 MB safety limit.");
+        if (!(await flushActiveDocument())) { notify("Save the open document before importing another file."); return; }
         if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
         $("#pdf-frame")?.remove();
         activePdfFile = undefined;
         activeId = crypto.randomUUID();
+        activeDocumentKind = "document";
         applyPageLayout({ ...(importedPageLayout.layout || defaultPageLayout), header: importedPageLayout.header, footer: importedPageLayout.footer, pageNumbers: importedPageLayout.pageNumbers });
         reviewComments = normalizeReviewComments(importedCommentData.comments);
         showReviewPanel(false);
         setTitle(file.name.replace(/\.docx$/i, "") || file.name);
+        registerOpenDocumentTab({ id: activeId, title: title(), kind: "document" });
         $("#file-kind").textContent = "DOCX imported · editable structure";
         $("#editor-card").classList.remove("pdf-preview", "landing");
         editor.hidden = false;
@@ -1942,21 +2077,27 @@
       } catch (error) { notify(`Could not import this Word document: ${error.message}`); }
       return;
     }
+    const importedText = extension === "pdf" || file.type === "application/pdf" ? "" : await file.text();
+    if (!(await flushActiveDocument())) { notify("Save the open document before importing another file."); return; }
     if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
     $("#pdf-frame")?.remove();
     activePdfFile = undefined;
     activeId = crypto.randomUUID();
+    activeDocumentKind = extension === "pdf" || file.type === "application/pdf" ? "pdf" : "document";
     applyPageLayout();
     reviewComments = [];
     trackChangesEnabled = false;
     updateRibbonSelection();
     showReviewPanel(false);
     setTitle(file.name.replace(/\.[^.]+$/, "") || file.name);
+    registerOpenDocumentTab(activeDocumentKind === "pdf"
+      ? { id: activeId, title: title(), kind: "pdf", file }
+      : { id: activeId, title: title(), kind: "document" });
     $("#file-kind").textContent = extension === "pdf" ? "PDF preview · original file" : `${extension.toUpperCase()} imported as editable text`;
     $("#editor-card").classList.remove("pdf-preview");
     $("#editor-card").classList.remove("landing");
     editor.hidden = false;
-    if (extension === "pdf" || file.type === "application/pdf") {
+    if (activeDocumentKind === "pdf") {
       setWorkspaceMode("pdf");
       activePdfFile = file;
       pdfUrl = URL.createObjectURL(file);
@@ -1982,8 +2123,7 @@
     }
     setWorkspaceMode("document");
     $("#export-html").lastElementChild.textContent = "Export HTML";
-    const text = await file.text();
-    const plain = extension === "html" || extension === "htm" ? new DOMParser().parseFromString(text, "text/html").body.innerText : text;
+    const plain = extension === "html" || extension === "htm" ? new DOMParser().parseFromString(importedText, "text/html").body.innerText : importedText;
     editor.innerHTML = plain.split(/\r?\n/).map((line) => `<p>${escapeHTML(line) || "<br>"}</p>`).join("") || "<p><br></p>";
     countWords();
     saveDocument();
@@ -3422,6 +3562,26 @@
   }
 
   $("#new-document").addEventListener("click", () => { setMobileMenu(false); createDocument(); });
+  $("#new-document-tab").addEventListener("click", () => createDocument());
+  documentTabList.addEventListener("click", (event) => {
+    const close = event.target.closest("[data-close-document-tab]");
+    if (close) { closeOpenDocumentTab(close.dataset.closeDocumentTab); return; }
+    const tab = event.target.closest("[data-document-tab]");
+    if (tab) activateOpenDocumentTab(tab.dataset.documentTab);
+  });
+  documentTabList.addEventListener("keydown", (event) => {
+    const current = event.target.closest("[data-document-tab]");
+    if (!current) return;
+    const tabs = [...documentTabList.querySelectorAll("[data-document-tab]")];
+    const index = tabs.indexOf(current);
+    const targetIndex = event.key === "ArrowRight" ? (index + 1) % tabs.length
+      : event.key === "ArrowLeft" ? (index + tabs.length - 1) % tabs.length
+        : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : -1;
+    if (targetIndex < 0) return;
+    event.preventDefault();
+    tabs[targetIndex].focus();
+    activateOpenDocumentTab(tabs[targetIndex].dataset.documentTab);
+  });
   $("#open-document").addEventListener("click", () => { setMobileMenu(false); openFilePicker(); });
   $("#mobile-menu").addEventListener("click", () => setMobileMenu(!$("#workspace-nav").classList.contains("mobile-open")));
   document.addEventListener("click", (event) => {
