@@ -2640,6 +2640,12 @@
     return new Blob([...chunks, ...central, end], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   }
 
+  function docxExportWarningMessage(unsupported, commentCount) {
+    const warnings = [];
+    if (unsupported.length) warnings.push(`This Word copy cannot preserve: ${unsupported.join(", ")}.`);
+    if (commentCount > 0) warnings.push(`This Word copy will omit ${commentCount} local ${commentCount === 1 ? "comment" : "comments"}. They remain saved in this browser.`);
+    return warnings.length ? `${warnings.join("\n\n")}\n\nContinue with Word export? The document saved in this browser will remain unchanged.` : "";
+  }
   async function exportDocx() {
     if (activePdfFile) { notify("Open an editable document before exporting a Word file."); return; }
     const source = document.createElement("div");
@@ -2648,7 +2654,8 @@
       for (const image of source.querySelectorAll("img")) if (typeof image.decode === "function") await image.decode();
     } catch { notify("Wait for the document images to finish loading, then export again."); return; }
     const wordPackage = makeWordPackage(source);
-    if (wordPackage.unsupported.length && !window.confirm(`This export cannot preserve: ${wordPackage.unsupported.join(", ")}. It will create a reduced Word copy and leave the browser-saved document unchanged. Continue?`)) return;
+    const warning = docxExportWarningMessage(wordPackage.unsupported, reviewComments.length);
+    if (warning && !window.confirm(warning)) return;
     download(makeStoredZip(wordPackage.files), `${safeFilename(title())}.docx`);
     notify(wordPackage.unsupported.length ? `Word file saved. Check unsupported content: ${wordPackage.unsupported.join(", ")}.` : "Word document downloaded with supported tables, images and page setup.");
   }

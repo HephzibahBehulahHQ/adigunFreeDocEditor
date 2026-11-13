@@ -26,7 +26,7 @@ Status is specific to the current first workspace slice.
 | Accounts, cloud sync or shared documents | Not implemented | No identity or remote persistence service exists in this repository. |
 | Find and replace | Implemented | Searches editable document text, navigates matches, and replaces one or all matches. Replace all is disabled above 5,000 matches to keep large edits bounded. |
 | Strikethrough formatting | Implemented | Applies to selected text and persists through the local document model, DOCX import and DOCX export. |
-| Document comments | Partial | Quote- and context-anchored comments are saved with the local document; comments can be resolved and reopened. Comments are not exported to DOCX. |
+| Document comments | Partial | Quote- and context-anchored comments are saved with the local document; comments can be resolved and reopened. Comments are not exported to DOCX, and the export warns before omitting them. |
 | Track changes and review history | Partial | Opt-in local tracking captures plain text insertions and same-paragraph deletions, with author/time metadata and per-change or bulk accept/reject actions. Revisions persist when reopened and export as OOXML `w:ins`/`w:del` with author/date. Formatting and multi-paragraph edits are not tracked; simple imported DOCX revisions are reviewable when paragraph alignment is exact. |
 
 
