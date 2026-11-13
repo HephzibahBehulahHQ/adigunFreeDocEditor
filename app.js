@@ -2467,7 +2467,10 @@
     const button = event.target.closest("[data-view]"); if (!button) return;
     setMobileMenu(false);
     document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item === button));
-    if (button.dataset.view === "settings") {
+    if (button.dataset.view === "templates") {
+      $("#template-dialog").showModal();
+    }
+    else if (button.dataset.view === "settings") {
       $("#autosave-toggle").checked = autosave;
       $("#theme-toggle").checked = theme === "dark";
       $("#default-paper").value = defaultPageLayout.paper;
@@ -2490,6 +2493,13 @@
     if (event.target.closest("#landing-all")) document.querySelector('[data-view="recent"]')?.click();
     const trashButton = event.target.closest("[data-trash-id]"); if (trashButton) markDeleted(trashButton.dataset.trashId, true);
     const restoreButton = event.target.closest("[data-restore-id]"); if (restoreButton) markDeleted(restoreButton.dataset.restoreId, false);
+  });
+  $("#close-templates").addEventListener("click", () => $("#template-dialog").close());
+  $("#template-dialog").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-template]");
+    if (!button || !documentTemplates[button.dataset.template]) return;
+    $("#template-dialog").close();
+    createDocument(documentTemplates[button.dataset.template]);
   });
   $("#build-overview").addEventListener("click", buildOverview);
   $("#table-form").addEventListener("submit", (event) => {
