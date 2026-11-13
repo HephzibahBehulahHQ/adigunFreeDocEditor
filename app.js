@@ -1082,7 +1082,8 @@
         if (file.size > 20 * 1024 * 1024) throw new Error("Word documents must be 20 MB or smaller.");
         if (!window.mammoth?.convertToHtml) throw new Error("The local Word import module did not load. Reload the page and try again.");
         const arrayBuffer = await file.arrayBuffer();
-        inspectDocxArchive(arrayBuffer);
+        const archiveEntry = inspectDocxArchive(arrayBuffer);
+        const revisionCounts = await readDocxRevisionCounts(arrayBuffer, archiveEntry);
         const converted = await window.mammoth.convertToHtml({ arrayBuffer });
         const sanitized = sanitizeDocxHtml(converted.value);
         html = sanitized.html || "<p><br></p>";
@@ -1090,7 +1091,8 @@
         if (warningCount) warnings.push(warningCount + " Word compatibility warning" + (warningCount === 1 ? "" : "s") + ".");
         if (sanitized.removed) warnings.push(sanitized.removed + " unsupported or unsafe item" + (sanitized.removed === 1 ? " was" : "s were") + " omitted.");
         warnings.push("Word page layout and advanced formatting are not retained in this conversion.");
-        warnings.push("Tracked changes from the source are not retained in this conversion.");
+        const revisionWarning = sourceRevisionLossWarning(revisionCounts, true);
+        if (revisionWarning) warnings.push(revisionWarning);
       } else {
         if (file.size > 12 * 1024 * 1024) throw new Error("Text and HTML sources must be 12 MB or smaller.");
         const text = await file.text();
@@ -1176,7 +1178,7 @@
     const decoder = new TextDecoder();
     const names = new Set();
     let expandedBytes = 0;
-    let hasDocument = false;
+    let documentEntry = null;
     for (let index = 0; index < count; index++) {
       if (cursor + 46 > directoryEnd || bytes.getUint32(cursor, true) !== 0x02014b50) throw new Error("The Word package directory is damaged.");
       const flags = bytes.getUint16(cursor + 8, true);
@@ -1194,11 +1196,82 @@
       if (expanded > 50 * 1024 * 1024) throw new Error("A file inside this Word package exceeds the 50 MB import limit.");
       expandedBytes += expanded;
       if (expandedBytes > 100 * 1024 * 1024) throw new Error("The uncompressed Word package exceeds the 100 MB safety limit.");
-      if (name === "word/document.xml") hasDocument = true;
+      if (name === "word/document.xml") documentEntry = { method, compressed, expanded, localOffset: bytes.getUint32(cursor + 42, true) };
       cursor = next;
     }
-    if (cursor !== directoryEnd || !hasDocument || !names.has("[Content_Types].xml")) throw new Error("This file is missing required Word document parts.");
+    if (cursor !== directoryEnd || !documentEntry || !names.has("[Content_Types].xml")) throw new Error("This file is missing required Word document parts.");
     if (expandedBytes > Math.max(32 * 1024 * 1024, buffer.byteLength * 150)) throw new Error("The Word package expands beyond the safe import ratio.");
+    return documentEntry;
+  }
+
+  async function readDocxRevisionCounts(buffer, entry) {
+    try {
+      if (!entry || entry.expanded > 50 * 1024 * 1024) return null;
+      const bytes = new DataView(buffer);
+      const localOffset = entry.localOffset;
+      if (localOffset + 30 > buffer.byteLength || bytes.getUint32(localOffset, true) !== 0x04034b50) return null;
+      const flags = bytes.getUint16(localOffset + 6, true);
+      const method = bytes.getUint16(localOffset + 8, true);
+      const nameLength = bytes.getUint16(localOffset + 26, true);
+      const extraLength = bytes.getUint16(localOffset + 28, true);
+      if ((flags & 1) || method !== entry.method) return null;
+      const nameOffset = localOffset + 30;
+      const dataOffset = nameOffset + nameLength + extraLength;
+      const dataEnd = dataOffset + entry.compressed;
+      if (dataEnd > buffer.byteLength) return null;
+      const localName = new TextDecoder().decode(new Uint8Array(buffer, nameOffset, nameLength));
+      if (localName !== "word/document.xml") return null;
+      const compressedBytes = new Uint8Array(buffer, dataOffset, entry.compressed);
+      let xmlBytes;
+      if (method === 0) {
+        if (entry.compressed !== entry.expanded) return null;
+        xmlBytes = compressedBytes;
+      } else {
+        if (typeof DecompressionStream !== "function") return null;
+        const stream = new Blob([compressedBytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+        const reader = stream.getReader();
+        const chunks = [];
+        let total = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          total += value.byteLength;
+          if (total > entry.expanded || total > 50 * 1024 * 1024) {
+            await reader.cancel();
+            return null;
+          }
+          chunks.push(value);
+        }
+        if (total !== entry.expanded) return null;
+        xmlBytes = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) { xmlBytes.set(chunk, offset); offset += chunk.byteLength; }
+      }
+      const xmlText = new TextDecoder("utf-8", { fatal: true }).decode(xmlBytes);
+      if (/<!DOCTYPE/i.test(xmlText)) return null;
+      const parsed = new DOMParser().parseFromString(xmlText, "application/xml");
+      if (parsed.getElementsByTagName("parsererror").length) return null;
+      const wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+      return {
+        insertions: parsed.getElementsByTagNameNS(wordNamespace, "ins").length,
+        deletions: parsed.getElementsByTagNameNS(wordNamespace, "del").length,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function sourceRevisionLossWarning(counts, conversion = false) {
+    if (counts && counts.insertions + counts.deletions === 0) return "";
+    if (counts) {
+      const summary = `${counts.insertions} insertion${counts.insertions === 1 ? "" : "s"} and ${counts.deletions} deletion${counts.deletions === 1 ? "" : "s"}`;
+      return conversion
+        ? `Source tracked changes (${summary}) are not retained in this conversion.`
+        : `Source tracked changes (${summary}) are not preserved.`;
+    }
+    return conversion
+      ? "The source revision status could not be checked; tracked changes may be lost in this conversion."
+      : "The source revision status could not be checked; tracked changes may be lost.";
   }
 
   function sanitizeDocxHtml(source) {
@@ -1283,7 +1356,8 @@
         if (file.size > 20 * 1024 * 1024) throw new Error("Word documents must be 20 MB or smaller.");
         if (!window.mammoth?.convertToHtml) throw new Error("The local Word import module did not load. Reload the page and try again.");
         const arrayBuffer = await file.arrayBuffer();
-        inspectDocxArchive(arrayBuffer);
+        const archiveEntry = inspectDocxArchive(arrayBuffer);
+        const revisionCounts = await readDocxRevisionCounts(arrayBuffer, archiveEntry);
         const converted = await window.mammoth.convertToHtml({ arrayBuffer });
         const sanitized = sanitizeDocxHtml(converted.value);
         if (sanitized.html.length > 12 * 1024 * 1024) throw new Error("The editable document exceeds the 12 MB safety limit.");
@@ -1307,7 +1381,8 @@
         const notes = [];
         if (warningCount) notes.push(`${warningCount} Word compatibility warning${warningCount === 1 ? "" : "s"}`);
         if (sanitized.removed) notes.push(`${sanitized.removed} unsupported or unsafe item${sanitized.removed === 1 ? "" : "s"} omitted`);
-        notes.push("Tracked changes from the source are not preserved");
+        const revisionWarning = sourceRevisionLossWarning(revisionCounts);
+        if (revisionWarning) notes.push(revisionWarning);
         notify(notes.length ? `DOCX imported. ${notes.join("; ")}. Layout and advanced formatting may differ.` : "DOCX imported as editable structure. Word page layout and advanced formatting may differ.");
       } catch (error) { notify(`Could not import this Word document: ${error.message}`); }
       return;
