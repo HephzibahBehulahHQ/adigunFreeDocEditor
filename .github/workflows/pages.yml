@@ -43,6 +43,7 @@ jobs:
           node tests/save-status.test.cjs
           node tests/keyboard-accessibility.test.cjs
           node tests/text-contrast.test.cjs
+          node tests/conversion-layout.test.cjs
       - name: Package application
         run: |
           mkdir -p _site/assets/vendor
