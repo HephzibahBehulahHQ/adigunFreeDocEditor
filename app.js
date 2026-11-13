@@ -378,12 +378,14 @@
       focusOffset: selection.focusOffset,
       anchorTextOffset: editorOffset(selection.anchorNode, selection.anchorOffset),
       focusTextOffset: editorOffset(selection.focusNode, selection.focusOffset),
+      focused: document.activeElement === editor || Boolean(document.activeElement && editor.contains(document.activeElement)),
     };
   }
 
   function restoreEditorSelection(savedSelection) {
     if (!savedSelection) return false;
     const isInsideEditor = (node) => node === editor || Boolean(node && editor.contains(node));
+    if (savedSelection.focused) editor.focus({ preventScroll: true });
     const selection = window.getSelection();
     if (!selection) return false;
     if (savedSelection.anchorTextOffset >= 0 && savedSelection.focusTextOffset >= 0) {

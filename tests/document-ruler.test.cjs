@@ -81,16 +81,22 @@ const selectionState = {
   focusOffset: 2,
   setBaseAndExtent(...points) { this.restoredPoints = points; },
 };
-const selectionEditor = { contains: (node) => node === anchorNode || node === focusNode };
+const selectionEditor = {
+  focusCalls: 0,
+  focus() { this.focusCalls++; },
+  contains: (node) => node === anchorNode || node === focusNode,
+};
+const activeDocument = { activeElement: selectionEditor };
 const editorOffset = (node, offset) => node === anchorNode ? 10 + offset : node === focusNode ? offset : -1;
 const rangeAtTextOffsets = (start, end) => ({
   startContainer: focusNode, startOffset: start,
   endContainer: anchorNode, endOffset: end - 10,
 });
-const selectionApi = new Function("window", "editor", "editorOffset", "rangeAtTextOffsets",
+const selectionApi = new Function("window", "document", "editor", "editorOffset", "rangeAtTextOffsets",
   source.slice(source.indexOf("  function captureEditorSelection()"), source.indexOf("  function normalizeReviewComments(")) +
   "return { captureEditorSelection, restoreEditorSelection };")(
   { getSelection: () => selectionState },
+  activeDocument,
   selectionEditor,
   editorOffset,
   rangeAtTextOffsets
@@ -98,8 +104,15 @@ const selectionApi = new Function("window", "editor", "editorOffset", "rangeAtTe
 const savedSelection = selectionApi.captureEditorSelection();
 assert.equal(savedSelection.anchorTextOffset, 13);
 assert.equal(savedSelection.focusTextOffset, 2);
+assert.equal(savedSelection.focused, true);
 assert.equal(selectionApi.restoreEditorSelection(savedSelection), true);
+assert.equal(selectionEditor.focusCalls, 1, "focused editor is refocused before restoring its selection");
 assert.deepEqual(selectionState.restoredPoints, [anchorNode, 3, focusNode, 2], "backward selection direction is preserved");
+activeDocument.activeElement = outsideNode;
+const unfocusedBookmark = selectionApi.captureEditorSelection();
+assert.equal(unfocusedBookmark.focused, false);
+selectionApi.restoreEditorSelection(unfocusedBookmark);
+assert.equal(selectionEditor.focusCalls, 1, "restoration does not steal focus from another control");
 selectionState.anchorNode = outsideNode;
 selectionState.focusNode = outsideNode;
 assert.equal(selectionApi.captureEditorSelection(), null, "selection outside the editor is ignored");
