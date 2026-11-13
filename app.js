@@ -176,6 +176,12 @@
     return titleInput.value.trim() || "Untitled document";
   }
 
+  function formatDocumentTimestamp(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Saved on this device";
+    return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  }
+
   function countWords() {
     const isEditableDocument = editor.contentEditable === "true";
     const plainText = isEditableDocument ? editor.innerText.trim() : "";
@@ -1014,8 +1020,7 @@
         return;
       }
       const rows = documents.map((doc) => {
-        const updated = new Date(doc.updatedAt);
-        const updatedLabel = Number.isNaN(updated.getTime()) ? "Saved on this device" : `Edited ${updated.toLocaleDateString()}`;
+        const updatedLabel = `Edited ${formatDocumentTimestamp(doc.updatedAt)}`;
         return `<li><button class="landing-document" type="button" data-open-id="${escapeHTML(doc.id)}"><span class="landing-document-icon" aria-hidden="true">▤</span><span class="landing-document-copy"><strong>${escapeHTML(doc.title || "Untitled document")}</strong><time>${updatedLabel}</time></span><span class="landing-document-open" aria-hidden="true">Open&nbsp;→</span></button></li>`;
       }).join("");
       container.innerHTML = `<div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div><button class="landing-all" type="button" id="landing-all">View all</button></div><ul class="landing-document-list">${rows}</ul>`;
@@ -1158,7 +1163,7 @@
       setTitle(heading);
       $("#file-kind").textContent = `${docs.length} saved ${docs.length === 1 ? "document" : "documents"}`;
       const rows = view === "recent" ? docs.slice(0, 8) : docs;
-      editor.innerHTML = rows.length ? rows.map((doc) => `<div class="recent-row"><button type="button" data-open-id="${doc.id}">${escapeHTML(doc.title)}</button><time>${new Date(doc.updatedAt).toLocaleDateString()}</time>${view === "trash" ? `<button type="button" data-restore-id="${doc.id}">Restore</button>` : `<button type="button" aria-label="Move ${escapeHTML(doc.title)} to Trash" data-trash-id="${doc.id}">Move to Trash</button>`}</div>`).join("") : `<div class="empty-state"><span class="empty-icon">${view === "trash" ? "⌫" : "▤"}</span><h2>${view === "trash" ? "Trash is empty" : "No saved documents yet"}</h2><p>${view === "trash" ? "Documents you move to Trash can be restored here." : "Create a document or open a text or PDF file. Your editable work is saved in this browser."}</p>${view !== "trash" ? '<button type="button" class="button button-outline" id="empty-create">Create a document</button>' : ""}</div>`;
+      editor.innerHTML = rows.length ? rows.map((doc) => `<div class="recent-row"><button type="button" data-open-id="${doc.id}">${escapeHTML(doc.title)}</button><time>${formatDocumentTimestamp(doc.updatedAt)}</time>${view === "trash" ? `<button type="button" data-restore-id="${doc.id}">Restore</button>` : `<button type="button" aria-label="Move ${escapeHTML(doc.title)} to Trash" data-trash-id="${doc.id}">Move to Trash</button>`}</div>`).join("") : `<div class="empty-state"><span class="empty-icon">${view === "trash" ? "⌫" : "▤"}</span><h2>${view === "trash" ? "Trash is empty" : "No saved documents yet"}</h2><p>${view === "trash" ? "Documents you move to Trash can be restored here." : "Create a document or open a text or PDF file. Your editable work is saved in this browser."}</p>${view !== "trash" ? '<button type="button" class="button button-outline" id="empty-create">Create a document</button>' : ""}</div>`;
       countWords();
     } catch { notify("Local document storage is not available in this browser."); }
   }
