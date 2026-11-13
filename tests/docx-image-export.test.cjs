@@ -116,6 +116,6 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
   assert.doesNotMatch(conversionDocumentXml, /w:(?:header|footer)Reference/);
   assert.equal(Object.hasOwn(conversionPackage.files, "word/header1.xml"), false);
   assert.equal(Object.hasOwn(conversionPackage.files, "word/footer1.xml"), false);
-  process.stdout.write("DOCX export tests passed: page fields, conversion page setup, PNG media, DrawingML, formatting, dimensions, alt text and vertical table merges.\\n");
+  process.stdout.write("DOCX export tests passed: page fields, conversion page setup, PNG media, DrawingML, formatting, dimensions, alt text and vertical table merges.\n");
 }).catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1; });
 
