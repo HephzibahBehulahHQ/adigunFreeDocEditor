@@ -51,7 +51,12 @@ const verticalTable = (() => {
 const pageBreak = { nodeType: 1, tagName: "HR", children: [], childNodes: [], textContent: "", getAttribute(name) { return name === "data-page-break" ? "true" : null; } };
 const fontText = { nodeType: Node.TEXT_NODE, nodeValue: "Georgia type" };
 const fontSpan = { nodeType: 1, tagName: "SPAN", children: [fontText], childNodes: [fontText], style: { fontFamily: "Georgia" }, getAttribute(name) { return ({ "data-font-family": "Georgia", "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" })[name] || null; } };
-const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), verticalTable] }] };
+const revisionText = (value) => ({ nodeType: Node.TEXT_NODE, nodeValue: value });
+const insertionText = revisionText("new wording");
+const deletionText = revisionText("old wording");
+const insertion = { nodeType: 1, tagName: "INS", children: [insertionText], childNodes: [insertionText], style: {}, getAttribute(name) { return ({ "data-revision-id": "rev-ins-1", "data-revision-author": "Reviewer", "data-revision-created-at": "1762992000000" })[name] || null; } };
+const deletion = { nodeType: 1, tagName: "DEL", children: [deletionText], childNodes: [deletionText], style: {}, getAttribute(name) { return ({ "data-revision-id": "rev-del-1", "data-revision-author": "Reviewer", "data-revision-created-at": "1762992000000" })[name] || null; } };
+const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), paragraph(insertion), paragraph(deletion), verticalTable] }] };
 const page = { classList: { contains() { return false; } } };
 const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumbersEnabled", "pageHeaderText", "pageFooterText", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip, setPageNumbers(value) { pageNumbersEnabled = value; }, setHeaderFooter(header, footer) { pageHeaderText = header; pageFooterText = footer; } };`);
 const { makeWordPackage, makeStoredZip, setPageNumbers, setHeaderFooter } = factory(Node, root, () => "Image export QA", atob, () => page, true, "Project & scope", "Confidential");
@@ -94,6 +99,8 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
   assert.match(documentXml, /<w:highlight w:val="yellow"\/>/);
   assert.match(documentXml, /<w:spacing w:line="360" w:lineRule="auto" w:after="240"\/>/);
   assert.match(documentXml, /<w:ind w:left="1440"\/>/);
+  assert.match(documentXml, /<w:ins w:id="1" w:author="Reviewer" w:date="2025-11-13T00:00:00.000Z"><w:r><w:t>new wording<\/w:t><\/w:r><\/w:ins>/);
+  assert.match(documentXml, /<w:del w:id="2" w:author="Reviewer" w:date="2025-11-13T00:00:00.000Z"><w:r><w:delText>old wording<\/w:delText><\/w:r><\/w:del>/);
   assert.equal((documentXml.match(/<w:gridCol\b/g) || []).length, 2, "vertical spans reserve their grid column");
   assert.match(documentXml, /<w:vMerge w:val="restart"\/>/);
   assert.match(documentXml, /<w:vMerge\/>/);
