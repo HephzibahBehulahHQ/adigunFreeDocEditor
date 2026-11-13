@@ -3,23 +3,25 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
-const warningFunction = app.match(/function docxExportWarningMessage\(unsupported, commentCount\) \{[\s\S]*?\n  \}/)?.[0];
+const warningFunction = app.match(/function docxExportWarnings\(unsupported, commentCount\) \{[\s\S]*?\n  \}/)?.[0];
 assert.ok(warningFunction, "DOCX export should explain unsupported content and omitted comments");
 
-const getWarning = new Function("return (" + warningFunction + ");")();
-assert.equal(getWarning([], 0), "");
+const getWarnings = new Function("return (" + warningFunction + ");")();
+assert.deepEqual(getWarnings([], 0), []);
 
-const singleComment = getWarning([], 1);
-assert.match(singleComment, /omit 1 local comment/);
-assert.match(singleComment, /remain saved in this browser/);
-assert.match(singleComment, /document saved in this browser will remain unchanged/);
+const singleComment = getWarnings([], 1);
+assert.match(singleComment[0], /omit 1 local comment/);
 
-const combined = getWarning(["advanced styles"], 2);
-assert.match(combined, /cannot preserve: advanced styles/);
-assert.match(combined, /omit 2 local comments/);
-assert.match(combined, /Continue with Word export/);
+const unsupported = getWarnings(["advanced styles"], 0);
+assert.match(unsupported[0], /cannot preserve: advanced styles/);
 
-assert.match(app, /docxExportWarningMessage\(wordPackage\.unsupported, reviewComments\.length\)/);
-assert.match(app, /if \(warning && !window\.confirm\(warning\)\) return;/);
+const combined = getWarnings(["advanced styles"], 2);
+assert.match(combined[0], /cannot preserve: advanced styles/);
+assert.match(combined[1], /omit 2 local comments/);
+
+assert.match(app, /function confirmDocxExport\(warnings\)/);
+assert.match(app, /dialog\.showModal\(\)/);
+assert.match(app, /if \(warnings\.length && !\(await confirmDocxExport\(warnings\)\)\) return;/);
+assert.doesNotMatch(app, /window\.confirm\(warning\)/);
 
 process.stdout.write("DOCX comment export warning tests passed.\n");

@@ -150,6 +150,15 @@
         </div>
       </div>
     </dialog>
+    <dialog class="settings-dialog docx-export-warning-dialog" id="docx-export-warning-dialog" role="alertdialog" aria-labelledby="docx-export-warning-title" aria-describedby="docx-export-warning-description">
+      <form method="dialog">
+        <div class="settings-head"><div><span class="eyebrow">WORD EXPORT</span><h2 id="docx-export-warning-title">Some content won’t be included</h2></div></div>
+        <p class="docx-export-warning-description" id="docx-export-warning-description">The downloaded Word copy has these limitations:</p>
+        <ul class="docx-export-warning-list" id="docx-export-warning-list"></ul>
+        <p class="docx-export-warning-note">Your document and comments saved in this browser will remain unchanged.</p>
+        <div class="settings-foot"><button class="button button-outline" value="cancel">Cancel</button><button class="button button-primary" value="export">Download Word copy</button></div>
+      </form>
+    </dialog>
     <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
       <form method="dialog"><div class="settings-head"><div><span class="eyebrow">PREFERENCES</span><h2 id="settings-title">Settings</h2></div><button class="window-control" aria-label="Close settings">×</button></div>
         <label class="setting-row" for="autosave-toggle"><span><strong>Automatic saving</strong><small>Keep document changes in this browser as you work.</small></span><input id="autosave-toggle" type="checkbox" checked /></label>
