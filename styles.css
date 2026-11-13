@@ -250,3 +250,5 @@
 .review-location-highlight{background:var(--purple-soft);border-radius:2px;outline:2px solid var(--focus-ring);outline-offset:1px}
 
 .review-filters button,.review-comment-link,.review-comment-resolve,.tracked-revision-actions button{min-width:24px;min-height:24px}
+
+.zoom-button.zoom-fit{min-height:24px}
