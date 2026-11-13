@@ -361,10 +361,38 @@
       fragment.append(sheet);
     });
     updatePageNumberLabels([...fragment.children], pages.length);
+    const savedSelection = captureEditorSelection();
     editor.replaceChildren(fragment);
+    restoreEditorSelection(savedSelection);
     renderPageNavigation();
     $("#page-count").textContent = `${pages.length} ${pages.length === 1 ? "page" : "pages"}`;
   }
+  function captureEditorSelection() {
+    const selection = window.getSelection();
+    const isInsideEditor = (node) => node === editor || Boolean(node && editor.contains(node));
+    if (!selection?.rangeCount || !isInsideEditor(selection.anchorNode) || !isInsideEditor(selection.focusNode)) return null;
+    return {
+      anchorNode: selection.anchorNode,
+      anchorOffset: selection.anchorOffset,
+      focusNode: selection.focusNode,
+      focusOffset: selection.focusOffset,
+    };
+  }
+
+  function restoreEditorSelection(savedSelection) {
+    if (!savedSelection) return false;
+    const isInsideEditor = (node) => node === editor || Boolean(node && editor.contains(node));
+    if (!isInsideEditor(savedSelection.anchorNode) || !isInsideEditor(savedSelection.focusNode)) return false;
+    const selection = window.getSelection();
+    if (!selection) return false;
+    try {
+      selection.setBaseAndExtent(savedSelection.anchorNode, savedSelection.anchorOffset, savedSelection.focusNode, savedSelection.focusOffset);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function normalizeReviewComments(value) {
     if (!Array.isArray(value)) return [];
     return value.filter((item) => item && typeof item.quote === "string" && typeof item.body === "string")
