@@ -2310,6 +2310,21 @@
     assistant.setAttribute("aria-hidden", String(!open));
   }
 
+  function useAssistantFind() {
+    if (window.matchMedia("(max-width: 900px)").matches) toggleAssistant(false);
+    openFindDialog();
+  }
+
+  function useAssistantReview() {
+    if (activePdfFile || editor.contentEditable !== "true") {
+      notify("Open an editable document to review comments and tracked changes.");
+      return;
+    }
+    activeTab = "review";
+    renderRibbon();
+    showReviewPanel(true);
+  }
+
   function buildOverview() {
     const text = editor.innerText.trim();
     const result = $("#overview-result");
@@ -2487,6 +2502,8 @@
   $("#paragraph-indent-ruler").addEventListener("input", (event) => setParagraphIndent(event.currentTarget.value));
   $("#assist-button").addEventListener("click", () => toggleAssistant(true));
   $("#assistant-launcher").addEventListener("click", () => toggleAssistant(true));
+  $("#assistant-find").addEventListener("click", useAssistantFind);
+  $("#assistant-review").addEventListener("click", useAssistantReview);
   $("#close-adigun").addEventListener("click", () => toggleAssistant(false));
   $("#minimize-adigun").addEventListener("click", () => { assistant.classList.toggle("minimized"); $("#minimize-adigun").setAttribute("aria-label", assistant.classList.contains("minimized") ? "Restore Adigun" : "Minimize Adigun"); });
   $(".ribbon-tabs").addEventListener("click", (event) => {
