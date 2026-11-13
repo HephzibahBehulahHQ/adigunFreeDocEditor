@@ -47,6 +47,7 @@ jobs:
           node tests/document-ruler-target-size.test.cjs
           node tests/docx-revision-warning.test.cjs
           node tests/docx-comment-export-warning.test.cjs
+          node tests/docx-comment-export.test.cjs
           node tests/docx-revision-detection.test.cjs
           node tests/docx-revision-order.test.cjs
           node tests/docx-revision-mapping.test.cjs
