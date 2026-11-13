@@ -5,32 +5,67 @@ const { deflateRawSync } = require("node:zlib");
 
 const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
 const archiveStart = app.indexOf("  function inspectDocxArchive(");
-const extractStart = app.indexOf("  async function readDocxRevisionCounts(", archiveStart);
+const extractStart = app.indexOf("  function readWordRevisionParagraphs(", archiveStart);
 const warningStart = app.indexOf("  function sourceRevisionLossWarning(", extractStart);
 assert.ok(archiveStart >= 0 && extractStart > archiveStart && warningStart > extractStart);
 
-const inspectSource = app.slice(archiveStart, extractStart);
-const extractSource = app.slice(extractStart, warningStart);
+class FakeNode {
+  constructor(nodeType, localName = "", attributes = {}, value = "") {
+    this.nodeType = nodeType;
+    this.localName = localName;
+    this.namespaceURI = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    this.attributes = attributes;
+    this.nodeValue = value;
+    this.childNodes = [];
+  }
+  get textContent() { return this.nodeType === 3 ? this.nodeValue : this.childNodes.map((node) => node.textContent).join(""); }
+  getAttributeNS(namespace, name) { return namespace === this.namespaceURI ? this.attributes[name] || "" : ""; }
+}
+function parseXml(xml) {
+  const root = new FakeNode(1, "document");
+  const stack = [root];
+  const tokens = xml.match(/<[^>]+>|[^<]+/g) || [];
+  for (const token of tokens) {
+    if (token.startsWith("</")) { if (stack.length > 1) stack.pop(); continue; }
+    if (token.startsWith("<?") || token.startsWith("<!")) continue;
+    if (token.startsWith("<")) {
+      const name = token.match(/^<w:([\w-]+)/)?.[1];
+      if (!name) continue;
+      const attrs = {};
+      for (const match of token.matchAll(/w:([\w-]+)="([^"]*)"/g)) attrs[match[1]] = match[2];
+      const node = new FakeNode(1, name, attrs);
+      stack.at(-1).childNodes.push(node);
+      if (!token.endsWith("/>")) stack.push(node);
+    } else {
+      const value = token.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+      stack.at(-1).childNodes.push(new FakeNode(3, "", {}, value));
+    }
+  }
+  return root;
+}
 class FakeXmlDocument {
-  constructor(xml) { this.xml = xml; }
+  constructor(root) { this.root = root; }
   getElementsByTagName(name) { return name === "parsererror" ? [] : []; }
   getElementsByTagNameNS(namespace, localName) {
-    assert.equal(namespace, "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
-    const matches = this.xml.match(new RegExp(`<w:${localName}(?:\\s|>)`, "g"));
-    return { length: matches?.length ?? 0 };
+    const matches = [];
+    const visit = (node) => {
+      if (node.nodeType === 1 && node.namespaceURI === namespace && node.localName === localName) matches.push(node);
+      for (const child of node.childNodes) visit(child);
+    };
+    visit(this.root);
+    return matches;
   }
 }
 class FakeDOMParser {
   parseFromString(xml) {
     if (!xml.startsWith("<?xml") && !xml.startsWith("<w:document")) throw new Error("unexpected XML input");
-    return new FakeXmlDocument(xml);
+    return new FakeXmlDocument(parseXml(xml));
   }
 }
-
 const api = new Function(
-  "TextDecoder", "Uint8Array", "DataView", "DecompressionStream", "Blob", "Response", "DOMParser",
-  `${inspectSource}\n${extractSource}\nreturn { inspectDocxArchive, readDocxRevisionCounts };`
-)(TextDecoder, Uint8Array, DataView, DecompressionStream, Blob, Response, FakeDOMParser);
+  "TextDecoder", "Uint8Array", "DataView", "DecompressionStream", "Blob", "Response", "DOMParser", "Node",
+  `${app.slice(archiveStart, warningStart)}\nreturn { inspectDocxArchive, readDocxRevisionCounts };`
+)(TextDecoder, Uint8Array, DataView, DecompressionStream, Blob, Response, FakeDOMParser, { ELEMENT_NODE: 1 });
 
 function crc32(buffer) {
   let value = 0xffffffff;
@@ -58,7 +93,6 @@ function zip(entries, method) {
     local.writeUInt32LE(raw.length, 22);
     local.writeUInt16LE(nameBytes.length, 26);
     localParts.push(local, nameBytes, compressed);
-
     const central = Buffer.alloc(46);
     central.writeUInt32LE(0x02014b50, 0);
     central.writeUInt16LE(20, 4);
@@ -86,16 +120,22 @@ function documentXml(body) {
   return `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`;
 }
 async function readCounts(body, method) {
-  const buffer = zip([
-    ["[Content_Types].xml", "<Types/>"],
-    ["word/document.xml", documentXml(body)],
-  ], method);
-  const entry = api.inspectDocxArchive(buffer);
-  return api.readDocxRevisionCounts(buffer, entry);
+  const buffer = zip([["[Content_Types].xml", "<Types/>"], ["word/document.xml", documentXml(body)]], method);
+  return api.readDocxRevisionCounts(buffer, api.inspectDocxArchive(buffer));
 }
 
 (async () => {
-  assert.deepEqual(await readCounts("<w:p><w:r><w:t>Plain text</w:t></w:r></w:p>", 0), { insertions: 0, deletions: 0 });
-  assert.deepEqual(await readCounts("<w:p><w:ins w:id=\"1\"><w:r><w:t>new</w:t></w:r></w:ins><w:del w:id=\"2\"><w:r><w:delText>old</w:delText></w:r></w:del></w:p>", 8), { insertions: 1, deletions: 1 });
-  process.stdout.write("DOCX revision detection tests passed: stored and deflated packages report namespaced insertion/deletion counts.\n");
+  assert.deepEqual(await readCounts("<w:p><w:r><w:t>Plain text</w:t></w:r></w:p>", 0), {
+    insertions: 0, deletions: 0,
+    paragraphs: [{ acceptedText: "Plain text", operations: [], unsupported: false }],
+  });
+  const revisions = await readCounts("<w:p><w:r><w:t>Start </w:t></w:r><w:ins w:id=\"1\" w:author=\"Alex\" w:date=\"2026-11-12T10:00:00Z\"><w:r><w:t>new</w:t></w:r></w:ins><w:del w:id=\"2\"><w:r><w:delText>old</w:delText></w:r></w:del></w:p>", 8);
+  assert.equal(revisions.insertions, 1);
+  assert.equal(revisions.deletions, 1);
+  assert.equal(revisions.paragraphs[0].acceptedText, "Start new");
+  assert.deepEqual(revisions.paragraphs[0].operations.map(({ kind, text, start, id, author }) => ({ kind, text, start, id, author })), [
+    { kind: "insert", text: "new", start: 6, id: "1", author: "Alex" },
+    { kind: "delete", text: "old", start: 9, id: "2", author: "", },
+  ]);
+  process.stdout.write("DOCX revision tests passed: stored and deflated packages preserve paragraph text, revision segments, offsets, and metadata.\n");
 })().catch((error) => { process.stderr.write(String(error.stack || error)); process.exitCode = 1; });

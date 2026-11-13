@@ -1086,12 +1086,13 @@
         const revisionCounts = await readDocxRevisionCounts(arrayBuffer, archiveEntry);
         const converted = await window.mammoth.convertToHtml({ arrayBuffer });
         const sanitized = sanitizeDocxHtml(converted.value);
-        html = sanitized.html || "<p><br></p>";
+        const revisionMapping = mapDocxRevisionsToHtml(sanitized.html, revisionCounts?.paragraphs);
+        html = revisionMapping.html || "<p><br></p>";
         const warningCount = converted.messages.filter((message) => message.type === "warning").length;
         if (warningCount) warnings.push(warningCount + " Word compatibility warning" + (warningCount === 1 ? "" : "s") + ".");
         if (sanitized.removed) warnings.push(sanitized.removed + " unsupported or unsafe item" + (sanitized.removed === 1 ? " was" : "s were") + " omitted.");
         warnings.push("Word page layout and advanced formatting are not retained in this conversion.");
-        const revisionWarning = sourceRevisionLossWarning(revisionCounts, true);
+        const revisionWarning = sourceRevisionLossWarning(revisionCounts, true, revisionMapping.preserved);
         if (revisionWarning) warnings.push(revisionWarning);
       } else {
         if (file.size > 12 * 1024 * 1024) throw new Error("Text and HTML sources must be 12 MB or smaller.");
@@ -1204,6 +1205,55 @@
     return documentEntry;
   }
 
+  function readWordRevisionParagraphs(parsed) {
+    const wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const paragraphs = [];
+    for (const paragraph of parsed.getElementsByTagNameNS(wordNamespace, "p")) {
+      const record = { acceptedText: "", operations: [], unsupported: false };
+      function appendText(text, revision) {
+        if (!text) return;
+        const kind = revision?.kind || "text";
+        const operation = kind === "text" ? null : {
+          kind,
+          text: "",
+          start: record.acceptedText.length,
+          id: revision.id,
+          author: revision.author,
+          date: revision.date,
+          revisionNode: revision.node,
+        };
+        if (operation) {
+          const previous = record.operations[record.operations.length - 1];
+          if (previous && previous.revisionNode === operation.revisionNode && previous.kind === operation.kind) previous.text += text;
+          else { operation.text = text; record.operations.push(operation); }
+        }
+        if (kind !== "delete") record.acceptedText += text;
+      }
+      function visit(node, activeRevision = null, root = false) {
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        const isWord = node.namespaceURI === wordNamespace;
+        const localName = isWord ? node.localName : "";
+        if (!root && isWord && localName === "p") { record.unsupported = true; return; }
+        if (isWord && (localName === "ins" || localName === "del")) {
+          activeRevision = {
+            kind: localName === "ins" ? "insert" : "delete",
+            id: node.getAttributeNS(wordNamespace, "id") || "",
+            author: node.getAttributeNS(wordNamespace, "author") || "",
+            date: node.getAttributeNS(wordNamespace, "date") || "",
+            node,
+          };
+        }
+        if (isWord && localName === "t") { appendText(node.textContent, activeRevision); return; }
+        if (isWord && localName === "delText") { appendText(node.textContent, activeRevision?.kind === "delete" ? activeRevision : { ...activeRevision, kind: "delete" }); return; }
+        if (isWord && ["tab", "br", "cr", "sym", "noBreakHyphen", "softHyphen", "drawing", "object", "pict"].includes(localName)) record.unsupported = true;
+        for (const child of node.childNodes) visit(child, activeRevision);
+      }
+      visit(paragraph, null, true);
+      paragraphs.push(record);
+    }
+    return paragraphs;
+  }
+
   async function readDocxRevisionCounts(buffer, entry) {
     try {
       if (!entry || entry.expanded > 50 * 1024 * 1024) return null;
@@ -1236,10 +1286,7 @@
           const { done, value } = await reader.read();
           if (done) break;
           total += value.byteLength;
-          if (total > entry.expanded || total > 50 * 1024 * 1024) {
-            await reader.cancel();
-            return null;
-          }
+          if (total > entry.expanded || total > 50 * 1024 * 1024) { await reader.cancel(); return null; }
           chunks.push(value);
         }
         if (total !== entry.expanded) return null;
@@ -1251,27 +1298,103 @@
       if (/<!DOCTYPE/i.test(xmlText)) return null;
       const parsed = new DOMParser().parseFromString(xmlText, "application/xml");
       if (parsed.getElementsByTagName("parsererror").length) return null;
-      const wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+      const paragraphs = readWordRevisionParagraphs(parsed);
+      const operations = paragraphs.flatMap((paragraph) => paragraph.operations);
       return {
-        insertions: parsed.getElementsByTagNameNS(wordNamespace, "ins").length,
-        deletions: parsed.getElementsByTagNameNS(wordNamespace, "del").length,
+        insertions: operations.filter((operation) => operation.kind === "insert").length,
+        deletions: operations.filter((operation) => operation.kind === "delete").length,
+        paragraphs,
       };
     } catch {
       return null;
     }
   }
 
-  function sourceRevisionLossWarning(counts, conversion = false) {
-    if (counts && counts.insertions + counts.deletions === 0) return "";
-    if (counts) {
-      const summary = `${counts.insertions} insertion${counts.insertions === 1 ? "" : "s"} and ${counts.deletions} deletion${counts.deletions === 1 ? "" : "s"}`;
+  function sourceRevisionLossWarning(counts, conversion = false, preserved = {}) {
+    if (!counts) {
       return conversion
-        ? `Source tracked changes (${summary}) are not retained in this conversion.`
-        : `Source tracked changes (${summary}) are not preserved.`;
+        ? "The source revision status could not be checked; tracked changes may be lost in this conversion."
+        : "The source revision status could not be checked; tracked changes may be lost.";
     }
+    const insertions = Math.max(0, counts.insertions - (preserved.insertions || 0));
+    const deletions = Math.max(0, counts.deletions - (preserved.deletions || 0));
+    if (insertions + deletions === 0) return "";
+    const summary = `${insertions} insertion${insertions === 1 ? "" : "s"} and ${deletions} deletion${deletions === 1 ? "" : "s"}`;
     return conversion
-      ? "The source revision status could not be checked; tracked changes may be lost in this conversion."
-      : "The source revision status could not be checked; tracked changes may be lost.";
+      ? `Source tracked changes (${summary}) are not retained in this conversion.`
+      : `Source tracked changes (${summary}) are not preserved.`;
+  }
+
+  function mapDocxRevisionsToHtml(sourceHtml, sourceParagraphs) {
+    const empty = { html: sourceHtml, preserved: { insertions: 0, deletions: 0 } };
+    const hasChanges = sourceParagraphs?.some((paragraph) => paragraph.operations.length);
+    if (!hasChanges) return empty;
+    try {
+      const parsed = new DOMParser().parseFromString(`<main>${sourceHtml}</main>`, "text/html");
+      const root = parsed.querySelector("main");
+      if (!root) return empty;
+      const blockNames = "p,h1,h2,h3,h4,h5,h6,li,blockquote,pre";
+      const blocks = [...root.querySelectorAll(blockNames)].filter((block) => {
+        if (!["LI", "BLOCKQUOTE", "PRE"].includes(block.tagName)) return true;
+        return !block.querySelector("p,h1,h2,h3,h4,h5,h6");
+      });
+      if (blocks.length !== sourceParagraphs.length) return empty;
+      for (let index = 0; index < blocks.length; index += 1) {
+        if (blocks[index].textContent !== sourceParagraphs[index].acceptedText) return empty;
+      }
+      const result = { html: sourceHtml, preserved: { insertions: 0, deletions: 0 } };
+      function pointAt(block, offset) {
+        let total = 0;
+        let last = null;
+        const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+          if (node.parentElement?.closest("del[data-revision-id]")) continue;
+          const length = node.nodeValue.length;
+          last = { node, offset: length };
+          if (offset <= total + length) return { node, offset: offset - total };
+          total += length;
+        }
+        if (offset === total && last) return last;
+        if (offset === 0 && total === 0) return { node: block, offset: 0 };
+        return null;
+      }
+      for (let paragraphIndex = 0; paragraphIndex < sourceParagraphs.length; paragraphIndex += 1) {
+        const sourceParagraph = sourceParagraphs[paragraphIndex];
+        if (sourceParagraph.unsupported) continue;
+        const block = blocks[paragraphIndex];
+        for (let operationIndex = 0; operationIndex < sourceParagraph.operations.length; operationIndex += 1) {
+          const operation = sourceParagraph.operations[operationIndex];
+          const startPoint = pointAt(block, operation.start);
+          if (!startPoint) return empty;
+          const tagName = operation.kind === "insert" ? "ins" : "del";
+          const revision = document.createElement(tagName);
+          const rawId = operation.id || `p${paragraphIndex}-r${operationIndex}`;
+          const revisionId = `docx-${paragraphIndex}-${operationIndex}-${rawId}`.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 80);
+          revision.setAttribute("data-revision-id", revisionId);
+          if (operation.author) revision.setAttribute("data-revision-author", operation.author.slice(0, 80));
+          const createdAt = Date.parse(operation.date);
+          if (Number.isFinite(createdAt) && createdAt > 0) revision.setAttribute("data-revision-created-at", String(createdAt));
+          const range = document.createRange();
+          range.setStart(startPoint.node, startPoint.offset);
+          if (operation.kind === "insert") {
+            const endPoint = pointAt(block, operation.start + operation.text.length);
+            if (!endPoint) return empty;
+            range.setEnd(endPoint.node, endPoint.offset);
+            revision.append(range.extractContents());
+          } else {
+            range.collapse(true);
+            revision.textContent = operation.text;
+          }
+          range.insertNode(revision);
+          result.preserved[operation.kind === "insert" ? "insertions" : "deletions"] += 1;
+        }
+      }
+      result.html = root.innerHTML;
+      return result;
+    } catch {
+      return empty;
+    }
   }
 
   function sanitizeDocxHtml(source) {
@@ -1360,7 +1483,8 @@
         const revisionCounts = await readDocxRevisionCounts(arrayBuffer, archiveEntry);
         const converted = await window.mammoth.convertToHtml({ arrayBuffer });
         const sanitized = sanitizeDocxHtml(converted.value);
-        if (sanitized.html.length > 12 * 1024 * 1024) throw new Error("The editable document exceeds the 12 MB safety limit.");
+        const revisionMapping = mapDocxRevisionsToHtml(sanitized.html, revisionCounts?.paragraphs);
+        if (revisionMapping.html.length > 12 * 1024 * 1024) throw new Error("The editable document exceeds the 12 MB safety limit.");
         if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
         $("#pdf-frame")?.remove();
         activePdfFile = undefined;
@@ -1374,14 +1498,15 @@
         editor.hidden = false;
         setWorkspaceMode("document");
         $("#export-html").lastElementChild.textContent = "Export HTML";
-        editor.innerHTML = sanitized.html || "<p><br></p>";
+        editor.innerHTML = revisionMapping.html || "<p><br></p>";
         countWords();
+        renderTrackedChanges();
         saveDocument();
         const warningCount = converted.messages.filter((message) => message.type === "warning").length;
         const notes = [];
         if (warningCount) notes.push(`${warningCount} Word compatibility warning${warningCount === 1 ? "" : "s"}`);
         if (sanitized.removed) notes.push(`${sanitized.removed} unsupported or unsafe item${sanitized.removed === 1 ? "" : "s"} omitted`);
-        const revisionWarning = sourceRevisionLossWarning(revisionCounts);
+        const revisionWarning = sourceRevisionLossWarning(revisionCounts, false, revisionMapping.preserved);
         if (revisionWarning) notes.push(revisionWarning);
         notify(notes.length ? `DOCX imported. ${notes.join("; ")}. Layout and advanced formatting may differ.` : "DOCX imported as editable structure. Word page layout and advanced formatting may differ.");
       } catch (error) { notify(`Could not import this Word document: ${error.message}`); }
