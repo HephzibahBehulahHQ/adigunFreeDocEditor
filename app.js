@@ -1325,6 +1325,12 @@
       : `Source tracked changes (${summary}) are not preserved.`;
   }
 
+  function orderedDocxRevisionOperations(operations) {
+    return operations
+      .map((operation, operationIndex) => ({ operation, operationIndex }))
+      .sort((left, right) => right.operation.start - left.operation.start || right.operationIndex - left.operationIndex);
+  }
+
   function mapDocxRevisionsToHtml(sourceHtml, sourceParagraphs) {
     const empty = { html: sourceHtml, preserved: { insertions: 0, deletions: 0 } };
     const hasChanges = sourceParagraphs?.some((paragraph) => paragraph.operations.length);
@@ -1363,8 +1369,7 @@
         const sourceParagraph = sourceParagraphs[paragraphIndex];
         if (sourceParagraph.unsupported) continue;
         const block = blocks[paragraphIndex];
-        for (let operationIndex = 0; operationIndex < sourceParagraph.operations.length; operationIndex += 1) {
-          const operation = sourceParagraph.operations[operationIndex];
+        for (const { operation, operationIndex } of orderedDocxRevisionOperations(sourceParagraph.operations)) {
           const startPoint = pointAt(block, operation.start);
           if (!startPoint) return empty;
           const tagName = operation.kind === "insert" ? "ins" : "del";
