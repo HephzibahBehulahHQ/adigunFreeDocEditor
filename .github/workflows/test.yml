@@ -35,5 +35,6 @@ jobs:
           node tests/mobile-header.test.cjs
           node tests/save-status.test.cjs
           node tests/keyboard-accessibility.test.cjs
+          node tests/text-contrast.test.cjs
 
 

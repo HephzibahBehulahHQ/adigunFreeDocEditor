@@ -23,6 +23,6 @@ assert.match(markup, /id="save-label"/);
 assert.match(markup, /<time id="save-time" class="save-time" hidden><\/time>/);
 assert.match(source, /setSaveStatus\("Saved", false, updatedAt\)/);
 assert.match(source, /setSaveStatus\("Saved", false, doc\.updatedAt\)/);
-assert.match(css, /\.save-time\{color:#708094;font-size:10px;font-variant-numeric:tabular-nums\}/);
+assert.match(css, /\.save-time\{color:var\(--muted\);font-size:10px;font-variant-numeric:tabular-nums\}/);
 
 process.stdout.write("Save status tests passed: timestamps format consistently and persist on save and reopen.\n");
