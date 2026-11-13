@@ -18,6 +18,7 @@ assert.match(mobileRules, /\.sidebar\{justify-content:flex-start\}/);
 assert.match(mobileRules, /\.product-name\{display:flex/);
 assert.match(mobileRules, /\.mobile-brand\{display:none\}/);
 assert.match(mobileRules, /\.workspace\.mode-no-document-title \.topbar\{height:0/);
+assert.match(css, /@media\(min-width:901px\)\{\.workspace\.mode-no-document-title \.topbar\{display:none\}\}/);
 assert.match(mobileRules, /\.workspace\.mode-no-document-title \.topbar-actions\{position:fixed/);
 assert.match(mobileRules, /\.workspace\.mode-no-document-title \.mobile-menu-button\{color:#fff\}/);
 assert.match(mobileRules, /@media\(max-width:420px\)\{[\s\S]*?\.document-title\{width:min\(110px,28vw\)/);
