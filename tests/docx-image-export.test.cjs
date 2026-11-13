@@ -109,6 +109,13 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
   assert.equal(Object.hasOwn(withoutHeaderFooter.files, "word/header1.xml"), false, "header is omitted when empty");
   assert.equal(Object.hasOwn(withoutHeaderFooter.files, "word/footer1.xml"), false, "footer is omitted when empty and numbering is off");
   assert.doesNotMatch(withoutHeaderFooter.files["word/document.xml"], /w:(?:header|footer)Reference/);
-  process.stdout.write("DOCX export tests passed: page fields, PNG media, DrawingML, formatting, dimensions, alt text and vertical table merges.\n");
+  const conversionPackage = makeWordPackage(root, { paper: "letter", orientation: "landscape", margins: "narrow", pageNumbers: false, header: "", footer: "" });
+  const conversionDocumentXml = conversionPackage.files["word/document.xml"];
+  assert.match(conversionDocumentXml, /<w:pgSz w:w="15840" w:h="12240"\/>/);
+  assert.match(conversionDocumentXml, /<w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/);
+  assert.doesNotMatch(conversionDocumentXml, /w:(?:header|footer)Reference/);
+  assert.equal(Object.hasOwn(conversionPackage.files, "word/header1.xml"), false);
+  assert.equal(Object.hasOwn(conversionPackage.files, "word/footer1.xml"), false);
+  process.stdout.write("DOCX export tests passed: page fields, conversion page setup, PNG media, DrawingML, formatting, dimensions, alt text and vertical table merges.\n");
 }).catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1; });
 
