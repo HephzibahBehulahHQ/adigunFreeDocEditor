@@ -27,6 +27,7 @@ class Classes {
 
 const assistant = { classList: new Classes(), attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
 const launcher = { classList: new Classes() };
+const assistButton = { attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
 const editor = { contentEditable: "false" };
 const notices = [];
 let findOpenedWhileAssistantHidden = false;
@@ -35,7 +36,7 @@ let ribbonRenders = 0;
 const script = `let activeTab = "home";\n${source.slice(start, end)}\nreturn { useAssistantFind, useAssistantReview, getActiveTab: () => activeTab };`;
 const api = new Function("window", "$", "assistant", "editor", "activePdfFile", "openFindDialog", "renderRibbon", "showReviewPanel", "notify", script)(
   { matchMedia: () => ({ matches: true }) },
-  (selector) => selector === "#assistant-launcher" ? launcher : null,
+  (selector) => selector === "#assistant-launcher" ? launcher : selector === "#assist-button" ? assistButton : null,
   assistant,
   editor,
   undefined,

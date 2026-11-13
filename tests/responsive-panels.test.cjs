@@ -32,6 +32,7 @@ const nodes = {
   "#document-outline": element(),
   "#toggle-outline": element(),
   "#assistant-launcher": element(),
+  "#assist-button": element(),
 };
 nodes["#review-comments"].hidden = true;
 const assistant = element();
