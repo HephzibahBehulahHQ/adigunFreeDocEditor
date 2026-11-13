@@ -251,6 +251,7 @@
 [data-theme="dark"]{--focus-ring:#c4b5fd}
 :focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
 .document-title:focus-visible,.document-page:focus-visible,.outline-search:focus-visible,.table-size-fields input:focus-visible,.find-fields input:focus-visible,.break-navigation-item:focus-visible,#paragraph-indent-ruler:focus-visible,.page-decoration-field input:focus-visible,.landing-template:focus-visible,.assistant-tool:focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
+@media(min-width:1200px){.app-shell.assistant-docked{grid-template-columns:240px minmax(0,1fr) 310px}.app-shell.assistant-docked>.adigun-window{position:sticky;grid-column:3;grid-row:1;top:0;align-self:start;width:auto;height:100dvh;max-width:none;max-height:none;min-width:0;min-height:0;margin:0;border:0;border-left:1px solid var(--line);border-radius:0;box-shadow:none;resize:none}.app-shell.assistant-docked>.adigun-window.minimized{height:48px!important;min-height:48px}.app-shell.assistant-docked .adigun-header{cursor:default}}
 
 .workspace.mode-no-document-title #document-title,.workspace.mode-no-document-title #save-state{display:none}
 
@@ -275,3 +276,4 @@
 
 
 .docx-export-warning-dialog h2{max-width:310px;line-height:1.3}.docx-export-warning-dialog form{padding:22px}.docx-export-warning-description{margin:0 0 10px;color:var(--muted);font-size:12px;line-height:1.5}.docx-export-warning-list{display:grid;gap:8px;margin:0;padding:12px 12px 12px 30px;border-left:3px solid #d4af37;border-radius:5px;background:var(--canvas);color:var(--ink);font-size:12px;line-height:1.5}.docx-export-warning-list li::marker{color:#967615}.docx-export-warning-note{margin:12px 0 0;color:var(--muted);font-size:11px;line-height:1.5}.docx-export-warning-dialog .settings-foot{justify-content:flex-end}
+

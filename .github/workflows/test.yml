@@ -32,6 +32,7 @@ jobs:
           node tests/tablet-layout.test.cjs
           node tests/assistant-tools.test.cjs
           node tests/local-data-privacy.test.cjs
+          node tests/assistant-docked-layout.test.cjs
           node tests/mobile-header.test.cjs
           node tests/save-status.test.cjs
           node tests/keyboard-accessibility.test.cjs
@@ -60,5 +61,6 @@ jobs:
           node tests/mobile-menu-outside-click.test.cjs
           node tests/file-picker-labels.test.cjs
           node tests/assistant-panel-state.test.cjs
+
 
 

@@ -27,16 +27,18 @@ class Classes {
 
 const assistant = { classList: new Classes(), attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
 const assistButton = { attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
+const appShell = { classList: new Classes() };
 const editor = { contentEditable: "false" };
 const notices = [];
 let findOpenedWhileAssistantHidden = false;
 let reviewOpened = false;
 let ribbonRenders = 0;
 const script = `let activeTab = "home";\n${source.slice(start, end)}\nreturn { useAssistantFind, useAssistantReview, getActiveTab: () => activeTab };`;
-const api = new Function("window", "$", "assistant", "editor", "activePdfFile", "openFindDialog", "renderRibbon", "showReviewPanel", "notify", script)(
-  { matchMedia: () => ({ matches: true }) },
-  (selector) => selector === "#assist-button" ? assistButton : null,
+const api = new Function("window", "$", "assistant", "appShell", "editor", "activePdfFile", "openFindDialog", "renderRibbon", "showReviewPanel", "notify", script)(
+  { matchMedia: (query) => ({ matches: query === "(max-width: 900px)" }), addEventListener() {} },
+  (selector) => selector === "#assist-button" ? assistButton : appShell,
   assistant,
+  appShell,
   editor,
   undefined,
   () => { findOpenedWhileAssistantHidden = assistant.classList.contains("hidden"); },
@@ -60,6 +62,8 @@ api.useAssistantFind();
 assert.equal(assistant.classList.contains("hidden"), true, "Find closes Adigun on compact layouts");
 assert.equal(assistButton.attributes["aria-expanded"], "false", "the workspace toggle remains available and announces the collapsed state");
 assert.equal(findOpenedWhileAssistantHidden, true, "Find opens after Adigun closes");
+assert.equal(appShell.classList.contains("assistant-docked"), false, "the panel does not dock in the compact layout");
 
 process.stdout.write("Assistant tool tests passed: Find and Review route to existing editor tools without implying hosted AI.\n");
+
 
