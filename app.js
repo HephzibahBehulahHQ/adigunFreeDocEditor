@@ -815,7 +815,25 @@
     filePicker.click();
   }
 
-  function createDocument() {
+  const documentTemplates = {
+    meeting: {
+      title: "Meeting notes",
+      name: "Meeting notes",
+      content: "<h1>Meeting notes</h1><p><strong>Date:</strong> [Add date] &nbsp; <strong>Attendees:</strong> [Add names]</p><h2>Agenda</h2><ul><li>[Add agenda item]</li></ul><h2>Notes</h2><p>[Capture key discussion points]</p><h2>Decisions</h2><ul><li>[Record a decision]</li></ul><h2>Action items</h2><ul><li>[Task] — [Owner] — [Due date]</li></ul>",
+    },
+    project: {
+      title: "Project brief",
+      name: "Project brief",
+      content: "<h1>Project brief</h1><p><strong>Owner:</strong> [Name] &nbsp; <strong>Date:</strong> [Add date]</p><h2>Objective</h2><p>[What outcome should this project achieve?]</p><h2>Scope</h2><p><strong>Included:</strong> [Add scope]</p><p><strong>Excluded:</strong> [Add exclusions]</p><h2>Deliverables</h2><ul><li>[Add deliverable]</li></ul><h2>Milestones</h2><ul><li>[Milestone] — [Target date]</li></ul><h2>Risks and open questions</h2><p>[Add known risks or questions]</p>",
+    },
+    letter: {
+      title: "Formal letter",
+      name: "Formal letter",
+      content: "<p>[Your name]<br>[Your address]<br>[City, postal code]</p><p>[Date]</p><p>[Recipient name]<br>[Recipient address]</p><p><strong>Subject: [Add subject]</strong></p><p>Dear [Recipient name],</p><p>[Write your message here.]</p><p>Yours sincerely,</p><p>[Your name]</p>",
+    },
+  };
+
+  function createDocument(template) {
     activePdfFile = undefined;
     if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
     $("#pdf-frame")?.remove();
@@ -826,17 +844,17 @@
     updateRibbonSelection();
     showReviewPanel(false);
     renderReviewComments();
-    setTitle("Untitled document");
+    setTitle(template?.title || "Untitled document");
     setWorkspaceMode("document");
     $("#file-kind").textContent = "New document";
     $("#editor-card").classList.remove("pdf-preview");
     $("#editor-card").classList.remove("landing");
     editor.hidden = false;
-    editor.innerHTML = "<p><br></p>";
+    editor.innerHTML = template?.content || "<p><br></p>";
     editor.focus();
     countWords();
     saveDocument();
-    notify("Blank document created.");
+    notify(template ? `${template.name} template opened.` : "Blank document created.");
   }
 
   function getDocuments() {
@@ -858,7 +876,7 @@
     $("#editor-card").classList.remove("pdf-preview");
     $("#editor-card").classList.add("landing");
     editor.hidden = false;
-    editor.innerHTML = '<section class="landing-page"><span class="landing-kicker">ADIGUNFREEDOCEDITOR</span><h2>Your documents.<br>Your workspace.</h2><p>Create a document or open one of the file types supported in this first workspace.</p><div class="landing-actions"><button class="landing-primary" type="button" id="landing-create">Create blank document</button><button class="landing-secondary" type="button" id="landing-open-word">Open Word document</button><button class="landing-secondary" type="button" id="landing-open-pdf">Open PDF</button></div><button class="landing-dropzone" type="button" id="landing-open-file" aria-label="Choose or drop a Word, PDF, text, Markdown, or HTML file"><span class="landing-dropzone-icon" aria-hidden="true">↥</span><span class="landing-dropzone-copy"><strong>Choose a file or drop it here</strong><small>DOCX · PDF · TXT · Markdown · HTML</small></span></button><section class="landing-recents" id="landing-recents" aria-labelledby="landing-recents-title"><div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div><button class="landing-all" type="button" id="landing-all">View all</button></div><p class="landing-recents-empty">Loading saved documents…</p></section><div class="landing-details"><div><strong>Work stays here</strong><span>Editable document text is saved in this browser. No account or cloud sync is active.</span></div><div><strong>Supported in this build</strong><span>Import Word structure, edit TXT, Markdown and HTML, or view and download PDF</span></div></div></section>';
+    editor.innerHTML = '<section class="landing-page"><span class="landing-kicker">ADIGUNFREEDOCEDITOR</span><h2>Your documents.<br>Your workspace.</h2><p>Create a document or open one of the file types supported in this first workspace.</p><div class="landing-actions"><button class="landing-primary" type="button" id="landing-create">Create blank document</button><button class="landing-secondary" type="button" id="landing-open-word">Open Word document</button><button class="landing-secondary" type="button" id="landing-open-pdf">Open PDF</button></div><section class="landing-templates" aria-labelledby="landing-templates-title"><div class="landing-recents-heading"><div><span class="landing-kicker">START WITH A TEMPLATE</span><h3 id="landing-templates-title">A useful first page</h3></div></div><div class="landing-template-grid"><button class="landing-template" type="button" data-template="meeting"><span class="landing-template-icon" aria-hidden="true">▤</span><strong>Meeting notes</strong><small>Agenda, decisions and action items</small></button><button class="landing-template" type="button" data-template="project"><span class="landing-template-icon" aria-hidden="true">◇</span><strong>Project brief</strong><small>Objective, scope and milestones</small></button><button class="landing-template" type="button" data-template="letter"><span class="landing-template-icon" aria-hidden="true">✉</span><strong>Formal letter</strong><small>Recipient, subject and message</small></button></div></section><button class="landing-dropzone" type="button" id="landing-open-file" aria-label="Choose or drop a Word, PDF, text, Markdown, or HTML file"><span class="landing-dropzone-icon" aria-hidden="true">↥</span><span class="landing-dropzone-copy"><strong>Choose a file or drop it here</strong><small>DOCX · PDF · TXT · Markdown · HTML</small></span></button><section class="landing-recents" id="landing-recents" aria-labelledby="landing-recents-title"><div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div><button class="landing-all" type="button" id="landing-all">View all</button></div><p class="landing-recents-empty">Loading saved documents…</p></section><div class="landing-details"><div><strong>Work stays here</strong><span>Editable document text is saved in this browser. No account or cloud sync is active.</span></div><div><strong>Supported in this build</strong><span>Import Word structure, edit TXT, Markdown and HTML, or view and download PDF</span></div></div></section>';
     loadLandingRecentDocuments();
   }
 
@@ -2464,6 +2482,8 @@
     const openButton = event.target.closest("[data-open-id]"); if (openButton) openSaved(openButton.dataset.openId);
     if (event.target.closest("#empty-create")) createDocument();
     if (event.target.closest("#landing-create")) createDocument();
+    const templateButton = event.target.closest("[data-template]");
+    if (templateButton && documentTemplates[templateButton.dataset.template]) createDocument(documentTemplates[templateButton.dataset.template]);
     if (event.target.closest("#landing-open-word")) openFilePicker(".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     if (event.target.closest("#landing-open-pdf")) openFilePicker(".pdf,application/pdf");
     if (event.target.closest("#landing-open-file")) openFilePicker();
