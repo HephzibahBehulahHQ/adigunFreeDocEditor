@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 const warningFunction = app.match(/function docxExportWarnings\(unsupported, commentCount\) \{[\s\S]*?\n  \}/)?.[0];
 assert.ok(warningFunction, "DOCX export should explain unsupported content and omitted comments");
 
@@ -23,5 +24,7 @@ assert.match(app, /function confirmDocxExport\(warnings\)/);
 assert.match(app, /dialog\.showModal\(\)/);
 assert.match(app, /if \(warnings\.length && !\(await confirmDocxExport\(warnings\)\)\) return;/);
 assert.doesNotMatch(app, /window\.confirm\(warning\)/);
+
+assert.match(html, /aria-describedby="docx-export-warning-description docx-export-warning-list docx-export-warning-note"/);
 
 process.stdout.write("DOCX comment export warning tests passed.\n");
