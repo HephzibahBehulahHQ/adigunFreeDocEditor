@@ -2555,6 +2555,12 @@
   $("#new-document").addEventListener("click", () => { setMobileMenu(false); createDocument(); });
   $("#open-document").addEventListener("click", () => { setMobileMenu(false); openFilePicker(); });
   $("#mobile-menu").addEventListener("click", () => setMobileMenu(!$("#workspace-nav").classList.contains("mobile-open")));
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!$("#workspace-nav").classList.contains("mobile-open") || !(target instanceof Element)) return;
+    if (target.closest("#workspace-nav") || target.closest("#mobile-menu")) return;
+    setMobileMenu(false);
+  });
   filePicker.addEventListener("change", () => { const file = filePicker.files[0]; filePicker.accept = acceptedFileTypes; filePicker.value = ""; if (file) importFile(file); });
   conversionFilePicker.addEventListener("change", () => { const file = conversionFilePicker.files[0]; conversionFilePicker.value = ""; if (file) selectConversionSource(file); });
   $("#conversion-select-source").addEventListener("click", () => conversionFilePicker.click());
