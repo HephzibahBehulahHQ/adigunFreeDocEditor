@@ -26,6 +26,6 @@ Status is specific to the current first workspace slice.
 | Find and replace | Implemented | Searches editable document text, navigates matches, and replaces one or all matches. Replace all is disabled above 5,000 matches to keep large edits bounded. |
 | Strikethrough formatting | Implemented | Applies to selected text and persists through the local document model, DOCX import and DOCX export. |
 | Document comments | Partial | Quote- and context-anchored comments are saved with the local document; comments can be resolved and reopened. Comments are not exported to DOCX. |
-| Track changes and review history | Not implemented | The editor does not record or accept/reject tracked insertions or deletions, and DOCX revisions are not preserved. |
+| Track changes and review history | Partial | Opt-in local tracking captures plain text insertions and same-paragraph deletions, with author/time metadata and per-change or bulk accept/reject actions. Revisions persist when reopened and export as OOXML `w:ins`/`w:del` with author/date. Formatting, multi-paragraph edits, and imported DOCX revision preservation are not supported. |
 
 
