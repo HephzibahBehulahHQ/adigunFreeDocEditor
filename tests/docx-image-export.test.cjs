@@ -108,7 +108,7 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
   const withoutHeaderFooter = makeWordPackage(root);
   assert.equal(Object.hasOwn(withoutHeaderFooter.files, "word/header1.xml"), false, "header is omitted when empty");
   assert.equal(Object.hasOwn(withoutHeaderFooter.files, "word/footer1.xml"), false, "footer is omitted when empty and numbering is off");
-  assert.doesNotMatch(withoutPageNumbers.files["word/document.xml"], /w:footerReference/);
+  assert.doesNotMatch(withoutHeaderFooter.files["word/document.xml"], /w:(?:header|footer)Reference/);
   process.stdout.write("DOCX export tests passed: page fields, PNG media, DrawingML, formatting, dimensions, alt text and vertical table merges.\n");
 }).catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1; });
 
