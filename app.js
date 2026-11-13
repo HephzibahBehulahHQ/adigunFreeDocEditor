@@ -1166,6 +1166,22 @@
     }
   }
 
+  function filterSavedDocumentList(value) {
+    const rows = [...editor.querySelectorAll(".recent-row")];
+    const query = value.trim().toLocaleLowerCase();
+    let matchCount = 0;
+    rows.forEach((row) => {
+      const title = row.querySelector("[data-open-id]")?.textContent || "";
+      const matches = title.toLocaleLowerCase().includes(query);
+      row.hidden = !matches;
+      if (matches) matchCount += 1;
+    });
+    const resultCount = $("#document-list-result-count");
+    resultCount.textContent = query
+      ? `${matchCount} ${matchCount === 1 ? "match" : "matches"}`
+      : `${rows.length} ${rows.length === 1 ? "document" : "documents"}`;
+    $("#document-list-empty").hidden = matchCount !== 0;
+  }
   async function showDocumentList(view) {
     activePdfFile = undefined;
     $("#pdf-frame")?.remove();
@@ -1181,7 +1197,12 @@
       setTitle(heading);
       $("#file-kind").textContent = `${docs.length} saved ${docs.length === 1 ? "document" : "documents"}`;
       const rows = view === "recent" ? docs.slice(0, 8) : docs;
-      editor.innerHTML = rows.length ? rows.map((doc) => `<div class="recent-row"><button type="button" data-open-id="${doc.id}">${escapeHTML(doc.title)}</button><time>${formatDocumentTimestamp(doc.updatedAt)}</time>${view === "trash" ? `<button type="button" data-restore-id="${doc.id}">Restore</button>` : `<button type="button" aria-label="Move ${escapeHTML(doc.title)} to Trash" data-trash-id="${doc.id}">Move to Trash</button>`}</div>`).join("") : `<div class="empty-state"><span class="empty-icon">${view === "trash" ? "⌫" : "▤"}</span><h2>${view === "trash" ? "Trash is empty" : "No saved documents yet"}</h2><p>${view === "trash" ? "Documents you move to Trash can be restored here." : "Create a document or open a text or PDF file. Your editable work is saved in this browser."}</p>${view !== "trash" ? '<button type="button" class="button button-outline" id="empty-create">Create a document</button>' : ""}</div>`;
+      if (rows.length) {
+        const rowsMarkup = rows.map((doc) => `<div class="recent-row"><button type="button" data-open-id="${doc.id}">${escapeHTML(doc.title)}</button><time>${formatDocumentTimestamp(doc.updatedAt)}</time>${view === "trash" ? `<button type="button" data-restore-id="${doc.id}">Restore</button>` : `<button type="button" aria-label="Move ${escapeHTML(doc.title)} to Trash" data-trash-id="${doc.id}">Move to Trash</button>`}</div>`).join("");
+        editor.innerHTML = `<div class="document-list-filter"><label class="sr-only" for="document-list-search">Filter this list by title</label><input id="document-list-search" type="search" placeholder="Filter documents" autocomplete="off"><output id="document-list-result-count" aria-live="polite">${rows.length} ${rows.length === 1 ? "document" : "documents"}</output></div>${rowsMarkup}<p class="document-list-empty" id="document-list-empty" hidden>No documents match your filter.</p>`;
+      } else {
+        editor.innerHTML = `<div class="empty-state"><span class="empty-icon">${view === "trash" ? "⌫" : "▤"}</span><h2>${view === "trash" ? "Trash is empty" : "No saved documents yet"}</h2><p>${view === "trash" ? "Documents you move to Trash can be restored here." : "Create a document or open a text or PDF file. Your editable work is saved in this browser."}</p>${view !== "trash" ? "<button type=\"button\" class=\"button button-outline\" id=\"empty-create\">Create a document</button>" : ""}</div>`;
+      }
       countWords();
     } catch { notify("Local document storage is not available in this browser."); }
   }
@@ -2809,8 +2830,18 @@
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
   window.addEventListener("resize", applyPaperCanvasMinimumHeight);
   if (window.ResizeObserver) new ResizeObserver(applyPaperCanvasMinimumHeight).observe(editor);
-  editor.addEventListener("beforeinput", handleTrackedBeforeInput);
-  editor.addEventListener("input", () => { countWords(); clearTimeout(reviewHighlightTimer); reviewHighlightTimer = setTimeout(() => { updateReviewHighlights(); renderTrackedChanges(); }, 350); saveDocument(); if (!replacingAllMatches && $("#find-dialog").open) refreshFindMatches(false); });
+  editor.addEventListener("beforeinput", (event) => {
+    if (event.target?.id === "document-list-search") return;
+    handleTrackedBeforeInput(event);
+  });
+  editor.addEventListener("input", (event) => {
+    if (event.target?.id === "document-list-search") { filterSavedDocumentList(event.target.value); return; }
+    countWords();
+    clearTimeout(reviewHighlightTimer);
+    reviewHighlightTimer = setTimeout(() => { updateReviewHighlights(); renderTrackedChanges(); }, 350);
+    saveDocument();
+    if (!replacingAllMatches && $("#find-dialog").open) refreshFindMatches(false);
+  });
   $("#outline-search").addEventListener("input", renderOutline);
   $("#toggle-outline").addEventListener("click", () => {
     const panel = $("#document-outline");

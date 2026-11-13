@@ -39,6 +39,7 @@ jobs:
           node tests/conversion-layout.test.cjs
           node tests/workspace-chrome.test.cjs
           node tests/landing-copy.test.cjs
+          node tests/document-list-search.test.cjs
           node tests/spellcheck-language.test.cjs
           node tests/review-navigation.test.cjs
           node tests/review-target-size.test.cjs
