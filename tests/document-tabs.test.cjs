@@ -11,6 +11,7 @@ assert.match(html, /id="open-document-tabs" hidden/);
 assert.match(html, /id="open-document-tab-list" role="toolbar" aria-label="Open documents"/);
 assert.match(html, /id="new-document-tab"[^>]*aria-label="Create a new document"/);
 assert.match(source, /function renderOpenDocumentTabs\(\)/);
+assert.ok(source.includes('documentTabList.querySelector(".open-document-tab-item.active")?.scrollIntoView({ block: "nearest", inline: "nearest" }'));
 assert.match(source, /function markActiveDocumentTabDirty\(\)/);
 assert.match(source, /item\.dirty \? `\$\{item\.title\} · Unsaved changes` : item\.title/);
 assert.match(source, /item\.dirty \? `\$\{item\.title\}, unsaved changes` : item\.title/);

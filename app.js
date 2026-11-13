@@ -930,6 +930,7 @@
       wrapper.append(tab, close);
       documentTabList.append(wrapper);
     }
+    documentTabList.querySelector(".open-document-tab-item.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
   function registerOpenDocumentTab(tab) {
