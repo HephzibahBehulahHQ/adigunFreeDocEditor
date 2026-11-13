@@ -162,6 +162,8 @@
   .brand{padding:0;border:0;justify-content:flex-start}
   .brand img{width:122px;height:auto;max-width:calc(100vw - 32px);object-fit:contain}
   .product-name,.sidebar-caption,.nav-item,.sidebar-divider,.sidebar-footer{display:none}
+  .product-name{display:flex;margin:0 0 0 12px;font-size:13px}
+  .product-name>span:not(.product-mark){display:inline}
   .workspace{grid-column:1;padding-top:54px}
   .mobile-menu-button{display:grid}
   .sidebar.mobile-open{height:auto;min-height:54px;max-height:calc(100dvh - 8px);overflow-y:auto;padding:10px 16px 14px;align-items:stretch;flex-direction:column;box-shadow:0 12px 24px rgba(11,18,32,.2)}
@@ -212,3 +214,22 @@
 .clear-local-data-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin-top:20px}
 .clear-local-data-actions .button{justify-content:center}
 [data-theme="dark"] .button-danger{border-color:#b42318;background:#b42318;color:#fff}
+
+@media(max-width:700px){
+  .sidebar{justify-content:flex-start}
+  .product-name{display:flex;margin:0 0 0 12px;font-size:12px}
+  .product-name>span:not(.product-mark){display:inline}
+  .mobile-brand{display:none}
+}
+@media(max-width:420px){
+  .sidebar .brand img{width:106px}
+  .product-name{gap:5px;margin-left:8px;font-size:11px}
+  .product-mark{font-size:16px}
+  .topbar{gap:4px;padding:0 8px}
+  .topbar-title{gap:6px}
+  .document-title{width:min(96px,30vw);padding:5px 4px;font-size:11px}
+  .topbar-actions{gap:2px}
+  .icon-button{width:26px}
+  .button-outline{padding:5px}
+}
+
