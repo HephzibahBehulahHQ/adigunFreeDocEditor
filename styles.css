@@ -201,3 +201,14 @@
 .assistant-tool:focus-visible{outline:3px solid var(--purple);outline-offset:2px}
 [data-theme="dark"] .assistant-tool{background:#101827;border-color:var(--line);color:var(--ink)}
 [data-theme="dark"] .assistant-tool:hover{background:#2b2540}
+
+.privacy-settings{margin-top:18px}
+.local-data-count{margin:8px 0 12px;color:var(--muted);font-size:10px}
+.button-danger{border-color:#b42318;background:#b42318;color:#fff}
+.button-danger:hover{border-color:#912018;background:#912018}
+.clear-local-data-dialog{width:min(460px,calc(100vw - 28px));padding:0}
+.clear-local-data-content{padding:20px}
+.clear-local-data-warning{margin:0;color:var(--ink);font-size:12px;line-height:1.6}
+.clear-local-data-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin-top:20px}
+.clear-local-data-actions .button{justify-content:center}
+[data-theme="dark"] .button-danger{border-color:#b42318;background:#b42318;color:#fff}
