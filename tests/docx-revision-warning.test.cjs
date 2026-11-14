@@ -13,7 +13,7 @@ assert.match(sourceRevisionLossWarning(null, true), /status could not be checked
 assert.match(app, /const revisionCounts = await readDocxRevisionCounts\(arrayBuffer, archiveEntry\)/);
 assert.match(app, /if \(revisionWarning\) warnings\.push\(revisionWarning\)/);
 assert.match(app, /if \(revisionWarning\) notes\.push\(revisionWarning\)/);
-const importedHtmlStart = app.indexOf('editor.innerHTML = revisionMapping.html || "<p><br></p>";');
+const importedHtmlStart = app.indexOf('setDocumentContent(revisionMapping.html || "<p><br></p>");');
 const importedHtmlEnd = app.indexOf("saveDocument();", importedHtmlStart);
 assert.ok(importedHtmlStart >= 0 && importedHtmlEnd > importedHtmlStart, "DOCX import flow connects the document and review UI");
 const importedReviewUi = app.slice(importedHtmlStart, importedHtmlEnd);
@@ -22,3 +22,4 @@ assert.match(importedReviewUi, /activeTab = "review"/);
 assert.match(importedReviewUi, /showReviewPanel\(true\)/);
 
 process.stdout.write("DOCX revision warning tests passed: warnings reflect source revision counts and inspection uncertainty.\n");
+

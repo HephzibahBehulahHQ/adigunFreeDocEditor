@@ -31,10 +31,14 @@ jobs:
           node-version: 22
       - name: Install pinned editor schema dependencies
         run: npm ci
+      - name: Build the bundled live editor runtime
+        run: npm run build:editor
       - name: Check structured editor schema compatibility
         run: npm run test:editor-schema
       - name: Check editor HTML import and export compatibility
         run: npm run test:editor-html
+      - name: Check live editor transactions and page sheets
+        run: npm run test:live-editor
       - name: Validate document model
         run: |
           node --check app.js
@@ -72,9 +76,11 @@ jobs:
       - name: Package application
         run: |
           mkdir -p _site/assets/vendor
-          cp index.html styles.css app.js document-model.js CNAME _site/
+          cp index.html styles.css app.js document-model.js editor-runtime.js CNAME _site/
           cp assets/hb-official.jpg _site/assets/
           cp assets/vendor/mammoth.browser.min.js assets/vendor/MAMMOTH-LICENSE _site/assets/vendor/
+          cp node_modules/@tiptap/core/LICENSE.md _site/assets/vendor/TIPTAP-LICENSE.md
+          cp node_modules/@tiptap/pm/LICENSE node_modules/@tiptap/pm/THIRD_PARTY_LICENSES.md _site/assets/vendor/
           python - <<'PY'
           import os
           from pathlib import Path
@@ -82,7 +88,7 @@ jobs:
           index = Path("_site/index.html")
           html = index.read_text()
           version = os.environ["GITHUB_SHA"]
-          for asset in ("styles.css", "document-model.js", "app.js"):
+          for asset in ("styles.css", "document-model.js", "editor-runtime.js", "app.js"):
               html = html.replace(f'./{asset}"', f'./{asset}?v={version}"')
           index.write_text(html)
           PY
@@ -97,6 +103,7 @@ jobs:
         uses: actions/deploy-pages@v5
         with:
           artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+
 
 
 

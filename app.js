@@ -1,6 +1,7 @@
 (() => {
   const $ = (selector) => document.querySelector(selector);
-  const editor = $("#document");
+  const editorContainer = $("#document");
+  let editor = editorContainer;
   const titleInput = $("#document-title");
   const saveState = $("#save-state");
   const toast = $("#toast");
@@ -17,6 +18,8 @@
   const documentModel = window.AdigunDocumentModel;
   const DB_NAME = "adigunFreeDocEditor";
   const OPEN_DOCUMENT_SESSION_KEY = "adigun-open-document-session";
+  let liveEditor;
+  let editorResizeObserver;
   let database;
   let activeId = crypto.randomUUID();
   let lastSavedFor = activeId;
@@ -69,6 +72,55 @@
   let theme = localStorage.getItem("adigun-theme") === "dark" ? "dark" : "light";
   const spellcheckLanguageOptions = new Map([["en-US", "English"], ["de-DE", "Deutsch"], ["fr-FR", "Français"], ["es-ES", "Español"]]);
   let spellcheckLanguage = localStorage.getItem("adigun-spellcheck-language") || "en-US";
+
+  function destroyLiveEditor() {
+    if (!liveEditor) return;
+    const content = editor.innerHTML;
+    const inlineStyle = editor.style.cssText;
+    liveEditor?.destroy();
+    liveEditor = undefined;
+    editorContainer.replaceChildren();
+    editorContainer.className = "document-page";
+    editorContainer.style.cssText = inlineStyle;
+    editorContainer.contentEditable = String(activeWorkspaceMode === "document");
+    editorContainer.setAttribute("role", "textbox");
+    editorContainer.setAttribute("aria-label", "Document content");
+    editorContainer.setAttribute("aria-multiline", "true");
+    editorContainer.setAttribute("spellcheck", "true");
+    editorContainer.innerHTML = content;
+    editor = editorContainer;
+    editorResizeObserver?.observe(editor);
+  }
+
+  function setDocumentContent(html) {
+    const content = html || "<p><br></p>";
+    if (liveEditor) {
+      liveEditor.commands.setContent(content, { emitUpdate: false });
+      return;
+    }
+    editor.innerHTML = content;
+    const createLiveEditor = window.AdigunEditorRuntime?.createLiveEditor;
+    if (editor.contentEditable === "true" && typeof createLiveEditor === "function") {
+      liveEditor = createLiveEditor.call(window.AdigunEditorRuntime, {
+        element: editorContainer,
+        onUpdate: () => { countWords(); saveDocument(); },
+      });
+      editor = liveEditor.view.dom;
+      editor.style.cssText = editorContainer.style.cssText;
+      editorContainer.style.cssText = "";
+      editorContainer.className = "document-host";
+      editorContainer.removeAttribute("role");
+      editorContainer.removeAttribute("aria-label");
+      editorContainer.removeAttribute("aria-multiline");
+      editorContainer.removeAttribute("spellcheck");
+      editor.classList.add("document-page");
+      editor.setAttribute("role", "textbox");
+      editor.setAttribute("aria-label", "Document content");
+      editor.setAttribute("aria-multiline", "true");
+      editor.setAttribute("spellcheck", "true");
+      editorResizeObserver?.observe(editor);
+    }
+  }
   const defaultPageLayout = (() => {
     try {
       const saved = JSON.parse(localStorage.getItem("adigun-page-defaults") || "{}");
@@ -1453,11 +1505,13 @@
   function setWorkspaceMode(mode) {
     const isDocument = mode === "document";
     const isConversion = mode === "conversion";
+    if (!isDocument) destroyLiveEditor();
     $("#workspace").classList.toggle("mode-no-document-title", ["landing", "list", "conversion"].includes(mode));
     $("#conversion-workspace").hidden = !isConversion;
     if (!isConversion) { editor.hidden = false; $(".page-footer").hidden = false; }
     $("#document-ruler").hidden = !isDocument;
     if (!isDocument) $("#editor-card").classList.remove("paper-layout");
+    if (liveEditor) liveEditor.setEditable(isDocument);
     editor.contentEditable = String(isDocument);
     titleInput.readOnly = !isDocument;
     $("#editor-layout").classList.toggle("has-outline", isDocument);
@@ -1562,7 +1616,7 @@
     $("#editor-card").classList.remove("pdf-preview");
     $("#editor-card").classList.remove("landing");
     editor.hidden = false;
-    editor.innerHTML = template?.content || "<p><br></p>";
+    setDocumentContent(template?.content || "<p><br></p>");
     editor.focus();
     countWords();
     saveDocument();
@@ -2490,7 +2544,7 @@
     $("#editor-card").classList.remove("landing");
     $("#file-kind").textContent = "Saved on this device";
     const content = typeof doc.content === "string" ? documentModel.fromHTML(doc.content) : documentModel.normalize(doc.content);
-    editor.innerHTML = documentModel.toHTML(content) || "<p><br></p>";
+    setDocumentContent(documentModel.toHTML(content) || "<p><br></p>");
     editor.hidden = false;
     renderReviewComments();
     countWords();
@@ -2619,7 +2673,7 @@
         editor.hidden = false;
         setWorkspaceMode("document");
         $("#export-html").lastElementChild.textContent = "Export HTML";
-        editor.innerHTML = revisionMapping.html || "<p><br></p>";
+        setDocumentContent(revisionMapping.html || "<p><br></p>");
         countWords();
         const hasImportedRevisions = revisionMapping.preserved.insertions + revisionMapping.preserved.deletions > 0;
         if (hasImportedRevisions || reviewComments.length) {
@@ -2689,7 +2743,7 @@
     setWorkspaceMode("document");
     $("#export-html").lastElementChild.textContent = "Export HTML";
     const plain = extension === "html" || extension === "htm" ? new DOMParser().parseFromString(importedText, "text/html").body.innerText : importedText;
-    editor.innerHTML = plain.split(/\r?\n/).map((line) => `<p>${escapeHTML(line) || "<br>"}</p>`).join("") || "<p><br></p>";
+    setDocumentContent(plain.split(/\r?\n/).map((line) => `<p>${escapeHTML(line) || "<br>"}</p>`).join("") || "<p><br></p>");
     countWords();
     saveDocument();
     notify("File opened. Imported text is saved in this browser.");
@@ -3069,7 +3123,48 @@
     saveDocument();
   }
 
+  function runLiveEditorCommand(command, value) {
+    if (!liveEditor) return null;
+    const chain = liveEditor.chain().focus();
+    switch (command) {
+      case "bold": return chain.toggleBold().run();
+      case "italic": return chain.toggleItalic().run();
+      case "underline": return chain.toggleUnderline().run();
+      case "strikeThrough": return chain.toggleStrike().run();
+      case "insertUnorderedList": return chain.toggleBulletList().run();
+      case "insertOrderedList": return chain.toggleOrderedList().run();
+      case "justifyLeft": return chain.setTextAlign("left").run();
+      case "justifyCenter": return chain.setTextAlign("center").run();
+      case "justifyRight": return chain.setTextAlign("right").run();
+      case "justifyFull": return chain.setTextAlign("justify").run();
+      case "removeFormat": return chain.unsetAllMarks().run();
+      case "createLink": return chain.setLink({ href: value }).run();
+      case "unlink": return chain.unsetLink().run();
+      case "undo": return chain.undo().run();
+      case "redo": return chain.redo().run();
+      case "insertText": return chain.insertContent(value).run();
+      case "insertHTML": return chain.insertContent(value).run();
+      case "fontName": return chain.setMark("textStyle", { fontFamily: value }).run();
+      case "foreColor": return chain.setMark("textStyle", { textColor: value }).run();
+      case "hiliteColor": return chain.setMark("textStyle", { highlightColor: value }).run();
+      case "formatBlock": {
+        const tag = String(value || "").replace(/[<>/]/g, "").toLowerCase();
+        if (/^h[1-6]$/.test(tag)) return chain.setHeading({ level: Number(tag.slice(1)) }).run();
+        if (tag === "p") return chain.setParagraph().run();
+        return null;
+      }
+      default: return null;
+    }
+  }
+
   function runCommand(command, value) {
+    const liveResult = runLiveEditorCommand(command, value);
+    if (liveResult !== null) {
+      updateRibbonSelection();
+      countWords();
+      saveDocument();
+      return;
+    }
     editor.focus();
     document.execCommand(command, false, value || null);
     updateRibbonSelection();
@@ -4243,7 +4338,10 @@
   $("#cancel-image-properties").addEventListener("click", () => $("#image-properties-dialog").close());
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
   window.addEventListener("resize", applyPaperCanvasMinimumHeight);
-  if (window.ResizeObserver) new ResizeObserver(applyPaperCanvasMinimumHeight).observe(editor);
+  if (window.ResizeObserver) {
+    editorResizeObserver = new ResizeObserver(applyPaperCanvasMinimumHeight);
+    editorResizeObserver.observe(editorContainer);
+  }
   editor.addEventListener("beforeinput", (event) => {
     if (event.target?.id === "document-list-search") return;
     handleTrackedBeforeInput(event);
@@ -4580,7 +4678,7 @@
   });
 
   document.addEventListener("selectionchange", updateRibbonSelection);
-  for (const event of ["click", "keyup", "mouseup", "input", "focus"]) editor.addEventListener(event, updateRibbonSelection);
+  for (const event of ["click", "keyup", "mouseup", "input", "focusin"]) editor.addEventListener(event, updateRibbonSelection);
   window.addEventListener("resize", () => {
     if (window.matchMedia("(max-width: 1050px)").matches && (!$("#review-comments").hidden || $("#document-outline").classList.contains("mobile-open"))) toggleAssistant(false);
     scheduleEditorPagination();
@@ -4589,5 +4687,6 @@
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
   openDatabase().then(() => { setSaveStatus("Saved"); return restoreOpenDocumentTabs(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
 })();
+
 
 

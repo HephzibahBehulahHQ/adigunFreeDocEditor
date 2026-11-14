@@ -1,4 +1,4 @@
-import { Extension, Mark, getSchema, mergeAttributes } from "@tiptap/core";
+import { Extension, Mark, Node, getSchema, mergeAttributes } from "@tiptap/core";
 import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
@@ -131,7 +131,32 @@ function revisionMark(name, tag) {
 const TrackedInsertion = revisionMark("trackedInsertion", "ins");
 const TrackedDeletion = revisionMark("trackedDeletion", "del");
 
+const DocumentSheet = Node.create({
+  name: "documentSheet",
+  group: "block",
+  content: "(paragraph|heading|bulletList|orderedList|blockquote|codeBlock|horizontalRule|table)+",
+  defining: true,
+  selectable: false,
+  priority: 1000,
+  addAttributes() {
+    return {
+      pageLabel: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("aria-label"),
+        renderHTML: (attrs) => attrs.pageLabel ? { "aria-label": attrs.pageLabel } : {},
+      },
+    };
+  },
+  parseHTML: () => [{ tag: "div.document-sheet", priority: 1000 }],
+  renderHTML: ({ HTMLAttributes }) => ["div", mergeAttributes({
+    class: "document-sheet",
+    "data-editor-page": "true",
+    role: "group",
+  }, HTMLAttributes), 0],
+});
+
 export const editorExtensions = [
+  DocumentSheet,
   StarterKit.configure({ link: false, heading: { levels: [1, 2, 3, 4, 5, 6] } }),
   TableKit,
   Image.configure({ inline: true, allowBase64: true }),
@@ -305,6 +330,7 @@ function wrapTextMarks(node, marks = []) {
 }
 
 function editorNodeToModel(node) {
+  if (node.type === "documentSheet") return node.content.flatMap(editorNodeToModel);
   if (node.type === "text") return wrapTextMarks({ type: "text", text: node.text }, node.marks);
   if (node.type === "image") return { type: "element", tag: "img", attrs: Object.fromEntries([
     ["src", node.attrs.src], ["alt", node.attrs.alt], ["width", node.attrs.width], ["height", node.attrs.height],
@@ -349,7 +375,8 @@ function editorNodeToModel(node) {
 }
 
 export function editorJSONToDocumentModel(editorDocument) {
-  const content = (editorDocument?.content || []).map(editorNodeToModel);
+  const content = (editorDocument?.content || []).flatMap(editorNodeToModel);
   return { type: modelFormat, version: 1, content };
 }
+
 

@@ -21,10 +21,14 @@ jobs:
           node-version: 22
       - name: Install pinned editor schema dependencies
         run: npm ci
+      - name: Build the bundled live editor runtime
+        run: npm run build:editor
       - name: Check structured editor schema compatibility
         run: npm run test:editor-schema
       - name: Check editor HTML import and export compatibility
         run: npm run test:editor-html
+      - name: Check live editor transactions and page sheets
+        run: npm run test:live-editor
       - name: Check JavaScript syntax and document behavior
         run: |
           node --check app.js
@@ -71,6 +75,7 @@ jobs:
           node tests/mobile-menu-outside-click.test.cjs
           node tests/file-picker-labels.test.cjs
           node tests/assistant-panel-state.test.cjs
+
 
 
 
