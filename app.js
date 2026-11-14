@@ -96,6 +96,7 @@
     const content = html || "<p><br></p>";
     if (liveEditor) {
       liveEditor.commands.setContent(content, { emitUpdate: false });
+      updateHistoryAvailability();
       return;
     }
     editor.innerHTML = content;
@@ -103,7 +104,7 @@
     if (editor.contentEditable === "true" && typeof createLiveEditor === "function") {
       liveEditor = createLiveEditor.call(window.AdigunEditorRuntime, {
         element: editorContainer,
-        onUpdate: () => { countWords(); saveDocument(); },
+        onUpdate: () => { updateHistoryAvailability(); countWords(); saveDocument(); },
       });
       editor = liveEditor.view.dom;
       editor.style.cssText = editorContainer.style.cssText;
@@ -119,6 +120,7 @@
       editor.setAttribute("aria-multiline", "true");
       editor.setAttribute("spellcheck", "true");
       editorResizeObserver?.observe(editor);
+      updateHistoryAvailability();
     }
   }
   const defaultPageLayout = (() => {
@@ -2831,7 +2833,15 @@
     return null;
   }
 
+  function updateHistoryAvailability() {
+    const canUndo = liveEditor ? liveEditor.can().undo() : typeof document.queryCommandEnabled === "function" && document.queryCommandEnabled("undo");
+    const canRedo = liveEditor ? liveEditor.can().redo() : typeof document.queryCommandEnabled === "function" && document.queryCommandEnabled("redo");
+    for (const button of [$("#undo"), ribbon.querySelector('.tool-button[data-action="undo"]')]) if (button) button.disabled = !canUndo;
+    for (const button of [$("#redo"), ribbon.querySelector('.tool-button[data-action="redo"]')]) if (button) button.disabled = !canRedo;
+  }
+
   function updateRibbonSelection() {
+    updateHistoryAvailability();
     const selection = window.getSelection();
     const focusNode = selection?.focusNode || selection?.anchorNode;
     const anchorNode = selection?.anchorNode;

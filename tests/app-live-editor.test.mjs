@@ -66,12 +66,16 @@ try {
   assert.equal(liveRoot.contentEditable, "true", "the ProseMirror root owns document editing");
   assert.equal(host.contentEditable, "false", "the persistent document host is not an editable ancestor");
   assert.equal(liveRoot.getAttribute("role"), "textbox", "the live editing root keeps the accessible textbox role");
+  assert.equal(window.document.querySelector("#undo").disabled, true, "Undo is disabled when the new document has no history");
+  assert.equal(window.document.querySelector("#redo").disabled, true, "Redo is disabled when the new document has no redo history");
 
   window.__testEditor.commands.setContent("<p>Live text</p>");
   window.__testEditor.commands.setTextSelection({ from: 1, to: 10 });
   window.document.querySelector('#ribbon-tools [data-action="bold"]').click();
   assert.match(window.__testEditor.getHTML(), /<strong>Live text<\/strong>/, "the Home ribbon applies formatting through a live editor transaction");
   assert.equal(window.document.querySelector('#ribbon-tools [data-action="bold"]').getAttribute("aria-pressed"), "true", "the Home ribbon shows bold as active for the live selection");
+  assert.equal(window.document.querySelector("#undo").disabled, false, "Undo enables after a live editor transaction");
+  assert.equal(window.document.querySelector('#ribbon-tools [data-action="undo"]').disabled, false, "ribbon Undo enables after a live editor transaction");
 
   const fontSize = window.document.querySelector('#ribbon-tools [data-tool="size"]');
   fontSize.value = "14pt";
