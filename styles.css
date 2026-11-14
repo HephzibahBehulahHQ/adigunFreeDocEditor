@@ -355,6 +355,9 @@ button:disabled{cursor:not-allowed;opacity:.48}
 
 @media(min-width:701px) and (max-width:1050px){.ribbon-tools{height:64px}.tool-group{height:48px}.tool-button,.tool-select{height:44px}.tool-button{min-width:44px}.tool-select{max-width:160px}}
 
+@media(max-width:1050px){.review-filters button,.review-comment-link,.review-comment-resolve,.tracked-revision-actions button{min-height:44px;display:inline-flex;align-items:center;justify-content:center}}
+
+
 
 
 
