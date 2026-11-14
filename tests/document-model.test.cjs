@@ -88,7 +88,12 @@ const splitTable = element("div", {}, [
     element("tbody", {}, [element("tr", {}, [element("td", {}, [text("Grace")])])]),
   ])]),
 ]);
-assert.equal(modelApi.toHTML(modelApi.fromDOM(splitTable)), "<table><thead><tr><th>Name</th></tr></thead><tbody><tr><td>Ada</td></tr></tbody><tbody><tr><td>Grace</td></tr></tbody></table>", "page-fragmented tables save as one table with a single header");
+assert.equal(modelApi.toHTML(modelApi.fromDOM(splitTable)), "<table><thead><tr><th>Name</th></tr></thead><tbody><tr><td>Ada</td></tr><tr><td>Grace</td></tr></tbody></table>", "page-fragmented tables save as one table with a single header");
+const splitTableRow = element("div", {}, [
+  element("div", {}, [element("table", { "data-page-flow-id": "f22e-123" }, [element("tbody", {}, [element("tr", { "data-page-flow-id": "a22e-123" }, [element("td", {}, [text("A long cell ")]), element("td", {}, [text("Same row")])])])])]),
+  element("div", {}, [element("table", { "data-page-flow-id": "f22e-123" }, [element("tbody", {}, [element("tr", { "data-page-flow-id": "a22e-123" }, [element("td", {}, [text("continued across sheets")]), element("td", {}, [])])])])]),
+]);
+assert.equal(modelApi.toHTML(modelApi.fromDOM(splitTableRow)), "<table><tbody><tr><td>A long cell continued across sheets</td><td>Same row</td></tr></tbody></table>", "split table rows save as one row and rejoin cell contents by column");
 assert.match(html, /unsafe link/);
 assert.doesNotMatch(html, /javascript:|<script|https:\/\/invalid\.example/);
 assert.match(html, /<img src="data:image\/png;base64,aGVsbG8=" alt="Diagram">/);
