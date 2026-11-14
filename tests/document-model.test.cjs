@@ -61,6 +61,13 @@ assert.match(html, /untrusted family/);
 assert.doesNotMatch(html, /data-font-family="Arial; color: red"/);
 assert.equal((html.match(/data-page-break="true"/g) || []).length, 1);
 assert.doesNotMatch(html, /data-page-break="false"/);
+const flowFragments = element("div", {}, [
+  element("div", {}, [element("p", { "data-page-flow-id": "f10a-123" }, [text("A paragraph split ")])]),
+  element("div", {}, [element("p", { "data-page-flow-id": "f10a-123" }, [element("strong", {}, [text("across pages")])])]),
+]);
+const joinedFlow = modelApi.toHTML(modelApi.fromDOM(flowFragments));
+assert.equal(joinedFlow, "<p>A paragraph split <strong>across pages</strong></p>", "visual page fragments persist and export as the original paragraph");
+assert.doesNotMatch(joinedFlow, /data-page-flow-id/);
 assert.match(html, /unsafe link/);
 assert.doesNotMatch(html, /javascript:|<script|https:\/\/invalid\.example/);
 assert.match(html, /<img src="data:image\/png;base64,aGVsbG8=" alt="Diagram">/);
