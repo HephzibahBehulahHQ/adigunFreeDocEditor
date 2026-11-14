@@ -293,3 +293,6 @@
 
 button:disabled{cursor:not-allowed;opacity:.48}
 @media(min-width:901px){.workspace.mode-no-document-title .topbar{display:none}}
+
+.settings-dialog{max-height:calc(100vh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 24px)}
+@supports(height:100dvh){.settings-dialog{max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 24px)}}
