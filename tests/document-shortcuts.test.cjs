@@ -10,7 +10,7 @@ assert.match(source, /action: "page-break", icon: "↧ Page break", title: "Inse
 assert.match(source, /if \(tool\.shortcut\) control\.setAttribute\("aria-keyshortcuts", tool\.shortcut\)/);
 
 const selectedText = {};
-const editor = { contains: (node) => node === selectedText };
+const editor = { contentEditable: "true", contains: (node) => node === selectedText };
 const selection = { rangeCount: 1, anchorNode: selectedText };
 const actions = [];
 const api = new Function("window", "document", "editor", "$", "runTool", "saveDocument", "notify", "openFindDialog", "setMobileMenu", source.slice(start, end) + "\nreturn handleKeyboardShortcut;")(
@@ -38,4 +38,7 @@ assert.deepEqual(actions, ["page-break", "page-break"]);
 assert.equal(press({ shiftKey: true }), false, "Ctrl+Shift+Enter is left alone");
 selection.anchorNode = {};
 assert.equal(press(), false, "the shortcut does not act on a selection outside the editor");
+selection.anchorNode = selectedText;
+editor.contentEditable = "false";
+assert.equal(press(), false, "the shortcut is ignored when the editor is read-only");
 console.log("Document keyboard shortcuts checks passed");
