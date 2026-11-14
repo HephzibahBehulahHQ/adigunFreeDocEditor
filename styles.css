@@ -146,6 +146,7 @@
 .document-sheet.page-numbered::after,.document-sheet[data-page-footer]::after{content:attr(data-page-footer) attr(data-page-number);position:absolute;left:24px;right:24px;bottom:28px;text-align:center;color:var(--muted);font:11px/1.2 Arial,sans-serif;pointer-events:none}
 .page-decoration-field{display:flex;flex-direction:column;gap:6px;margin:14px 0;color:var(--ink);font-size:12px;font-weight:600}
 .page-decoration-field input{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font:inherit;font-weight:400}
+.page-decoration-field select{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font:inherit;font-weight:400}
 .page-decoration-field input:focus-visible{outline:2px solid var(--purple);outline-offset:2px}
 
 .conversion-workspace{max-width:1120px;margin:0 auto;padding:34px 28px 42px}
@@ -251,7 +252,7 @@
 :root{--focus-ring:#5635b8}
 [data-theme="dark"]{--focus-ring:#c4b5fd}
 :focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
-.document-title:focus-visible,.document-page:focus-visible,.outline-search:focus-visible,.table-size-fields input:focus-visible,.find-fields input:focus-visible,.break-navigation-item:focus-visible,#paragraph-indent-ruler:focus-visible,.page-decoration-field input:focus-visible,.landing-template:focus-visible,.assistant-tool:focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
+.document-title:focus-visible,.document-page:focus-visible,.outline-search:focus-visible,.table-size-fields input:focus-visible,.find-fields input:focus-visible,.break-navigation-item:focus-visible,#paragraph-indent-ruler:focus-visible,.page-decoration-field input:focus-visible,.page-decoration-field select:focus-visible,.landing-template:focus-visible,.assistant-tool:focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
 @media(min-width:1200px){.app-shell.assistant-docked{grid-template-columns:240px minmax(0,1fr) minmax(260px,var(--assistant-docked-width,310px))}.app-shell.assistant-docked>.adigun-window{position:sticky;grid-column:3;grid-row:1;top:0;align-self:start;width:auto;height:100dvh;max-width:none;max-height:none;min-width:0;min-height:0;margin:0;border:0;border-left:1px solid var(--line);border-radius:0;box-shadow:none;resize:none}.app-shell.assistant-docked>.adigun-window.minimized{height:48px!important;min-height:48px}.app-shell.assistant-docked .adigun-header{cursor:default}.app-shell.assistant-docked .assistant-dock-resize{position:absolute;inset:0 auto 0 0;z-index:3;display:block;width:8px;touch-action:none;cursor:col-resize}.app-shell.assistant-docked .assistant-dock-resize::after{position:absolute;top:calc(50% - 18px);left:3px;width:2px;height:36px;border-radius:2px;background:var(--muted);content:"";opacity:.55}.app-shell.assistant-docked .assistant-dock-resize:hover::after,.app-shell.assistant-docked .assistant-dock-resize:focus-visible::after{opacity:1;background:var(--purple)}}
 .assistant-dock-resize{display:none}
 .open-document-tabs[hidden]{display:none}

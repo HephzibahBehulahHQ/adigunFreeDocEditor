@@ -3736,6 +3736,10 @@
     imagePropertiesTarget = image;
     $("#image-alt-text").value = image.alt || "";
     $("#image-width-pixels").value = String(Math.min(4096, Math.max(1, Number(image.getAttribute("width")) || image.naturalWidth || 600)));
+    const alignmentBlock = image.closest("p,li,blockquote");
+    const alignment = alignmentBlock ? getComputedStyle(alignmentBlock).textAlign : "left";
+    $("#image-alignment").value = ["center", "right"].includes(alignment) ? alignment : "left";
+    $("#image-alignment").disabled = !alignmentBlock;
     $("#image-properties-dialog").showModal();
     $("#image-alt-text").focus();
   }
@@ -3835,6 +3839,8 @@
     image.alt = $("#image-alt-text").value.slice(0, 300);
     image.setAttribute("width", String(width));
     image.style.maxWidth = "100%";
+    const alignmentBlock = image.closest("p,li,blockquote");
+    if (alignmentBlock) alignmentBlock.style.textAlign = $("#image-alignment").value;
     activeImage = image;
     $("#image-properties-dialog").close();
     countWords();

@@ -9,7 +9,8 @@ assert.match(source, /function imageAtSelection\(selection = window\.getSelectio
 assert.match(source, /action: "image-properties"/);
 assert.match(source, /image\.alt = \$\("#image-alt-text"\)\.value\.slice\(0, 300\)/, "image descriptions are editable");
 assert.match(source, /image\.setAttribute\("width", String\(width\)\)/, "image dimensions are persisted in the document model");
-assert.match(html, /id="image-properties-dialog"[\s\S]*?id="image-alt-text"[\s\S]*?id="image-width-pixels"/);
+assert.match(source, /alignmentBlock\.style\.textAlign = \$\("#image-alignment"\)\.value/, "image alignment is applied to its paragraph");
+assert.match(html, /id="image-properties-dialog"[\s\S]*?id="image-alt-text"[\s\S]*?id="image-width-pixels"[\s\S]*?id="image-alignment"/);
 const start = source.indexOf("  function wordXmlText(");
 const end = source.indexOf("  async function exportDocx(", start);
 assert.ok(start >= 0 && end > start, "DOCX serializer functions are present");
