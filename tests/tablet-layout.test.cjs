@@ -5,7 +5,7 @@ const path = require("node:path");
 const root = path.join(__dirname, "..");
 const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
-const mediaStart = css.indexOf("@media(min-width:701px) and (max-width:1050px){");
+const mediaStart = css.indexOf("@media(min-width:701px) and (max-width:1050px){\n  .app-shell{display:block}");
 assert.ok(mediaStart >= 0, "tablet layout breakpoint exists");
 
 let depth = 0;
