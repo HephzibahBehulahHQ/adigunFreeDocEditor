@@ -305,3 +305,10 @@ button:disabled{cursor:not-allowed;opacity:.48}
   .settings-dialog .settings-foot .button{min-height:40px}
   .settings-dialog .settings-foot>div>.button,.settings-dialog .comment-form-actions>.button{flex:1}
 }
+
+@media(max-width:420px){
+  .setting-choice{align-items:stretch;flex-direction:column;gap:5px}
+  .setting-choice select{width:100%;max-width:none;min-height:40px}
+  .clear-local-data-actions{display:grid;grid-template-columns:1fr}
+  .clear-local-data-actions .button{width:100%;min-height:40px}
+}
