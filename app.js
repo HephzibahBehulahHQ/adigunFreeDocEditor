@@ -164,7 +164,7 @@
   const toolsets = {
     home: [
       [{ label: "Undo", action: "undo", icon: "↶" }, { label: "Redo", action: "redo", icon: "↷" }],
-      [{ label: "Font family", select: "font", options: [["", "Font"], ...supportedFontFamilies.map((family) => [family, family])] }, { label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Heading 1"], ["h2", "Heading 2"], ["h3", "Heading 3"]] }, { label: "Font size", select: "size", options: [["11pt", "11"], ["14pt", "14"], ["18pt", "18"], ["24pt", "24"]] }],
+      [{ label: "Font family", select: "font", options: [["", "Font"], ...supportedFontFamilies.map((family) => [family, family])] }, { label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Heading 1"], ["h2", "Heading 2"], ["h3", "Heading 3"], ["h4", "Heading 4"], ["h5", "Heading 5"], ["h6", "Heading 6"]] }, { label: "Font size", select: "size", options: [["11pt", "11"], ["14pt", "14"], ["18pt", "18"], ["24pt", "24"]] }],
       [{ label: "Text color", select: "text-color", options: [["", "Text color"], ...textColorOptions] }, { label: "Highlight color", select: "highlight-color", options: [["", "Highlight"], ...highlightColorOptions] }],
       [{ label: "Line spacing", select: "line-spacing", options: [["", "Default"], ["1", "Single"], ["1.15", "1.15"], ["1.5", "1.5"], ["2", "Double"]] }, { label: "Paragraph spacing after", select: "paragraph-spacing", options: [["", "Default"], ["0", "None"], ["6", "Compact"], ["12", "Relaxed"]] }],
       [{ label: "Bold", action: "bold", icon: "B", pressed: true }, { label: "Italic", action: "italic", icon: "I", pressed: true }, { label: "Underline", action: "underline", icon: "U", pressed: true }, { label: "Strikethrough", action: "strikeThrough", icon: "S̶ Strike", pressed: true }, { label: "Clear character formatting", action: "removeFormat", icon: "T× Clear" }],
@@ -2883,7 +2883,7 @@
     const blockSelect = ribbon.querySelector("[data-tool=block]");
     if (blockSelect) {
       const tag = block?.tagName.toLowerCase();
-      blockSelect.value = ["h1", "h2", "h3"].includes(tag) ? tag : "p";
+      blockSelect.value = /^h[1-6]$/.test(tag || "") ? tag : "p";
     }
     const familySelect = ribbon.querySelector("[data-tool=font]");
     const fontNode = focusElement?.closest("span[data-font-family],font[face]");
