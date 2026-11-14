@@ -367,3 +367,8 @@ button:disabled{cursor:not-allowed;opacity:.48}
 
 .editor-layout:not(.has-outline) > .editor-card{width:min(100%,880px)}
 .document-host{display:contents}
+
+.sidebar-footer.checking .privacy-dot{background:#aeb8ca}
+.sidebar-footer.available .privacy-dot{background:#38b778}
+.sidebar-footer.unavailable{color:#ffc0b9}
+.sidebar-footer.unavailable .privacy-dot{background:#e45f52}
