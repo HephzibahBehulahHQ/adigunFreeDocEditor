@@ -50,6 +50,8 @@
   let conversionOutputName = "";
   let tableInsertionRange;
   let imageInsertionRange;
+  let activeImage;
+  let imagePropertiesTarget;
   let reviewComments = [];
   let trackChangesEnabled = false;
   let reviewFilter = "all";
@@ -118,7 +120,7 @@
     ],
     insert: [
       [{ label: "Add link", action: "link", icon: "↗ Link" }, { label: "Remove link", action: "unlink", icon: "↗̸" }],
-      [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert page break", action: "page-break", icon: "↧ Page break" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }, { label: "Insert image from this device", action: "image", icon: "▧ Image" }],
+      [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert page break", action: "page-break", icon: "↧ Page break" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }, { label: "Insert image from this device", action: "image", icon: "▧ Image" }, { label: "Edit selected image description and size", action: "image-properties", icon: "▧ Image properties" }],
       [{ label: "Insert row above", action: "table-row-above", icon: "▤ Row ↑" }, { label: "Insert row below", action: "table-row-below", icon: "▤ Row ↓" }, { label: "Insert column left", action: "table-column-left", icon: "▥ Col ←" }, { label: "Insert column right", action: "table-column-right", icon: "▥ Col →" }, { label: "Delete row", action: "table-row-delete", icon: "⌫ Row" }, { label: "Delete column", action: "table-column-delete", icon: "⌫ Col" }, { label: "Delete table", action: "table-delete", icon: "⌫ Table" }, { label: "Merge adjacent cells", action: "table-merge", icon: "▦ Merge" }, { label: "Merge cells vertically", action: "table-merge-vertical", icon: "▤ Merge ↓" }, { label: "Split merged cell", action: "table-split", icon: "▦ Split" }],
     ],
     layout: [
@@ -2365,11 +2367,36 @@
     updateRibbonSelection();
   }
 
+  function imageAtSelection(selection = window.getSelection()) {
+    if (!selection?.rangeCount) return null;
+    for (const node of [selection.focusNode, selection.anchorNode]) {
+      const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+      const image = element?.matches("img") ? element : element?.closest("img");
+      if (image && editor.contains(image)) return image;
+    }
+    const range = selection.getRangeAt(0);
+    if (range.collapsed && range.startContainer?.childNodes) {
+      const adjacent = range.startContainer.childNodes[range.startOffset] || range.startContainer.childNodes[range.startOffset - 1];
+      if (adjacent?.nodeName === "IMG" && editor.contains(adjacent)) return adjacent;
+    }
+    if (!range.collapsed) {
+      const images = [...editor.querySelectorAll("img")].filter((image) => range.intersectsNode(image));
+      if (images.length === 1) return images[0];
+    }
+    return null;
+  }
+
   function updateRibbonSelection() {
     const selection = window.getSelection();
     const focusNode = selection?.focusNode || selection?.anchorNode;
     const anchorNode = selection?.anchorNode;
     const inEditor = (node) => node && (node === editor || editor.contains(node));
+    const selectionImage = imageAtSelection(selection);
+    if (selectionImage) activeImage = selectionImage;
+    else if (document.activeElement === editor) activeImage = null;
+    if (activeImage && !editor.contains(activeImage)) activeImage = null;
+    const imagePropertiesButton = ribbon.querySelector('.tool-button[data-action="image-properties"]');
+    if (imagePropertiesButton) imagePropertiesButton.disabled = !activeImage;
     const tableCell = selectedTableCell();
     for (const button of ribbon.querySelectorAll('.tool-button[data-action^="table-"]')) button.disabled = !tableCell;
     const trackingButton = ribbon.querySelector('.tool-button[data-action="track-changes"]');
@@ -2898,6 +2925,7 @@
         imagePicker.click();
         break;
       }
+      case "image-properties": openImagePropertiesDialog(); break;
       case "orientation": pageOrientation = pageOrientation === "portrait" ? "landscape" : "portrait"; $("#editor-card").classList.toggle("landscape", pageOrientation === "landscape"); button.textContent = pageOrientation === "portrait" ? "▯ Portrait" : "▭ Landscape"; pageCanvasDimensions = ""; applyPaperCanvasMinimumHeight(); saveDocument(); break;
       case "add-comment": openCommentDialog(); break;
       case "show-comments": showReviewPanel(true); break;
@@ -3703,6 +3731,15 @@
     }
   }
 
+  function openImagePropertiesDialog(image = activeImage) {
+    if (!image || !editor.contains(image)) { notify("Select an image in the document first."); return; }
+    imagePropertiesTarget = image;
+    $("#image-alt-text").value = image.alt || "";
+    $("#image-width-pixels").value = String(Math.min(4096, Math.max(1, Number(image.getAttribute("width")) || image.naturalWidth || 600)));
+    $("#image-properties-dialog").showModal();
+    $("#image-alt-text").focus();
+  }
+
   function setupAssistantDrag() {
     const handle = $("#adigun-drag-handle");
     let start;
@@ -3776,6 +3813,37 @@
   $("#conversion-download").addEventListener("click", () => { if (conversionOutputBlob) { download(conversionOutputBlob, conversionOutputName); notify("Converted file downloaded."); } });
   filePicker.addEventListener("cancel", () => { filePicker.accept = acceptedFileTypes; });
   imagePicker.addEventListener("change", () => { insertLocalImage(imagePicker.files[0]); imagePicker.value = ""; });
+  editor.addEventListener("click", (event) => {
+    const image = event.target.closest?.("img");
+    activeImage = image && editor.contains(image) ? image : null;
+    if (activeImage) {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNode(activeImage);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+    updateRibbonSelection();
+  });
+  $("#image-properties-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const image = imagePropertiesTarget;
+    if (!image || !editor.contains(image)) { $("#image-properties-dialog").close(); notify("That image is no longer in the document."); return; }
+    const widthInput = $("#image-width-pixels");
+    const width = widthInput.valueAsNumber;
+    if (!Number.isInteger(width) || width < 1 || width > 4096) { widthInput.reportValidity(); return; }
+    image.alt = $("#image-alt-text").value.slice(0, 300);
+    image.setAttribute("width", String(width));
+    image.style.maxWidth = "100%";
+    activeImage = image;
+    $("#image-properties-dialog").close();
+    countWords();
+    saveDocument();
+    notify("Image description and size updated.");
+  });
+  $("#image-properties-dialog").addEventListener("close", () => { imagePropertiesTarget = null; });
+  $("#close-image-properties").addEventListener("click", () => $("#image-properties-dialog").close());
+  $("#cancel-image-properties").addEventListener("click", () => $("#image-properties-dialog").close());
   titleInput.addEventListener("input", () => { $("#stage-title").textContent = title(); saveDocument(); });
   window.addEventListener("resize", applyPaperCanvasMinimumHeight);
   if (window.ResizeObserver) new ResizeObserver(applyPaperCanvasMinimumHeight).observe(editor);
