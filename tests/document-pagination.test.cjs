@@ -91,6 +91,41 @@ assert.equal(listFragments.map((fragment) => fragment.children).flat().length, l
 assert.ok(listFragments.every((fragment) => fragment.attributes["data-page-flow-id"] === "beef-1234"));
 assert.deepEqual(listFragmentsInserted, listFragments);
 
+const tableStart = source.indexOf("  function splitTableBetweenRows(table, capacity)");
+const tableEnd = source.indexOf("  function paginateEditor()", tableStart);
+assert.ok(tableStart >= 0 && tableEnd > tableStart);
+const makeTableRow = (height, text) => ({
+  tagName: "TR", text, getBoundingClientRect: () => ({ height }),
+  cloneNode() { return makeTableRow(height, text); },
+});
+const makeSection = (tagName, children = []) => ({
+  tagName, children: [...children], attributes: {},
+  getAttribute(name) { return this.attributes[name] ?? null; },
+  setAttribute(name, value) { this.attributes[name] = value; },
+  append(child) { this.children.push(child); },
+  cloneNode(deep) { return makeSection(tagName, deep ? children.map((child) => child.cloneNode(true)) : []); },
+});
+const tableHeaderRow = makeTableRow(20, "Name");
+const bodyRows = [makeTableRow(25, "Ada"), makeTableRow(25, "Grace"), makeTableRow(25, "Katherine")];
+const tableFragmentsInserted = [];
+const table = {
+  tagName: "TABLE", children: [makeSection("THEAD", [tableHeaderRow]), makeSection("TBODY", bodyRows)],
+  getBoundingClientRect: () => ({ height: 95 }),
+  cloneNode() { return { tagName: "TABLE", children: [], attributes: {}, append(child) { this.children.push(child); }, setAttribute(name, value) { this.attributes[name] = value; } }; },
+  replaceWith(...nodes) { tableFragmentsInserted.push(...nodes); },
+};
+const splitTable = new Function("getComputedStyle", "crypto", source.slice(tableStart, tableEnd) + "\nreturn splitTableBetweenRows;")(
+  () => ({ marginTop: "0", marginBottom: "0" }),
+  { randomUUID: () => "d00d-1234" }
+);
+const tableFragments = splitTable(table, 75);
+assert.deepEqual(tableFragments.map((fragment) => fragment.children.find((child) => child.tagName === "TBODY").children.length), [2, 1], "tables flow between whole rows");
+assert.equal(tableFragments[0].children[0].attributes["data-page-header-copy"], undefined, "the first sheet owns the source header");
+assert.equal(tableFragments[1].children[0].attributes["data-page-header-copy"], "true", "later sheets mark repeated header rows for serialization");
+assert.equal(tableFragments.map((fragment) => fragment.children.find((child) => child.tagName === "TBODY").children).flat().length, bodyRows.length);
+assert.ok(tableFragments.every((fragment) => fragment.attributes["data-page-flow-id"] === "d00d-1234"));
+assert.deepEqual(tableFragmentsInserted, tableFragments);
+
 const outlineStart = source.indexOf("  function editorOutlineHeadings()");
 const outlineEnd = source.indexOf("  function renderOutline()", outlineStart);
 assert.ok(outlineStart >= 0 && outlineEnd > outlineStart);

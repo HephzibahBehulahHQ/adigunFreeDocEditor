@@ -8,7 +8,7 @@
   ]);
   const voidTags = new Set(["br", "hr", "img"]);
   const paragraphTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "th", "td"]);
-  const pageFlowTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol"]);
+  const pageFlowTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "table"]);
   const lineSpacingValues = new Set(["1", "1.15", "1.5", "2"]);
   const paragraphSpacingValues = new Set(["0", "6", "12"]);
   const fontFamilies = new Set(["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"]);
@@ -74,6 +74,7 @@
       }
     }
     if (tag === "hr" && attributes["data-page-break"] === "true") result["data-page-break"] = "true";
+    if (tag === "thead" && attributes["data-page-header-copy"] === "true") result["data-page-header-copy"] = "true";
     if (tag === "ol") {
       const start = Number(attributes.start);
       if (Number.isInteger(start) && start > 1 && start <= 100000) result.start = start;
@@ -118,7 +119,7 @@
     const sourceTag = node.tagName.toLowerCase();
     const tag = sourceTag === "font" ? "span" : sourceTag;
     const attrs = {};
-    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-page-flow-id", "data-font-family", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level", "data-revision-id", "data-revision-author", "data-revision-created-at"]) {
+    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-page-flow-id", "data-page-header-copy", "data-font-family", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level", "data-revision-id", "data-revision-author", "data-revision-created-at"]) {
       const value = node.getAttribute(name);
       if (value !== null) attrs[name] = value;
     }
@@ -142,7 +143,10 @@
     let previousFlowId = "";
     for (const node of content) {
       const flowId = node.type === "element" && pageFlowTags.has(node.tag) ? node.attrs["data-page-flow-id"] || "" : "";
-      if (flowId && flowId === previousFlowId) merged[merged.length - 1].children.push(...node.children);
+      if (flowId && flowId === previousFlowId) {
+        const additions = node.tag === "table" ? node.children.filter((child) => !(child.type === "element" && child.tag === "thead" && child.attrs["data-page-header-copy"] === "true")) : node.children;
+        merged[merged.length - 1].children.push(...additions);
+      }
       else merged.push(node);
       previousFlowId = flowId;
     }
@@ -159,6 +163,7 @@
     if (input.type === "text") return escapeHtml(input.text);
     const attributes = { ...input.attrs };
     delete attributes["data-page-flow-id"];
+    delete attributes["data-page-header-copy"];
     const styles = [];
     if (attributes.align) { styles.push(`text-align:${attributes.align}`); delete attributes.align; }
     if (paragraphTags.has(input.tag)) {
