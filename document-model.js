@@ -176,6 +176,24 @@
         }
         node.children = rows;
       }
+      const mergedChildren = [];
+      let previousTable = null;
+      for (const child of node.children) {
+        const flowId = child.type === "element" && child.tag === "table" ? child.attrs["data-page-flow-id"] || "" : "";
+        if (!flowId || flowId !== previousTable?.attrs["data-page-flow-id"]) {
+          mergedChildren.push(child);
+          previousTable = flowId ? child : null;
+          continue;
+        }
+        for (const section of child.children) {
+          if (section.type === "element" && (section.tag === "colgroup" || section.tag === "thead" && section.attrs["data-page-header-copy"] === "true")) continue;
+          const previousBody = section.type === "element" && section.tag === "tbody" ? previousTable.children.find((existing) => existing.type === "element" && existing.tag === "tbody") : null;
+          if (previousBody) previousBody.children.push(...section.children);
+          else previousTable.children.push(section);
+        }
+        mergeNestedListItemFlows(previousTable);
+      }
+      node.children = mergedChildren;
       if (["ul", "ol"].includes(node.tag)) {
         const items = [];
         let previousItem = null;
