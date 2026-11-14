@@ -562,6 +562,8 @@
     const probe = existing.find((child) => child.classList?.contains("document-sheet"));
     const style = probe ? getComputedStyle(probe) : getComputedStyle(editor);
     const capacity = Math.max(120, minHeight - parseFloat(style.paddingTop || 0) - parseFloat(style.paddingBottom || 0));
+    const imageMaxHeight = Math.max(96, capacity - 32);
+    existing.filter((child) => child.classList?.contains("document-sheet")).forEach((sheet) => sheet.style.setProperty("--page-image-max-height", `${imageMaxHeight}px`));
     const pages = [];
     let page = [];
     let used = 0;
@@ -609,6 +611,7 @@
       const sheet = document.createElement("div");
       sheet.className = "document-sheet";
       sheet.dataset.editorPage = "true";
+      sheet.style.setProperty("--page-image-max-height", `${imageMaxHeight}px`);
       sheet.setAttribute("role", "group");
       sheet.setAttribute("aria-label", `Page ${index + 1}`);
       items.forEach((node) => sheet.append(node));
