@@ -368,6 +368,20 @@
     editorPaginationTimer = setTimeout(paginateEditor, 120);
   }
   function mergePageFlowFragments(nodes) {
+    const mergeNestedListFragments = (parent) => {
+      if (!parent?.children) return;
+      for (const child of [...parent.children]) mergeNestedListFragments(child);
+      let previousList = null;
+      for (const child of [...parent.children]) {
+        if (!/^(UL|OL)$/.test(child.tagName)) { previousList = null; continue; }
+        const flowId = child.getAttribute("data-page-flow-id") || "";
+        if (flowId && flowId === previousList?.getAttribute("data-page-flow-id") && child.tagName === previousList.tagName) {
+          while (child.firstChild) previousList.append(child.firstChild);
+          child.remove();
+          previousList.removeAttribute("data-page-flow-id");
+        } else previousList = child;
+      }
+    };
     const mergeTableRowFragments = (table) => {
       if (!table || table.tagName !== "TABLE") return;
       for (const section of [...table.children].filter((child) => child.tagName === "TBODY")) {
@@ -382,6 +396,7 @@
             row.remove();
           } else previousRow = row;
         }
+        mergeNestedListFragments(section);
         section.querySelectorAll("[data-page-flow-id]").forEach((node) => node.removeAttribute("data-page-flow-id"));
       }
     };
@@ -417,7 +432,7 @@
           } else previousNode.append(child);
         }
         if (/^(UL|OL)$/.test(node.tagName)) mergeListItemFragments(previousNode);
-        if (node.tagName === "TABLE") mergeTableRowFragments(previousNode);
+        if (node.tagName === "TABLE") { mergeTableRowFragments(previousNode); mergeNestedListFragments(previousNode); }
         node.remove();
         continue;
       }
@@ -428,7 +443,7 @@
     for (const node of merged) {
       node.removeAttribute?.("data-page-flow-id");
       if (/^(UL|OL)$/.test(node.tagName)) mergeListItemFragments(node);
-      if (node.tagName === "TABLE") mergeTableRowFragments(node);
+      if (node.tagName === "TABLE") { mergeTableRowFragments(node); mergeNestedListFragments(node); }
     }
     return merged;
   }
@@ -575,7 +590,18 @@
     if (row.tagName !== "TR") return [row];
     const cells = [...row.children];
     if (cells.length < 1 || cells.some((cell) => !["TD", "TH"].includes(cell.tagName) || Number(cell.getAttribute("rowspan")) > 1)) return [row];
-    const cellFragments = cells.map((cell) => splitLongTextBlock(cell, capacity, false));
+    const cellFragments = cells.map((cell) => {
+      const meaningful = [...(cell.childNodes || cell.children || [])].filter((child) => child.nodeType !== Node.TEXT_NODE || child.nodeValue.trim());
+      if (meaningful.length === 1 && meaningful[0].nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(meaningful[0].tagName)) {
+        const lists = splitListBetweenItems(meaningful[0], capacity);
+        if (lists.length > 1) return lists.map((list) => {
+          const fragment = cell.cloneNode(false);
+          fragment.append(list);
+          return fragment;
+        });
+      }
+      return splitLongTextBlock(cell, capacity, false);
+    });
     const fragmentCount = Math.max(...cellFragments.map((fragments) => fragments.length));
     if (fragmentCount < 2) return [row];
     const flowId = crypto.randomUUID();
