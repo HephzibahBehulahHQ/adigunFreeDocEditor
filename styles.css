@@ -320,3 +320,12 @@ button:disabled{cursor:not-allowed;opacity:.48}
   .tool-button{min-width:44px}
   .tool-select{max-width:160px}
 }
+
+@media(max-width:560px){
+  .page-footer{align-items:stretch;flex-direction:column;gap:8px}
+  .document-stats{justify-content:space-between}
+  .page-footer-right{justify-content:space-between;gap:4px}
+  .language-indicator{min-height:40px;padding:0 8px}
+  .zoom-button{width:40px;height:40px;flex:none}
+  .zoom-button.zoom-fit{min-width:44px;min-height:40px;padding:2px 8px}
+}
