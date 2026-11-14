@@ -590,6 +590,24 @@
       return fragment;
     });
   }
+  function groupTableRowsBySpans(bodies) {
+    const groups = [];
+    for (const section of bodies) {
+      const rows = [...section.children].filter((row) => row.tagName === "TR");
+      let group = [];
+      let spanEnd = -1;
+      rows.forEach((row, index) => {
+        group.push({ section, row, height: row.getBoundingClientRect().height });
+        for (const cell of row.children) {
+          const span = Number(cell.getAttribute("rowspan")) || 1;
+          if (span > 1) spanEnd = Math.max(spanEnd, index + span - 1);
+        }
+        if (index >= spanEnd) { groups.push(group); group = []; spanEnd = -1; }
+      });
+      if (group.length) groups.push(group);
+    }
+    return groups;
+  }
   function splitTableBetweenRows(table, capacity) {
     if (table.tagName !== "TABLE") return [table];
     const sections = [...table.children];
@@ -612,15 +630,17 @@
       if (rowFragments.length > 1) entry.row.replaceWith(...rowFragments);
     }
     entries = bodies.flatMap((section) => [...section.children].filter((row) => row.tagName === "TR").map((row) => ({ section, row, height: row.getBoundingClientRect().height })));
+    const rowGroups = groupTableRowsBySpans(bodies);
     const groups = [];
-    let group = [];
+    let pageGroups = [];
     let used = 0;
-    for (const entry of entries) {
-      if (group.length && used + entry.height > bodyCapacity) { groups.push(group); group = []; used = 0; }
-      group.push(entry);
-      used += entry.height;
+    for (const rowGroup of rowGroups) {
+      const groupHeight = rowGroup.reduce((sum, entry) => sum + entry.height, 0);
+      if (pageGroups.length && used + groupHeight > bodyCapacity) { groups.push(pageGroups.flat()); pageGroups = []; used = 0; }
+      pageGroups.push(rowGroup);
+      used += groupHeight;
     }
-    if (group.length) groups.push(group);
+    if (pageGroups.length) groups.push(pageGroups.flat());
     if (groups.length < 2) return [table];
     const fragments = groups.map((groupEntries, index) => {
       const fragment = table.cloneNode(false);
