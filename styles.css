@@ -333,3 +333,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
 @media(max-width:700px){
   #paragraph-indent-ruler{height:44px;background:linear-gradient(to bottom,transparent 0 21px,#bbc4d2 21px 22px,transparent 22px),repeating-linear-gradient(to right,transparent 0 23px,#cbd2de 23px 24px,transparent 24px 47px,#9da9bb 47px 48px)}
 }
+
+@media(max-width:700px){
+  .break-navigation-list{max-height:42vh;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+}
