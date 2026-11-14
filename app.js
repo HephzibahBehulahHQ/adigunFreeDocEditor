@@ -120,7 +120,7 @@
     ],
     insert: [
       [{ label: "Add link", action: "link", icon: "↗ Link" }, { label: "Remove link", action: "unlink", icon: "↗̸" }],
-      [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert page break", action: "page-break", icon: "↧ Page break" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }, { label: "Insert image from this device", action: "image", icon: "▧ Image" }, { label: "Edit selected image description and size", action: "image-properties", icon: "▧ Image properties" }],
+      [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert page break", action: "page-break", icon: "↧ Page break", title: "Insert page break (Ctrl+Enter or Command+Enter)", shortcut: "Control+Enter Meta+Enter" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }, { label: "Insert image from this device", action: "image", icon: "▧ Image" }, { label: "Edit selected image description and size", action: "image-properties", icon: "▧ Image properties" }],
       [{ label: "Insert row above", action: "table-row-above", icon: "▤ Row ↑" }, { label: "Insert row below", action: "table-row-below", icon: "▤ Row ↓" }, { label: "Insert column left", action: "table-column-left", icon: "▥ Col ←" }, { label: "Insert column right", action: "table-column-right", icon: "▥ Col →" }, { label: "Delete row", action: "table-row-delete", icon: "⌫ Row" }, { label: "Delete column", action: "table-column-delete", icon: "⌫ Col" }, { label: "Delete table", action: "table-delete", icon: "⌫ Table" }, { label: "Merge adjacent cells", action: "table-merge", icon: "▦ Merge" }, { label: "Merge cells vertically", action: "table-merge-vertical", icon: "▤ Merge ↓" }, { label: "Split merged cell", action: "table-split", icon: "▦ Split" }],
     ],
     layout: [
@@ -2356,7 +2356,8 @@
           });
         } else {
           control = document.createElement("button");
-          control.type = "button"; control.className = "tool-button"; control.dataset.action = tool.action; control.textContent = tool.action === "orientation" && pageOrientation === "landscape" ? "▭ Landscape" : tool.icon; control.title = tool.label; control.setAttribute("aria-label", tool.label);
+          control.type = "button"; control.className = "tool-button"; control.dataset.action = tool.action; control.textContent = tool.action === "orientation" && pageOrientation === "landscape" ? "▭ Landscape" : tool.icon; control.title = tool.title || tool.label; control.setAttribute("aria-label", tool.label);
+          if (tool.shortcut) control.setAttribute("aria-keyshortcuts", tool.shortcut);
           if (tool.pressed || ["page-numbers", "track-changes"].includes(tool.action)) control.setAttribute("aria-pressed", tool.action === "page-numbers" ? String(pageNumbersEnabled) : tool.action === "track-changes" ? String(trackChangesEnabled) : "false");
           control.addEventListener("click", () => runTool(tool.action, control));
         }

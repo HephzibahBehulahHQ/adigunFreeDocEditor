@@ -6,6 +6,8 @@ const source = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
 const start = source.indexOf("  function handleKeyboardShortcut(event)");
 const end = source.indexOf("  document.addEventListener(\"keydown\", handleKeyboardShortcut);", start);
 assert.ok(start >= 0 && end > start);
+assert.match(source, /action: "page-break", icon: "↧ Page break", title: "Insert page break \(Ctrl\+Enter or Command\+Enter\)", shortcut: "Control\+Enter Meta\+Enter"/);
+assert.match(source, /if \(tool\.shortcut\) control\.setAttribute\("aria-keyshortcuts", tool\.shortcut\)/);
 
 const selectedText = {};
 const editor = { contains: (node) => node === selectedText };
