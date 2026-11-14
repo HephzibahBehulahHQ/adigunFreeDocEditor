@@ -296,3 +296,12 @@ button:disabled{cursor:not-allowed;opacity:.48}
 
 .settings-dialog{max-height:calc(100vh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 24px)}
 @supports(height:100dvh){.settings-dialog{max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 24px)}}
+
+@media(max-width:420px){
+  .settings-dialog .settings-foot{flex-direction:column;align-items:stretch;gap:10px}
+  .settings-dialog .settings-foot>span{align-self:flex-start}
+  .settings-dialog .settings-foot>.button,.settings-dialog .settings-foot>div{width:100%}
+  .settings-dialog .settings-foot>div{display:flex;gap:8px}
+  .settings-dialog .settings-foot .button{min-height:40px}
+  .settings-dialog .settings-foot>div>.button,.settings-dialog .comment-form-actions>.button{flex:1}
+}
