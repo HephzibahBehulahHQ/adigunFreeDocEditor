@@ -165,7 +165,10 @@
         for (const child of node.children) {
           const flowId = child.type === "element" && child.tag === "tr" ? child.attrs["data-page-flow-id"] || "" : "";
           if (flowId && flowId === previousRow?.attrs["data-page-flow-id"] && child.children.length === previousRow.children.length) {
-            child.children.forEach((cell, index) => previousRow.children[index].children.push(...cell.children));
+            child.children.forEach((cell, index) => {
+              previousRow.children[index].children.push(...cell.children);
+              mergeNestedListItemFlows(previousRow.children[index]);
+            });
           } else {
             rows.push(child);
             previousRow = child.type === "element" && child.tag === "tr" ? child : null;
@@ -173,16 +176,31 @@
         }
         node.children = rows;
       }
-      if (!["ul", "ol"].includes(node.tag)) return;
+      if (["ul", "ol"].includes(node.tag)) {
+        const items = [];
+        let previousItem = null;
+        for (const child of node.children) {
+          const flowId = child.type === "element" && child.tag === "li" ? child.attrs["data-page-flow-id"] || "" : "";
+          if (flowId && flowId === previousItem?.attrs["data-page-flow-id"]) {
+            previousItem.children.push(...child.children);
+            mergeNestedListItemFlows(previousItem);
+          } else {
+            items.push(child);
+            previousItem = child.type === "element" && child.tag === "li" ? child : null;
+          }
+        }
+        node.children = items;
+      }
       const children = [];
-      let previousItem = null;
+      let previousList = null;
       for (const child of node.children) {
-        const flowId = child.type === "element" && child.tag === "li" ? child.attrs["data-page-flow-id"] || "" : "";
-        if (flowId && flowId === previousItem?.attrs["data-page-flow-id"]) {
-          previousItem.children.push(...child.children);
+        const flowId = child.type === "element" && ["ul", "ol"].includes(child.tag) ? child.attrs["data-page-flow-id"] || "" : "";
+        if (flowId && flowId === previousList?.attrs["data-page-flow-id"] && child.tag === previousList.tag) {
+          previousList.children.push(...child.children);
+          mergeNestedListItemFlows(previousList);
         } else {
           children.push(child);
-          previousItem = child.type === "element" && child.tag === "li" ? child : null;
+          previousList = flowId ? child : null;
         }
       }
       node.children = children;
