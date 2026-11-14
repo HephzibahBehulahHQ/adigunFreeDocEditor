@@ -65,6 +65,8 @@ const paginationStart = source.indexOf("  function paginateEditor()");
 const paginationEnd = source.indexOf("  function normalizeReviewComments(", paginationStart);
 assert.ok(paginationStart >= 0 && paginationEnd > paginationStart);
 const paginationSource = source.slice(paginationStart, paginationEnd);
+assert.match(source, /function splitLongParagraph\(paragraph, capacity\)/, "pagination can split over-height paragraphs at text boundaries");
+assert.match(source, /function mergePageFlowFragments\(nodes\)/, "pagination rejoins existing fragments before reflow");
 const captureCall = paginationSource.indexOf("const savedSelection = captureEditorSelection();");
 const replaceCall = paginationSource.indexOf("editor.replaceChildren(fragment);");
 const restoreCall = paginationSource.indexOf("restoreEditorSelection(savedSelection);");
