@@ -37,6 +37,9 @@ const source = element("div", {}, [
   element("img", { src: "https://invalid.example/image.png" }),
 ]);
 const model = modelApi.fromDOM(source);
+const wrappedTableNode = element("table", {}, [element("tbody", {}, [element("tr", {}, [element("td", {}, [text("Wrapped table")])])])]);
+const wrappedTable = modelApi.fromDOM(element("div", {}, [element("div", {}, [element("div", {}, [wrappedTableNode])])]));
+assert.match(modelApi.toHTML(wrappedTable), /<table><tbody><tr><td>Wrapped table<\/td><\/tr><\/tbody><\/table>/, "nested editor wrappers retain tables during DOM serialization");
 assert.equal(model.type, "adigun-document");
 assert.equal(model.version, 1);
 const html = modelApi.toHTML(model);
