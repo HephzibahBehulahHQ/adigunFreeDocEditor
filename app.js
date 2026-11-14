@@ -627,11 +627,11 @@
         chunk.setAttribute("data-page-flow-continuation", "true");
         const list = block.parentElement;
         if (list?.tagName === "OL") {
-          let ordinal = Number(list.getAttribute("start")) || 1;
+          let ordinal = parseOrderedListOrdinal(list.getAttribute("start")) ?? 1;
           for (const item of list.children) {
             if (item.tagName !== "LI") continue;
-            const value = Number(item.getAttribute("value"));
-            if (Number.isInteger(value) && value > 0) ordinal = value;
+            const value = parseOrderedListOrdinal(item.getAttribute("value"));
+            if (value !== null) ordinal = value;
             if (item === block) break;
             if (item.getAttribute("data-page-flow-continuation") !== "true") ordinal++;
           }
@@ -2531,7 +2531,14 @@
       if (["th", "td"].includes(tag)) {
         for (const dimension of ["colspan", "rowspan"]) { const value = Number(node.getAttribute(dimension)); if (Number.isInteger(value) && value > 0 && value <= 50) element.setAttribute(dimension, String(value)); }
       }
-      if (tag === "ol") { const start = Number(node.getAttribute("start")); if (Number.isInteger(start) && start >= 1 && start <= 100000) element.setAttribute("start", String(start)); }
+      if (tag === "ol") {
+        const start = parseOrderedListOrdinal(node.getAttribute("start"));
+        if (start !== null && start !== 1) element.setAttribute("start", String(start));
+      }
+      if (tag === "li") {
+        const value = parseOrderedListOrdinal(node.getAttribute("value"));
+        if (value !== null) element.setAttribute("value", String(value));
+      }
       for (const child of [...node.childNodes]) { const safeChild = copy(child); if (safeChild) element.append(safeChild); }
       return element;
     }
@@ -3671,6 +3678,14 @@
     saveDocument();
   }
 
+  function parseOrderedListOrdinal(rawValue) {
+    if (typeof rawValue !== "string") return null;
+    const source = rawValue.trim();
+    if (!/^-?\d+$/.test(source)) return null;
+    const ordinal = Number(source);
+    return Number.isInteger(ordinal) && ordinal >= -2147483648 && ordinal <= 2147483647 ? ordinal : null;
+  }
+
   function wordXmlText(value) {
     return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
   }
@@ -3866,8 +3881,8 @@
       if (id) return id;
       const isOrdered = list.tagName.toLowerCase() === "ol";
       const rawStart = list.getAttribute?.("start");
-      const requestedStart = rawStart === null || rawStart === "" ? 1 : Number(rawStart);
-      const start = isOrdered && Number.isSafeInteger(requestedStart) && requestedStart > 0 ? requestedStart : 1;
+      const requestedStart = parseOrderedListOrdinal(rawStart);
+      const start = isOrdered ? requestedStart ?? 1 : 1;
       id = createListNumberingInstance(isOrdered ? "ol" : "ul", level, start);
       listNumberingIds.set(list, id);
       return id;
@@ -3998,8 +4013,8 @@
           const copy = child.cloneNode(true);
           for (const nested of [...copy.children]) if (["ul", "ol"].includes(nested.tagName.toLowerCase())) nested.remove();
           const rawValue = listKind === "ol" ? child.getAttribute?.("value") : null;
-          const itemValue = rawValue === null || rawValue === "" ? null : Number(rawValue);
-          if (Number.isSafeInteger(itemValue) && itemValue > 0) {
+          const itemValue = parseOrderedListOrdinal(rawValue);
+          if (itemValue !== null) {
             activeListNumId = createListNumberingInstance("ol", listLevel, itemValue);
           }
           addParagraph(copy, listKind || "ul", listLevel, output, activeListNumId);
@@ -4074,7 +4089,7 @@
     const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="20"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="18"/></w:rPr></w:style></w:styles>';
     const bulletGlyphs = ["•", "○", "▪"];
     const numberingLevels = (format) => Array.from({ length: 9 }, (_, level) => `<w:lvl w:ilvl="${level}"><w:start w:val="1"/><w:numFmt w:val="${format}"/><w:lvlText w:val="${format === "bullet" ? bulletGlyphs[level % bulletGlyphs.length] : `%${level + 1}.`}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${(level + 1) * 720}" w:hanging="360"/></w:pPr></w:lvl>`).join("");
-    const listNumberingXml = listNumberingInstances.map(({ id, abstractNumId, start, level }) => `<w:num w:numId="${id}"><w:abstractNumId w:val="${abstractNumId}"/>${start > 1 ? `<w:lvlOverride w:ilvl="${level}"><w:startOverride w:val="${start}"/></w:lvlOverride>` : ""}</w:num>`).join("");
+    const listNumberingXml = listNumberingInstances.map(({ id, abstractNumId, start, level }) => `<w:num w:numId="${id}"><w:abstractNumId w:val="${abstractNumId}"/>${start !== 1 ? `<w:lvlOverride w:ilvl="${level}"><w:startOverride w:val="${start}"/></w:lvlOverride>` : ""}</w:num>`).join("");
     const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="multilevel"/>${numberingLevels("bullet")}</w:abstractNum><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="multilevel"/>${numberingLevels("decimal")}</w:abstractNum>${listNumberingXml}</w:numbering>`;
     const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>${exportedComments.length ? '<Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/commentsExtended.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"/>' : ""}${hasHeader ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : ""}${hasFooter ? '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' : ""}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`;
     const rootRelationships = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>';
