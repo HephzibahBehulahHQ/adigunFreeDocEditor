@@ -73,6 +73,17 @@ const splitOrderedList = element("div", {}, [
   element("div", {}, [element("ol", { start: 5, "data-page-flow-id": "b33f-123" }, [element("li", {}, [text("Third")])])]),
 ]);
 assert.equal(modelApi.toHTML(modelApi.fromDOM(splitOrderedList)), '<ol start="3"><li>First</li><li>Second</li><li>Third</li></ol>', "visual ordered-list pages save and export as one correctly numbered list");
+const splitTable = element("div", {}, [
+  element("div", {}, [element("table", { "data-page-flow-id": "d00d-123" }, [
+    element("thead", {}, [element("tr", {}, [element("th", {}, [text("Name")])])]),
+    element("tbody", {}, [element("tr", {}, [element("td", {}, [text("Ada")])])]),
+  ])]),
+  element("div", {}, [element("table", { "data-page-flow-id": "d00d-123" }, [
+    element("thead", { "data-page-header-copy": "true" }, [element("tr", {}, [element("th", {}, [text("Name")])])]),
+    element("tbody", {}, [element("tr", {}, [element("td", {}, [text("Grace")])])]),
+  ])]),
+]);
+assert.equal(modelApi.toHTML(modelApi.fromDOM(splitTable)), "<table><thead><tr><th>Name</th></tr></thead><tbody><tr><td>Ada</td></tr></tbody><tbody><tr><td>Grace</td></tr></tbody></table>", "page-fragmented tables save as one table with a single header");
 assert.match(html, /unsafe link/);
 assert.doesNotMatch(html, /javascript:|<script|https:\/\/invalid\.example/);
 assert.match(html, /<img src="data:image\/png;base64,aGVsbG8=" alt="Diagram">/);
