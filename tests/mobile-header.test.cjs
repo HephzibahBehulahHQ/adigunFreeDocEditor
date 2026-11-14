@@ -26,6 +26,8 @@ assert.match(mobileRules, /safe-area-inset-right/);
 assert.match(mobileRules, /safe-area-inset-bottom/);
 assert.match(css, /\.settings-dialog\{max-height:calc\(100vh - env\(safe-area-inset-top,0px\) - env\(safe-area-inset-bottom,0px\) - 24px\)\}/, "dialog height clears both device safe areas");
 assert.match(css, /@supports\(height:100dvh\)\{\.settings-dialog\{max-height:calc\(100dvh - env\(safe-area-inset-top,0px\) - env\(safe-area-inset-bottom,0px\) - 24px\)\}\}/, "dialogs use the dynamic viewport height when available");
+assert.match(css, /@media\(max-width:420px\)\{[\s\S]*?\.settings-dialog \.settings-foot\{flex-direction:column;align-items:stretch;gap:10px\}/, "dialog actions stack at narrow widths");
+assert.match(css, /\.settings-dialog \.settings-foot \.button\{min-height:40px\}/, "mobile dialog actions have larger touch targets");
 assert.match(css, /\.toast\{[^}]*bottom:calc\(24px \+ env\(safe-area-inset-bottom,0px\)\)/, "toasts clear the device bottom inset");
 assert.match(mobileRules, /\.toast\{left:50%;bottom:calc\(78px \+ env\(safe-area-inset-bottom,0px\)\)\}/);
 assert.match(mobileRules, /\.adigun-window\.minimized\{top:auto;bottom:calc\(18px \+ env\(safe-area-inset-bottom,0px\)\)/);
