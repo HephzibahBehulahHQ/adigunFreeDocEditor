@@ -349,3 +349,6 @@ button:disabled{cursor:not-allowed;opacity:.48}
 
 @media(max-width:1050px){.landing-primary,.landing-secondary{min-height:44px}}
 
+@media(min-width:701px) and (max-width:1050px){.toast{left:50%;max-width:calc(100vw - 24px)}}
+
+
