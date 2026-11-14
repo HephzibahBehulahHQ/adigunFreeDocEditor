@@ -51,6 +51,38 @@ async function run() {
   assert.match(source, /\$\("#clear-local-data"\)\.addEventListener\("click", \(\) => \{[\s\S]*?\$\("#clear-local-data-dialog"\)\.showModal\(\);/);
   assert.match(source, /\$\("#confirm-clear-local-data"\)\.addEventListener\("click", deleteLocalDocuments\);/);
 
+  const storageClasses = new Set(["checking"]);
+  const storageStatus = {
+    attributes: {},
+    classList: { toggle(name, enabled) { enabled ? storageClasses.add(name) : storageClasses.delete(name); } },
+    setAttribute(name, value) { this.attributes[name] = value; },
+  };
+  const storageLabel = { textContent: "Checking local storage…" };
+  const fileKind = { textContent: "" };
+  const storageElements = new Map([["#local-storage-status", storageStatus], ["#local-storage-label", storageLabel], ["#file-kind", fileKind]]);
+  const availabilityStart = source.indexOf("  function setStorageAvailability(");
+  const availabilityEnd = source.indexOf("  function openDatabase(", availabilityStart);
+  assert.ok(availabilityStart >= 0 && availabilityEnd > availabilityStart);
+  const createAvailability = new Function("$", `let storageAvailability; let activeWorkspaceMode = "landing"; ${source.slice(availabilityStart, availabilityEnd)}; return { setStorageAvailability, get value() { return storageAvailability; } };`);
+  const availability = createAvailability((selector) => storageElements.get(selector));
+  availability.setStorageAvailability(true);
+  assert.equal(storageLabel.textContent, "Saved on this device");
+  assert.equal(fileKind.textContent, "Private by default · saved in this browser");
+  assert.equal(availability.value, true);
+  assert.equal(storageClasses.has("available"), true);
+  assert.equal(storageClasses.has("checking"), false);
+  availability.setStorageAvailability(false);
+  assert.equal(storageLabel.textContent, "Local saving unavailable");
+  assert.equal(fileKind.textContent, "Local saving unavailable · export documents to keep changes");
+  assert.equal(storageStatus.attributes["aria-label"], "Local saving unavailable");
+  assert.equal(storageClasses.has("unavailable"), true);
+  assert.equal(storageClasses.has("available"), false);
+  assert.match(markup, /id="local-storage-status" role="status" aria-live="polite"/);
+  assert.match(markup, /id="local-storage-label">Checking local storage…/);
+  assert.match(source, /openDatabase\(\)\.then\(\(\) => \{ setStorageAvailability\(true\);/);
+  assert.match(source, /\.catch\(\(\) => \{ setStorageAvailability\(false\); setSaveStatus\("Local save unavailable"\)/);
+  assert.match(fs.readFileSync(path.join(root, "styles.css"), "utf8"), /.sidebar-footer.unavailable .privacy-dot\{background:#e45f52\}/);
+
   process.stdout.write("Local data privacy tests passed: deletion is confirmed, clears only IndexedDB documents, and reports transaction errors.\n");
 }
 
