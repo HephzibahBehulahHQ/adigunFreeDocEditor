@@ -378,8 +378,27 @@
         if (flowId && flowId === previousList?.getAttribute("data-page-flow-id") && child.tagName === previousList.tagName) {
           while (child.firstChild) previousList.append(child.firstChild);
           child.remove();
-          previousList.removeAttribute("data-page-flow-id");
         } else previousList = child;
+      }
+    };
+    const mergeNestedTableFragments = (parent) => {
+      if (!parent?.children) return;
+      for (const child of [...parent.children]) mergeNestedTableFragments(child);
+      let previousTable = null;
+      for (const child of [...parent.children]) {
+        if (child.tagName !== "TABLE") { previousTable = null; continue; }
+        const flowId = child.getAttribute("data-page-flow-id") || "";
+        if (!flowId || flowId !== previousTable?.getAttribute("data-page-flow-id")) { previousTable = child; continue; }
+        for (const section of [...child.children]) {
+          if (section.tagName === "COLGROUP" || section.tagName === "THEAD" && section.getAttribute("data-page-header-copy") === "true") { section.remove(); continue; }
+          if (section.tagName === "TBODY" && previousTable.querySelector("tbody")) {
+            const previousBody = previousTable.querySelector("tbody");
+            while (section.firstChild) previousBody.append(section.firstChild);
+            section.remove();
+          } else previousTable.append(section);
+        }
+        child.remove();
+        mergeTableRowFragments(previousTable);
       }
     };
     const mergeTableRowFragments = (table) => {
@@ -397,6 +416,7 @@
           } else previousRow = row;
         }
         mergeNestedListFragments(section);
+        mergeNestedTableFragments(section);
         section.querySelectorAll("[data-page-flow-id]").forEach((node) => node.removeAttribute("data-page-flow-id"));
       }
     };
@@ -432,7 +452,7 @@
           } else previousNode.append(child);
         }
         if (/^(UL|OL)$/.test(node.tagName)) mergeListItemFragments(previousNode);
-        if (node.tagName === "TABLE") { mergeTableRowFragments(previousNode); mergeNestedListFragments(previousNode); }
+        if (node.tagName === "TABLE") { mergeTableRowFragments(previousNode); mergeNestedListFragments(previousNode); mergeNestedTableFragments(previousNode); }
         node.remove();
         continue;
       }
@@ -443,7 +463,7 @@
     for (const node of merged) {
       node.removeAttribute?.("data-page-flow-id");
       if (/^(UL|OL)$/.test(node.tagName)) mergeListItemFragments(node);
-      if (node.tagName === "TABLE") { mergeTableRowFragments(node); mergeNestedListFragments(node); }
+      if (node.tagName === "TABLE") { mergeTableRowFragments(node); mergeNestedListFragments(node); mergeNestedTableFragments(node); }
     }
     return merged;
   }
@@ -592,6 +612,14 @@
     if (cells.length < 1 || cells.some((cell) => !["TD", "TH"].includes(cell.tagName) || Number(cell.getAttribute("rowspan")) > 1)) return [row];
     const cellFragments = cells.map((cell) => {
       const meaningful = [...(cell.childNodes || cell.children || [])].filter((child) => child.nodeType !== Node.TEXT_NODE || child.nodeValue.trim());
+      if (meaningful.length === 1 && meaningful[0].nodeType === Node.ELEMENT_NODE && meaningful[0].tagName === "TABLE") {
+        const tables = splitTableBetweenRows(meaningful[0], capacity);
+        if (tables.length > 1) return tables.map((table) => {
+          const fragment = cell.cloneNode(false);
+          fragment.append(table);
+          return fragment;
+        });
+      }
       if (meaningful.length === 1 && meaningful[0].nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(meaningful[0].tagName)) {
         const lists = splitListBetweenItems(meaningful[0], capacity);
         if (lists.length > 1) return lists.map((list) => {
@@ -641,7 +669,7 @@
     const headers = sections.filter((section) => section.tagName === "THEAD");
     const bodies = sections.filter((section) => section.tagName === "TBODY");
     let entries = bodies.flatMap((section) => [...section.children].filter((row) => row.tagName === "TR").map((row) => ({ section, row, height: row.getBoundingClientRect().height })));
-    if (entries.length < 2) return [table];
+    if (!entries.length) return [table];
     const headerHeight = headers.flatMap((section) => [...section.children]).reduce((sum, row) => sum + row.getBoundingClientRect().height, 0);
     const rowHeight = entries.reduce((sum, entry) => sum + entry.height, headerHeight);
     const tableStyle = getComputedStyle(table);

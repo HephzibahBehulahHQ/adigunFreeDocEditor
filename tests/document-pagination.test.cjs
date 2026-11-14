@@ -180,9 +180,10 @@ assert.deepEqual(groupTableRows([
 ]).map((group) => group.length), [1, 1, 1], "row groups do not cross tbody boundaries");
 const rowSplitStart = source.indexOf("  function splitTableRowBetweenContent(row, capacity)");
 assert.ok(rowSplitStart >= 0 && rowSplitStart < tableStart, "oversized table rows have a text-cell splitting path");
-const splitTableRow = new Function("splitLongTextBlock", "splitListBetweenItems", "crypto", "Node", source.slice(rowSplitStart, tableStart) + "\nreturn splitTableRowBetweenContent;")(
+const splitTableRow = new Function("splitLongTextBlock", "splitListBetweenItems", "splitTableBetweenRows", "crypto", "Node", source.slice(rowSplitStart, tableStart) + "\nreturn splitTableRowBetweenContent;")(
   split,
   splitList,
+  (table) => table.fragments || [table],
   { randomUUID: () => "a22e-1234" },
   { TEXT_NODE: 3, ELEMENT_NODE: 1 }
 );
@@ -215,6 +216,60 @@ const nestedListRow = { tagName: "TR", children: [nestedListCell], cloneNode() {
 const nestedListRowFragments = splitTableRow(nestedListRow, 50);
 assert.deepEqual(nestedListRowFragments.map((fragment) => fragment.children[0].children[0].children.length), [2, 1], "a nested cell list splits between whole items");
 assert.equal(nestedListRowFragments.flatMap((fragment) => fragment.children[0].children[0].children).length, nestedListItems.length, "nested list pagination preserves each list item once");
+const nestedTableFragments = [
+  { tagName: "TABLE", height: 55, children: [{ tagName: "TBODY" }], getBoundingClientRect() { return { height: this.height }; } },
+  { tagName: "TABLE", height: 35, children: [{ tagName: "TBODY" }], getBoundingClientRect() { return { height: this.height }; } },
+];
+let nestedTableSplitCalls = 0;
+const nestedTableSource = { nodeType: 1, tagName: "TABLE", fragments: nestedTableFragments };
+const nestedTableCell = {
+  tagName: "TD", children: [nestedTableSource], childNodes: [nestedTableSource], attributes: {},
+  getAttribute(name) { return this.attributes[name] ?? null; },
+  getBoundingClientRect() { return { height: Math.max(...this.children.map((child) => child.getBoundingClientRect().height)) }; },
+  cloneNode() { return { tagName: "TD", children: [], childNodes: [], attributes: { ...this.attributes }, getAttribute(name) { return this.attributes[name] ?? null; }, getBoundingClientRect() { return { height: Math.max(...this.children.map((child) => child.getBoundingClientRect().height), 0) }; }, append(node) { this.children.push(node); this.childNodes.push(node); } }; },
+};
+const nestedTableRow = {
+  tagName: "TR", children: [nestedTableCell],
+  cloneNode() { return { tagName: "TR", children: [], attributes: {}, append(cell) { this.children.push(cell); }, setAttribute(name, value) { this.attributes[name] = value; } }; },
+};
+const nestedTableRowFragments = splitTableRow(nestedTableRow, 50);
+assert.equal(nestedTableRowFragments.length, 2, "an oversized nested table splits into outer row fragments");
+assert.ok(nestedTableRowFragments.every((fragment) => fragment.children[0].children[0].tagName === "TABLE"), "nested table fragments stay within their parent cells");
+const nestedTableBody = { tagName: "TBODY", children: [], cloneNode() { return { tagName: "TBODY", children: [], append(row) { this.children.push(row); } }; } };
+const nestedOuterRow = {
+  tagName: "TR", children: [nestedTableCell], getBoundingClientRect() { return { height: 100 }; },
+  cloneNode() { return { tagName: "TR", children: [], attributes: {}, append(cell) { this.children.push(cell); }, setAttribute(name, value) { this.attributes[name] = value; }, getBoundingClientRect() { return { height: Math.max(...this.children.map((cell) => cell.getBoundingClientRect().height)) }; } }; },
+  replaceWith(...rows) { nestedTableBody.children.splice(nestedTableBody.children.indexOf(nestedOuterRow), 1, ...rows); },
+};
+nestedTableBody.children.push(nestedOuterRow);
+const oneRowOuterTableFragments = [];
+const oneRowOuterTable = {
+  tagName: "TABLE", children: [nestedTableBody], style: { setProperty() {} },
+  getBoundingClientRect: () => ({ height: 100 }),
+  cloneNode() { return { tagName: "TABLE", children: [], attributes: {}, append(section) { this.children.push(section); }, setAttribute(name, value) { this.attributes[name] = value; } }; },
+  replaceWith(...fragments) { oneRowOuterTableFragments.push(...fragments); },
+};
+const splitNestedOuterTable = new Function("getComputedStyle", "crypto", "splitTableRowBetweenContent", "groupTableRowsBySpans", source.slice(tableStart, tableEnd) + "\nreturn splitTableBetweenRows;")(
+  () => ({ marginTop: "0", marginBottom: "0" }),
+  { randomUUID: () => "c33e-1234" },
+  (row, capacity) => {
+    const nested = row.children[0].children[0];
+    const tableParts = nested.fragments || [nested];
+    nestedTableSplitCalls++;
+    return tableParts.map((tablePart) => {
+      const cell = row.children[0].cloneNode(false);
+      cell.append(tablePart);
+      const fragment = row.cloneNode(false);
+      fragment.append(cell);
+      return fragment;
+    });
+  },
+  groupTableRows
+);
+const nestedOuterFragments = splitNestedOuterTable(oneRowOuterTable, 75);
+assert.equal(nestedTableSplitCalls, 1, "an oversized cell delegates its nested table to the table splitter");
+assert.equal(nestedOuterFragments.length, 2, "a single outer row can paginate through its nested table rows");
+assert.deepEqual(nestedOuterFragments.map((fragment) => fragment.children[0].children[0].children.length), [1, 1], "nested table fragments remain inside their parent table cells");
 const imageRow = {
   tagName: "TR", children: [makeTextBlock("Image", "TD", true, 100), makeTextBlock(text, "TD", false, 100)],
   cloneNode() { return { tagName: "TR", children: [], attributes: {}, append(cell) { this.children.push(cell); }, setAttribute(name, value) { this.attributes[name] = value; } }; },
