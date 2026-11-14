@@ -8,6 +8,7 @@ The repository initially contained the product specification, mockup, custom-dom
 - `styles.css` defines responsive layout and maps the verified HB brand tokens.
 - `app.js` owns document state, toolbar actions, browser-local persistence, file import/export and the local extractive overview.
 - `document-model.js` normalizes editable content to a versioned JSON tree with an allow-list for nodes and attributes, including font-family, text-color, highlight-color, line-spacing, paragraph-spacing and indent-level allow-lists. IndexedDB stores this model; older HTML records are migrated on open, and HTML/DOCX exports serialize through the model.
+- `src/editor-schema.js` defines the selected Tiptap schema and a model/JSON adapter for compatibility tests. It is not connected to the live editor yet; the production surface continues to use the browser `contenteditable` element.
 - The editor groups top-level blocks into paper-sized sheets, renders visual page previews, provides page navigation, and supports fit-to-width zoom. New-document page defaults are stored in local preferences and applied to blank documents and imports that lack page setup. Explicit page breaks persist; oversized blocks expand beyond a sheet, and paragraphs are not split across pages.
 - The built-in Word exporter packages a documented subset of the editable HTML as OOXML in an uncompressed ZIP container; it preserves supported font families, text colors, Word highlight values, paragraph/line spacing and indentation, basic tables, header rows, column spans and embedded PNG/JPEG/GIF files, and confirms before exporting content it cannot retain. It uses no external runtime service and does not claim full Word fidelity.
 - DOCX import uses the locally vendored Mammoth 1.12.2 browser build, checks ZIP structure and expanded-size limits, copies only allow-listed HTML elements and safe links/embedded raster images into the editor, and reads supported A4/US Letter page size, orientation, preset or custom margins (up to 100 mm per side), and default header/footer text and PAGE fields from consistent section properties. Gutter, mixed, or unsupported section setup falls back to new-document defaults with a warning.
@@ -21,5 +22,6 @@ The schema-backed model now governs persistence and exports. Interactive editing
 The editor currently supports a bounded set of browser editing commands. This is not a DOCX document model or an OOXML parser. Before DOCX compatibility, complex revisions, or conversion work, replace or wrap the editing surface with a structured document engine and verify round-trip behavior against representative files.
 
 The Adigun panel has no provider adapter. Its current overview is a deterministic extractive operation over local text, explicitly labelled as such; no document content leaves the browser.
+
 
 

@@ -1,0 +1,19 @@
+{
+  "name": "adigun-free-doc-editor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:editor-schema": "node tests/editor-schema.test.mjs"
+  },
+  "devDependencies": {
+    "@tiptap/core": "3.31.3",
+    "@tiptap/extension-image": "3.31.3",
+    "@tiptap/extension-link": "3.31.3",
+    "@tiptap/extension-table": "3.31.3",
+    "@tiptap/extension-text-align": "3.31.3",
+    "@tiptap/extension-text-style": "3.31.3",
+    "@tiptap/pm": "3.31.3",
+    "@tiptap/starter-kit": "3.31.3"
+  }
+}
+
