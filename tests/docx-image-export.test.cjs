@@ -80,6 +80,10 @@ for (const level of [4, 5, 6]) {
   assert.match(headingDocumentXml, new RegExp(`<w:t>${["Fourth", "Fifth", "Sixth"][level - 4]}-level heading<\\/w:t>`), `Heading ${level} text is preserved`);
   assert.match(headingStylesXml, new RegExp(`<w:style w:type="paragraph" w:styleId="Heading${level}">`), `Heading ${level} has a declared DOCX style`);
 }
+for (const level of [1, 2, 3, 4, 5, 6]) {
+  const style = headingStylesXml.match(new RegExp(`<w:style w:type="paragraph" w:styleId="Heading${level}">([\\s\\S]*?)<\\/w:style>`));
+  assert.match(style?.[1] || "", /<w:keepNext\/>/, `Heading ${level} stays with the paragraph that follows it`);
+}
 const zipBlob = makeStoredZip(result.files);
 
 zipBlob.arrayBuffer().then((arrayBuffer) => {
