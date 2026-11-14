@@ -4,6 +4,12 @@ const path = require("node:path");
 
 global.Node = { TEXT_NODE: 3, ELEMENT_NODE: 1 };
 const source = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+assert.match(source, /function imageAtSelection\(selection = window\.getSelection\(\)\)/, "images can be targeted from the editor selection");
+assert.match(source, /action: "image-properties"/);
+assert.match(source, /image\.alt = \$\("#image-alt-text"\)\.value\.slice\(0, 300\)/, "image descriptions are editable");
+assert.match(source, /image\.setAttribute\("width", String\(width\)\)/, "image dimensions are persisted in the document model");
+assert.match(html, /id="image-properties-dialog"[\s\S]*?id="image-alt-text"[\s\S]*?id="image-width-pixels"/);
 const start = source.indexOf("  function wordXmlText(");
 const end = source.indexOf("  async function exportDocx(", start);
 assert.ok(start >= 0 && end > start, "DOCX serializer functions are present");
