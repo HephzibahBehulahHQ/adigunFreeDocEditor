@@ -39,6 +39,8 @@ jobs:
         run: npm run test:editor-html
       - name: Check live editor transactions and page sheets
         run: npm run test:live-editor
+      - name: Check application live editor lifecycle
+        run: npm run test:app-live-editor
       - name: Validate document model
         run: |
           node --check app.js

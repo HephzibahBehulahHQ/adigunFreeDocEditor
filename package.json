@@ -6,7 +6,8 @@
     "build:editor": "esbuild src/live-editor-runtime.js --bundle --format=iife --global-name=AdigunEditorBundle --target=es2022 --outfile=editor-runtime.js",
     "test:editor-schema": "node tests/editor-schema.test.mjs",
     "test:editor-html": "node tests/editor-html.test.mjs",
-    "test:live-editor": "node tests/live-editor.test.mjs"
+    "test:live-editor": "node tests/live-editor.test.mjs",
+    "test:app-live-editor": "node tests/app-live-editor.test.mjs"
   },
   "devDependencies": {
     "@tiptap/core": "3.31.3",
