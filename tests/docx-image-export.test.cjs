@@ -81,7 +81,9 @@ const exportElement = (tagName, children = []) => {
 };
 const makeListItem = (value, nested = []) => exportElement("LI", [{ nodeType: Node.TEXT_NODE, nodeValue: value }, ...nested]);
 const nestedLists = exportElement("UL", [makeListItem("Outer bullet", [exportElement("UL", [makeListItem("Inner bullet", [exportElement("OL", [makeListItem("Nested number")])])])])]);
-const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), paragraph(insertion), paragraph(deletion), heading(4, "Fourth-level heading"), heading(5, "Fifth-level heading"), heading(6, "Sixth-level heading"), nestedLists, verticalTable] }] };
+const firstOrderedList = exportElement("OL", [makeListItem("First sequence item"), makeListItem("Second sequence item")]);
+const secondOrderedList = exportElement("OL", [makeListItem("Restarted sequence item")]);
+const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), paragraph(insertion), paragraph(deletion), heading(4, "Fourth-level heading"), heading(5, "Fifth-level heading"), heading(6, "Sixth-level heading"), nestedLists, firstOrderedList, secondOrderedList, verticalTable] }] };
 const page = { classList: { contains() { return false; } } };
 const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumbersEnabled", "pageHeaderText", "pageFooterText", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip, setPageNumbers(value) { pageNumbersEnabled = value; }, setHeaderFooter(header, footer) { pageHeaderText = header; pageFooterText = footer; } };`);
 const { makeWordPackage, makeStoredZip, setPageNumbers, setHeaderFooter } = factory(Node, root, () => "Image export QA", atob, () => page, true, "Project & scope", "Confidential");
@@ -99,13 +101,16 @@ for (const level of [1, 2, 3, 4, 5, 6]) {
   assert.match(style?.[1] || "", /<w:keepNext\/>/, `Heading ${level} stays with the paragraph that follows it`);
 }
 const listParagraphs = [...headingDocumentXml.matchAll(new RegExp('<w:numPr><w:ilvl w:val="(\\d+)"/><w:numId w:val="(\\d+)"/></w:numPr>', "g"))];
-assert.deepEqual(listParagraphs.map((match) => [match[1], match[2]]), [["0", "1"], ["1", "1"], ["2", "2"]], "nested bullet and numbered lists preserve their depth and type");
+assert.deepEqual(listParagraphs.map((match) => [match[1], match[2]]), [["0", "1"], ["1", "2"], ["2", "3"], ["0", "4"], ["0", "4"], ["0", "5"]], "nested list depth is preserved and separate ordered lists restart independently");
 const numberingXml = result.files["word/numbering.xml"];
 for (const abstractNumId of [0, 1]) {
   const abstract = numberingXml.match(new RegExp(`<w:abstractNum w:abstractNumId="${abstractNumId}">([\\s\\S]*?)</w:abstractNum>`));
   assert.equal([...(abstract?.[1] || "").matchAll(new RegExp("<w:lvl\\b", "g"))].length, 9, "each numbering type declares nine levels");
 }
 assert.ok(numberingXml.includes('<w:lvl w:ilvl="2"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%3."/>'), "numbering definitions include the matching depth placeholder");
+for (const [numId, abstractNumId] of [[1, 0], [2, 0], [3, 1], [4, 1], [5, 1]]) {
+  assert.ok(numberingXml.includes(`<w:num w:numId="${numId}"><w:abstractNumId w:val="${abstractNumId}"/></w:num>`), `list numbering instance ${numId} uses the matching list type`);
+}
 const zipBlob = makeStoredZip(result.files);
 
 zipBlob.arrayBuffer().then((arrayBuffer) => {
