@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+const styles = fs.readFileSync(path.join(__dirname, "..", "styles.css"), "utf8");
 const start = source.indexOf("  function splitLongTextBlock(block, capacity)");
 const end = source.indexOf("  function splitListBetweenItems(list, capacity)", start);
 assert.ok(start >= 0 && end > start);
@@ -45,6 +46,8 @@ assert.ok(fragments.length > 1, "over-height paragraphs are split into page-size
 assert.equal(fragments.map((fragment) => fragment.textContent).join(""), text, "splitting preserves every character in order");
 assert.ok(fragments.slice(0, -1).every((fragment) => /\s$/.test(fragment.textContent)), "paragraph fragments end at word boundaries");
 assert.ok(fragments.every((fragment) => fragment.attributes["data-page-flow-id"] === "f00d-1234"), "fragments retain a shared serialization identity");
+assert.match(source, /const imageMaxHeight = Math\.max\(96, capacity - 32\)/, "page image limits follow the content area remaining after page margins");
+assert.match(styles, /\.document-page img\{[^}]*max-height:var\(--page-image-max-height,70vh\)/, "images fit within the page content height while retaining their aspect ratio");
 assert.deepEqual(inserted, fragments, "the paragraph is replaced by its visual fragments");
 const unbroken = "🧪".repeat(30);
 const unbrokenFragments = split(makeTextBlock(unbroken), 32);
