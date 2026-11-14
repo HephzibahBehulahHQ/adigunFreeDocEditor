@@ -40,6 +40,10 @@ const fixture = modelApi.normalize({
     element("ul", {}, [
       element("li", {}, [element("p", {}, [text("List item")]), element("ol", { start: 3 }, [element("li", {}, [element("p", {}, [text("Nested item")])])])]),
     ]),
+    element("ol", { start: 0 }, [
+      element("li", { value: 0 }, [element("p", {}, [text("Zero item")])]),
+      element("li", { value: -2 }, [element("p", {}, [text("Negative reset")])]),
+    ]),
     element("blockquote", {}, [element("p", {}, [text("Quoted text")])]),
     element("pre", {}, [element("code", {}, [text("const answer = 42;")])]),
     element("table", {}, [
@@ -67,6 +71,9 @@ assert.ok(containsNode((node) => node.type.name === "tableCell" && node.attrs.ro
 assert.ok(containsNode((node) => node.type.name === "tableRow" && node.attrs.section === "tfoot"));
 assert.ok(containsNode((node) => node.type.name === "table" && node.attrs.pageHeaderCopy));
 assert.ok(containsNode((node) => node.type.name === "horizontalRule" && node.attrs.pageBreak));
+assert.ok(containsNode((node) => node.type.name === "orderedList" && node.attrs.start === 0), "zero list starts survive the live schema");
+assert.ok(containsNode((node) => node.type.name === "listItem" && node.attrs.value === 0), "zero list-item resets survive the live schema");
+assert.ok(containsNode((node) => node.type.name === "listItem" && node.attrs.value === -2), "negative list-item resets survive the live schema");
 assert.ok(editorDocument.rangeHasMark(0, editorDocument.content.size, schema.marks.trackedInsertion));
 assert.ok(editorDocument.rangeHasMark(0, editorDocument.content.size, schema.marks.trackedDeletion));
 
@@ -80,6 +87,9 @@ assert.match(roundTripHtml, /data-font-size="14pt"/);
 assert.match(roundTripHtml, /data-revision-created-at="1762992000000"/);
 assert.match(roundTripHtml, /rowspan="2"/);
 assert.match(roundTripHtml, /data-page-break="true"/);
+assert.match(roundTripHtml, /<ol start="0">/);
+assert.match(roundTripHtml, /<li value="0">/);
+assert.match(roundTripHtml, /<li value="-2">/);
 const roundTripTable = normalizedRoundTrip.content.find((node) => node.tag === "table");
 assert.equal(roundTripTable.children.find((node) => node.tag === "thead").attrs["data-page-header-copy"], "true");
 
