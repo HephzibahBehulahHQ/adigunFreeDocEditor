@@ -26,10 +26,12 @@ window.HTMLDialogElement.prototype.close = function () { this.open = false; };
 window.indexedDB = {
   open() {
     const request = { result: null };
+    const savedDocuments = [];
     const objectStore = {
       getAll() { const result = { result: [] }; queueMicrotask(() => result.onsuccess?.()); return result; },
-      put() {},
+      put(documentRecord) { savedDocuments.push(documentRecord); },
     };
+    window.__savedDocuments = savedDocuments;
     request.result = {
       createObjectStore() {},
       transaction() {
@@ -69,6 +71,35 @@ try {
   window.__testEditor.commands.setTextSelection({ from: 1, to: 10 });
   window.document.querySelector('#ribbon-tools [data-action="bold"]').click();
   assert.match(window.__testEditor.getHTML(), /<strong>Live text<\/strong>/, "the Home ribbon applies formatting through a live editor transaction");
+
+  window.document.querySelector('#ribbon-tools [data-action="indent"]').click();
+  assert.equal(window.__testEditor.getJSON().content[0].attrs.indentLevel, "1", "Increase indent updates the structured paragraph attributes");
+  assert.match(window.__testEditor.getHTML(), /data-indent-level="1"[^>]*style="[^"]*margin-left:\s*36pt/, "paragraph indent remains visible on the live editor surface");
+
+  const indentRuler = window.document.querySelector('#paragraph-indent-ruler');
+  indentRuler.value = "2";
+  indentRuler.dispatchEvent(new window.Event("input", { bubbles: true }));
+  assert.equal(window.__testEditor.getJSON().content[0].attrs.indentLevel, "2", "the paragraph ruler updates the structured paragraph attributes");
+  assert.match(window.__testEditor.getHTML(), /data-indent-level="2"[^>]*style="[^"]*margin-left:\s*72pt/, "ruler indent remains visible on the live editor surface");
+
+  const lineSpacing = window.document.querySelector('#ribbon-tools [data-tool="line-spacing"]');
+  lineSpacing.value = "1.5";
+  lineSpacing.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert.equal(window.__testEditor.getJSON().content[0].attrs.lineSpacing, "1.5", "Line spacing updates the structured paragraph attributes");
+  assert.match(window.__testEditor.getHTML(), /data-line-spacing="1.5"/, "line spacing persists as a structured paragraph attribute");
+  assert.match(window.__testEditor.getHTML(), /line-height:\s*1\.5/, "line spacing remains visible on the live editor surface");
+
+  const paragraphSpacing = window.document.querySelector('#ribbon-tools [data-tool="paragraph-spacing"]');
+  paragraphSpacing.value = "12";
+  paragraphSpacing.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert.equal(window.__testEditor.getJSON().content[0].attrs.paragraphSpacing, "12", "Paragraph spacing updates the structured paragraph attributes");
+  assert.match(window.__testEditor.getHTML(), /margin-bottom:\s*12pt/, "paragraph spacing remains visible on the live editor surface");
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  const saved = window.__savedDocuments.at(-1);
+  assert.ok(saved, `the edited document is written to browser-local storage (status: ${window.document.querySelector("#save-label").textContent}, records: ${window.__savedDocuments.length})`);
+  assert.equal(saved.content.content[0].attrs["data-indent-level"], "2", "saved documents retain the paragraph ruler indent");
+  assert.equal(saved.content.content[0].attrs["data-line-spacing"], "1.5", "saved documents retain the toolbar line spacing");
+  assert.equal(saved.content.content[0].attrs["data-paragraph-spacing"], "12", "saved documents retain the toolbar paragraph spacing");
 
   window.document.querySelector('[data-view="recent"]').click();
   await new Promise((resolve) => setTimeout(resolve, 20));
