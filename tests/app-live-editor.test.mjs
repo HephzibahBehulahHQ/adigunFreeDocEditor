@@ -14,6 +14,8 @@ const { window } = dom;
 window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
 window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
 window.Element.prototype.scrollIntoView = () => {};
+window.Range.prototype.getClientRects = () => [{ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }];
+window.Range.prototype.getBoundingClientRect = () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 });
 window.document.queryCommandState = () => false;
 window.document.queryCommandValue = () => "";
 Object.defineProperty(window.HTMLElement.prototype, "innerText", {
@@ -71,6 +73,12 @@ try {
 
   window.__testEditor.commands.setContent("<p>Live text</p>");
   window.__testEditor.commands.setTextSelection({ from: 1, to: 10 });
+  const blockStyle = window.document.querySelector('#ribbon-tools [data-tool="block"]');
+  assert.deepEqual([...blockStyle.options].map((option) => option.textContent), ["Normal", "Heading 1", "Heading 2", "Heading 3"], "the text-style menu labels match its semantic heading levels");
+  blockStyle.value = "h1";
+  blockStyle.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert.equal(window.__testEditor.getJSON().content[0].attrs.level, 1, "Heading 1 applies the first-level heading node");
+  assert.equal(blockStyle.value, "h1", "the heading control reflects the active live heading");
   window.document.querySelector('#ribbon-tools [data-action="bold"]').click();
   assert.match(window.__testEditor.getHTML(), /<strong>Live text<\/strong>/, "the Home ribbon applies formatting through a live editor transaction");
   assert.equal(window.document.querySelector('#ribbon-tools [data-action="bold"]').getAttribute("aria-pressed"), "true", "the Home ribbon shows bold as active for the live selection");
@@ -105,7 +113,7 @@ try {
   paragraphSpacing.dispatchEvent(new window.Event("change", { bubbles: true }));
   assert.equal(window.__testEditor.getJSON().content[0].attrs.paragraphSpacing, "12", "Paragraph spacing updates the structured paragraph attributes");
   assert.match(window.__testEditor.getHTML(), /margin-bottom:\s*12pt/, "paragraph spacing remains visible on the live editor surface");
-  await new Promise((resolve) => setTimeout(resolve, 800));
+  await new Promise((resolve) => setTimeout(resolve, 1200));
   const saved = window.__savedDocuments.at(-1);
   assert.ok(saved, `the edited document is written to browser-local storage (status: ${window.document.querySelector("#save-label").textContent}, records: ${window.__savedDocuments.length})`);
   assert.equal(saved.content.content[0].attrs["data-indent-level"], "2", "saved documents retain the paragraph ruler indent");
