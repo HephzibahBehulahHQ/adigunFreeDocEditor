@@ -180,9 +180,11 @@ assert.deepEqual(groupTableRows([
 ]).map((group) => group.length), [1, 1, 1], "row groups do not cross tbody boundaries");
 const rowSplitStart = source.indexOf("  function splitTableRowBetweenContent(row, capacity)");
 assert.ok(rowSplitStart >= 0 && rowSplitStart < tableStart, "oversized table rows have a text-cell splitting path");
-const splitTableRow = new Function("splitLongTextBlock", "crypto", source.slice(rowSplitStart, tableStart) + "\nreturn splitTableRowBetweenContent;")(
+const splitTableRow = new Function("splitLongTextBlock", "splitListBetweenItems", "crypto", "Node", source.slice(rowSplitStart, tableStart) + "\nreturn splitTableRowBetweenContent;")(
   split,
-  { randomUUID: () => "a22e-1234" }
+  splitList,
+  { randomUUID: () => "a22e-1234" },
+  { TEXT_NODE: 3, ELEMENT_NODE: 1 }
 );
 const longCell = makeTextBlock(text, "TD", false, 100);
 longCell.setAttribute("colspan", "2");
@@ -199,6 +201,20 @@ assert.equal(rowFragments[0].children[1].textNodes?.map((node) => node.nodeValue
 assert.ok(rowFragments.slice(1).every((fragment) => !fragment.children[1].textContent), "short neighboring cells are blank on continuation fragments");
 assert.ok(rowFragments.every((fragment) => fragment.attributes["data-page-flow-id"] === "a22e-1234"), "row fragments retain a shared serialization identity");
 assert.ok(rowFragments.every((fragment) => fragment.children[0].attributes.colspan === "2"), "horizontal merged cells keep their column span across row fragments");
+const nestedListItems = Array.from({ length: 3 }, (_, index) => ({ tagName: "LI", getAttribute: () => null, getBoundingClientRect: () => ({ height: 25 }), index }));
+const nestedListCell = { tagName: "TD", children: [], childNodes: [], attributes: {}, getAttribute(name) { return this.attributes[name] ?? null; }, cloneNode() { return { tagName: "TD", children: [], childNodes: [], attributes: { ...this.attributes }, append(node) { this.children.push(node); this.childNodes.push(node); } }; } };
+const nestedList = {
+  nodeType: 1, tagName: "UL", children: nestedListItems, attributes: {}, getAttribute(name) { return this.attributes[name] ?? null; },
+  cloneNode() { return { tagName: "UL", children: [], attributes: { ...this.attributes }, getAttribute(name) { return this.attributes[name] ?? null; }, setAttribute(name, value) { this.attributes[name] = value; }, append(item) { this.children.push(item); } }; },
+  setAttribute(name, value) { this.attributes[name] = value; },
+  replaceWith(...nodes) { nestedListCell.children.splice(nestedListCell.children.indexOf(nestedList), 1, ...nodes); nestedListCell.childNodes.splice(nestedListCell.childNodes.indexOf(nestedList), 1, ...nodes); },
+};
+nestedListCell.children.push(nestedList);
+nestedListCell.childNodes.push(nestedList);
+const nestedListRow = { tagName: "TR", children: [nestedListCell], cloneNode() { return { tagName: "TR", children: [], attributes: {}, append(cell) { this.children.push(cell); }, setAttribute(name, value) { this.attributes[name] = value; } }; } };
+const nestedListRowFragments = splitTableRow(nestedListRow, 50);
+assert.deepEqual(nestedListRowFragments.map((fragment) => fragment.children[0].children[0].children.length), [2, 1], "a nested cell list splits between whole items");
+assert.equal(nestedListRowFragments.flatMap((fragment) => fragment.children[0].children[0].children).length, nestedListItems.length, "nested list pagination preserves each list item once");
 const imageRow = {
   tagName: "TR", children: [makeTextBlock("Image", "TD", true, 100), makeTextBlock(text, "TD", false, 100)],
   cloneNode() { return { tagName: "TR", children: [], attributes: {}, append(cell) { this.children.push(cell); }, setAttribute(name, value) { this.attributes[name] = value; } }; },

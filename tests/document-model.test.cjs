@@ -94,6 +94,11 @@ const splitTableRow = element("div", {}, [
   element("div", {}, [element("table", { "data-page-flow-id": "f22e-123" }, [element("tbody", {}, [element("tr", { "data-page-flow-id": "a22e-123" }, [element("td", {}, [text("continued across sheets")]), element("td", {}, [])])])])]),
 ]);
 assert.equal(modelApi.toHTML(modelApi.fromDOM(splitTableRow)), "<table><tbody><tr><td>A long cell continued across sheets</td><td>Same row</td></tr></tbody></table>", "split table rows save as one row and rejoin cell contents by column");
+const splitNestedListCell = element("div", {}, [
+  element("div", {}, [element("table", { "data-page-flow-id": "f33e-123" }, [element("tbody", {}, [element("tr", { "data-page-flow-id": "a33e-123" }, [element("td", {}, [element("ul", { "data-page-flow-id": "b33e-123" }, [element("li", {}, [text("First nested item")])])])])])])]),
+  element("div", {}, [element("table", { "data-page-flow-id": "f33e-123" }, [element("tbody", {}, [element("tr", { "data-page-flow-id": "a33e-123" }, [element("td", {}, [element("ul", { "data-page-flow-id": "b33e-123" }, [element("li", {}, [text("Second nested item")])])])])])])]),
+]);
+assert.equal(modelApi.toHTML(modelApi.fromDOM(splitNestedListCell)), "<table><tbody><tr><td><ul><li>First nested item</li><li>Second nested item</li></ul></td></tr></tbody></table>", "nested list fragments inside a split table row save as one list");
 assert.match(html, /unsafe link/);
 assert.doesNotMatch(html, /javascript:|<script|https:\/\/invalid\.example/);
 assert.match(html, /<img src="data:image\/png;base64,aGVsbG8=" alt="Diagram">/);
