@@ -368,6 +368,23 @@
     editorPaginationTimer = setTimeout(paginateEditor, 120);
   }
   function mergePageFlowFragments(nodes) {
+    const mergeTableRowFragments = (table) => {
+      if (!table || table.tagName !== "TABLE") return;
+      for (const section of [...table.children].filter((child) => child.tagName === "TBODY")) {
+        let previousRow = null;
+        for (const row of [...section.children]) {
+          if (row.tagName !== "TR") continue;
+          const flowId = row.getAttribute("data-page-flow-id") || "";
+          if (flowId && flowId === previousRow?.getAttribute("data-page-flow-id") && row.children.length === previousRow.children.length) {
+            [...row.children].forEach((cell, index) => {
+              while (cell.firstChild) previousRow.children[index].append(cell.firstChild);
+            });
+            row.remove();
+          } else previousRow = row;
+        }
+        section.querySelectorAll("[data-page-flow-id]").forEach((node) => node.removeAttribute("data-page-flow-id"));
+      }
+    };
     const mergeListItemFragments = (list) => {
       if (!list || !/^(UL|OL)$/.test(list.tagName)) return;
       let previousItem = null;
@@ -393,9 +410,14 @@
         while (node.firstChild) {
           const child = node.firstChild;
           if (node.tagName === "TABLE" && (child.tagName === "COLGROUP" || child.tagName === "THEAD" && child.getAttribute("data-page-header-copy") === "true")) child.remove();
-          else previousNode.append(child);
+          else if (node.tagName === "TABLE" && child.tagName === "TBODY" && previousNode.querySelector("tbody")) {
+            const body = previousNode.querySelector("tbody");
+            while (child.firstChild) body.append(child.firstChild);
+            child.remove();
+          } else previousNode.append(child);
         }
         if (/^(UL|OL)$/.test(node.tagName)) mergeListItemFragments(previousNode);
+        if (node.tagName === "TABLE") mergeTableRowFragments(previousNode);
         node.remove();
         continue;
       }
@@ -406,6 +428,7 @@
     for (const node of merged) {
       node.removeAttribute?.("data-page-flow-id");
       if (/^(UL|OL)$/.test(node.tagName)) mergeListItemFragments(node);
+      if (node.tagName === "TABLE") mergeTableRowFragments(node);
     }
     return merged;
   }
@@ -436,8 +459,8 @@
     range.setEnd(last.node, last.offset);
     return range;
   }
-  function splitLongTextBlock(block, capacity) {
-    if (!/^(P|H[1-6]|LI)$/.test(block.tagName) || block.querySelector("img, ul, ol, table")) return [block];
+  function splitLongTextBlock(block, capacity, replaceBlock = true) {
+    if (!/^(P|H[1-6]|LI|TD|TH)$/.test(block.tagName) || block.querySelector("img, ul, ol, table")) return [block];
     const textNodes = paragraphTextNodes(block);
     const text = textNodes.map((node) => node.nodeValue).join("");
     if (!text.trim()) return [block];
@@ -505,7 +528,7 @@
         }
       }
     }
-    block.replaceWith(...chunks);
+    if (replaceBlock) block.replaceWith(...chunks);
     return chunks;
   }
   function splitListBetweenItems(list, capacity) {
@@ -548,13 +571,32 @@
     list.replaceWith(...fragments);
     return fragments;
   }
+  function splitTableRowBetweenContent(row, capacity) {
+    if (row.tagName !== "TR") return [row];
+    const cells = [...row.children];
+    if (cells.length < 1 || cells.some((cell) => !["TD", "TH"].includes(cell.tagName) || Number(cell.getAttribute("colspan")) > 1 || Number(cell.getAttribute("rowspan")) > 1)) return [row];
+    const cellFragments = cells.map((cell) => splitLongTextBlock(cell, capacity, false));
+    const fragmentCount = Math.max(...cellFragments.map((fragments) => fragments.length));
+    if (fragmentCount < 2) return [row];
+    const flowId = crypto.randomUUID();
+    return Array.from({ length: fragmentCount }, (_, index) => {
+      const fragment = row.cloneNode(false);
+      fragment.setAttribute("data-page-flow-id", flowId);
+      cells.forEach((cell, cellIndex) => {
+        const parts = cellFragments[cellIndex];
+        const cellFragment = parts.length > 1 ? parts[index] || cell.cloneNode(false) : index ? cell.cloneNode(false) : cell.cloneNode(true);
+        fragment.append(cellFragment);
+      });
+      return fragment;
+    });
+  }
   function splitTableBetweenRows(table, capacity) {
     if (table.tagName !== "TABLE") return [table];
     const sections = [...table.children];
     if (sections.some((section) => !["THEAD", "TBODY"].includes(section.tagName)) || sections.filter((section) => section.tagName === "THEAD").length > 1) return [table];
     const headers = sections.filter((section) => section.tagName === "THEAD");
     const bodies = sections.filter((section) => section.tagName === "TBODY");
-    const entries = bodies.flatMap((section) => [...section.children].filter((row) => row.tagName === "TR").map((row) => ({ section, row, height: row.getBoundingClientRect().height })));
+    let entries = bodies.flatMap((section) => [...section.children].filter((row) => row.tagName === "TR").map((row) => ({ section, row, height: row.getBoundingClientRect().height })));
     if (entries.length < 2) return [table];
     const headerHeight = headers.flatMap((section) => [...section.children]).reduce((sum, row) => sum + row.getBoundingClientRect().height, 0);
     const rowHeight = entries.reduce((sum, entry) => sum + entry.height, headerHeight);
@@ -564,6 +606,12 @@
     const tableOverhead = Math.max(0, tableHeight - rowHeight) + margins;
     const bodyCapacity = capacity - tableOverhead - headerHeight;
     if (bodyCapacity < 1) return [table];
+    for (const entry of entries) {
+      if (entry.height <= bodyCapacity) continue;
+      const rowFragments = splitTableRowBetweenContent(entry.row, bodyCapacity);
+      if (rowFragments.length > 1) entry.row.replaceWith(...rowFragments);
+    }
+    entries = bodies.flatMap((section) => [...section.children].filter((row) => row.tagName === "TR").map((row) => ({ section, row, height: row.getBoundingClientRect().height })));
     const groups = [];
     let group = [];
     let used = 0;

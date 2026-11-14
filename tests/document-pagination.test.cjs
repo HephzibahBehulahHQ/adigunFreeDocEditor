@@ -4,7 +4,7 @@ const path = require("node:path");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
 const styles = fs.readFileSync(path.join(__dirname, "..", "styles.css"), "utf8");
-const start = source.indexOf("  function splitLongTextBlock(block, capacity)");
+const start = source.indexOf("  function splitLongTextBlock(block, capacity, replaceBlock = true)");
 const end = source.indexOf("  function splitListBetweenItems(list, capacity)", start);
 assert.ok(start >= 0 && end > start);
 
@@ -18,9 +18,9 @@ const makeTextBlock = (text, tagName = "P", hasImage = false, measuredHeight = n
     querySelector: () => hasImage ? {} : null,
     getAttribute(name) { return this.attributes[name] ?? null; },
     setAttribute(name, value) { this.attributes[name] = value; },
-    cloneNode: () => ({
+    cloneNode: (deep) => ({
       tagName,
-      textContent: "",
+      textContent: deep ? text : "",
       attributes: {},
       getAttribute(name) { return this.attributes[name] ?? null; },
       append(fragment) { this.textContent += fragment.textContent; },
@@ -161,6 +161,26 @@ assert.deepEqual(numberedListFragments, numberedFragments);
 const tableStart = source.indexOf("  function splitTableBetweenRows(table, capacity)");
 const tableEnd = source.indexOf("  function paginateEditor()", tableStart);
 assert.ok(tableStart >= 0 && tableEnd > tableStart);
+const rowSplitStart = source.indexOf("  function splitTableRowBetweenContent(row, capacity)");
+assert.ok(rowSplitStart >= 0 && rowSplitStart < tableStart, "oversized table rows have a text-cell splitting path");
+const splitTableRow = new Function("splitLongTextBlock", "crypto", source.slice(rowSplitStart, tableStart) + "\nreturn splitTableRowBetweenContent;")(
+  split,
+  { randomUUID: () => "a22e-1234" }
+);
+const longCell = makeTextBlock(text, "TD", false, 100);
+const shortCell = makeTextBlock("Label", "TD", false, 20);
+const tableRow = {
+  tagName: "TR", children: [longCell, shortCell],
+  cloneNode() { return { tagName: "TR", children: [], attributes: {}, append(cell) { this.children.push(cell); }, setAttribute(name, value) { this.attributes[name] = value; } }; },
+  setAttribute(name, value) { this.attributes ??= {}; this.attributes[name] = value; },
+};
+const rowFragments = splitTableRow(tableRow, 50);
+assert.ok(rowFragments.length > 1, "an oversized text cell splits its row into page-sized visual fragments");
+assert.equal(rowFragments.map((fragment) => fragment.children[0].textContent).join(""), text, "row splitting preserves all long-cell text in order");
+assert.equal(rowFragments[0].children[1].textNodes?.map((node) => node.nodeValue).join("") ?? rowFragments[0].children[1].textContent, "Label", "the first fragment retains short neighboring cell content");
+assert.ok(rowFragments.slice(1).every((fragment) => !fragment.children[1].textContent), "short neighboring cells are blank on continuation fragments");
+assert.ok(rowFragments.every((fragment) => fragment.attributes["data-page-flow-id"] === "a22e-1234"), "row fragments retain a shared serialization identity");
+assert.match(source.slice(tableStart, tableEnd), /splitTableRowBetweenContent\(entry\.row, bodyCapacity\)/, "table pagination splits rows that exceed sheet capacity");
 const makeTableRow = (height, text) => ({
   tagName: "TR", text, getBoundingClientRect: () => ({ height }),
   cloneNode() { return makeTableRow(height, text); },
@@ -181,9 +201,10 @@ const table = {
   cloneNode() { return { tagName: "TABLE", children: [], attributes: {}, append(child) { this.children.push(child); }, setAttribute(name, value) { this.attributes[name] = value; } }; },
   replaceWith(...nodes) { tableFragmentsInserted.push(...nodes); },
 };
-const splitTable = new Function("getComputedStyle", "crypto", source.slice(tableStart, tableEnd) + "\nreturn splitTableBetweenRows;")(
+const splitTable = new Function("getComputedStyle", "crypto", "splitTableRowBetweenContent", source.slice(tableStart, tableEnd) + "\nreturn splitTableBetweenRows;")(
   () => ({ marginTop: "0", marginBottom: "0" }),
-  { randomUUID: () => "d00d-1234" }
+  { randomUUID: () => "d00d-1234" },
+  splitTableRow
 );
 const tableFragments = splitTable(table, 75);
 assert.deepEqual(tableFragments.map((fragment) => fragment.children.find((child) => child.tagName === "TBODY").children.length), [2, 1], "tables flow between whole rows");
@@ -192,6 +213,40 @@ assert.equal(tableFragments[1].children[0].attributes["data-page-header-copy"], 
 assert.equal(tableFragments.map((fragment) => fragment.children.find((child) => child.tagName === "TBODY").children).flat().length, bodyRows.length);
 assert.ok(tableFragments.every((fragment) => fragment.attributes["data-page-flow-id"] === "d00d-1234"));
 assert.deepEqual(tableFragmentsInserted, tableFragments);
+
+const oversizedRowTableFragments = [];
+const oversizedTableHeader = makeSection("THEAD", [makeTableRow(15, "Name")]);
+const contentCells = [makeTextBlock(text, "TD", false, 100), makeTextBlock("Label", "TD", false, 20)];
+const oversizedRow = {
+  tagName: "TR", children: contentCells,
+  getBoundingClientRect: () => ({ height: 100 }),
+  cloneNode() {
+    return {
+      tagName: "TR", children: [], attributes: {},
+      append(cell) { this.children.push(cell); },
+      setAttribute(name, value) { this.attributes[name] = value; },
+      getBoundingClientRect() { return { height: Math.max(...this.children.map((cell) => cell.getBoundingClientRect().height)) }; },
+    };
+  },
+  replaceWith(...nodes) { oversizedBody.children.splice(oversizedBody.children.indexOf(oversizedRow), 1, ...nodes); },
+};
+const oversizedBody = makeSection("TBODY", [oversizedRow, makeTableRow(20, "Next row")]);
+const tallTable = {
+  tagName: "TABLE", children: [oversizedTableHeader, oversizedBody],
+  getBoundingClientRect: () => ({ height: 135 }),
+  cloneNode() { return { tagName: "TABLE", children: [], attributes: {}, append(child) { this.children.push(child); }, setAttribute(name, value) { this.attributes[name] = value; } }; },
+  replaceWith(...nodes) { oversizedRowTableFragments.push(...nodes); },
+};
+const splitTallTable = new Function("getComputedStyle", "crypto", "splitTableRowBetweenContent", source.slice(tableStart, tableEnd) + "\nreturn splitTableBetweenRows;")(
+  () => ({ marginTop: "0", marginBottom: "0" }),
+  { randomUUID: () => "b22e-1234" },
+  splitTableRow
+);
+const tallTableFragments = splitTallTable(tallTable, 65);
+assert.equal(tallTableFragments.length, 2, "an oversized text row can flow across sheets before the next table row");
+assert.ok(tallTableFragments.every((fragment) => fragment.children.some((child) => child.tagName === "THEAD")), "the table header repeats on each sheet with a split row");
+assert.equal(tallTableFragments.map((fragment) => fragment.children.find((child) => child.tagName === "TBODY").children.length).join(","), "1,2", "table rows remain in order around row fragments");
+assert.deepEqual(oversizedRowTableFragments, tallTableFragments);
 
 const outlineStart = source.indexOf("  function editorOutlineHeadings()");
 const outlineEnd = source.indexOf("  function renderOutline()", outlineStart);

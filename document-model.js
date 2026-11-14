@@ -8,7 +8,7 @@
   ]);
   const voidTags = new Set(["br", "hr", "img"]);
   const paragraphTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "th", "td"]);
-  const pageFlowTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "table"]);
+  const pageFlowTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "table", "tr", "th", "td"]);
   const lineSpacingValues = new Set(["1", "1.15", "1.5", "2"]);
   const paragraphSpacingValues = new Set(["0", "6", "12"]);
   const fontFamilies = new Set(["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"]);
@@ -144,8 +144,14 @@
     for (const node of content) {
       const flowId = node.type === "element" && pageFlowTags.has(node.tag) ? node.attrs["data-page-flow-id"] || "" : "";
       if (flowId && flowId === previousFlowId) {
-        const additions = node.tag === "table" ? node.children.filter((child) => !(child.type === "element" && child.tag === "thead" && child.attrs["data-page-header-copy"] === "true")) : node.children;
-        merged[merged.length - 1].children.push(...additions);
+        if (node.tag === "table") {
+          for (const child of node.children) {
+            if (child.type === "element" && (child.tag === "colgroup" || child.tag === "thead" && child.attrs["data-page-header-copy"] === "true")) continue;
+            const previousBody = child.type === "element" && child.tag === "tbody" ? merged[merged.length - 1].children.find((existing) => existing.type === "element" && existing.tag === "tbody") : null;
+            if (previousBody) previousBody.children.push(...child.children);
+            else merged[merged.length - 1].children.push(child);
+          }
+        } else merged[merged.length - 1].children.push(...node.children);
       }
       else merged.push(node);
       previousFlowId = flowId;
@@ -153,6 +159,20 @@
     const mergeNestedListItemFlows = (node) => {
       if (node.type !== "element") return;
       node.children.forEach(mergeNestedListItemFlows);
+      if (node.tag === "tbody") {
+        const rows = [];
+        let previousRow = null;
+        for (const child of node.children) {
+          const flowId = child.type === "element" && child.tag === "tr" ? child.attrs["data-page-flow-id"] || "" : "";
+          if (flowId && flowId === previousRow?.attrs["data-page-flow-id"] && child.children.length === previousRow.children.length) {
+            child.children.forEach((cell, index) => previousRow.children[index].children.push(...cell.children));
+          } else {
+            rows.push(child);
+            previousRow = child.type === "element" && child.tag === "tr" ? child : null;
+          }
+        }
+        node.children = rows;
+      }
       if (!["ul", "ol"].includes(node.tag)) return;
       const children = [];
       let previousItem = null;
