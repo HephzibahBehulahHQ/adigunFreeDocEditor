@@ -2901,11 +2901,15 @@
     if (fontSelect && [...fontSelect.options].some((option) => option.value === fontSize)) fontSelect.value = fontSize;
     for (const action of ["bold", "italic", "underline", "strikeThrough"]) {
       const button = ribbon.querySelector('.tool-button[data-action=' + action + ']');
-      if (button) button.setAttribute("aria-pressed", String(document.queryCommandState(action)));
+      const mark = action === "strikeThrough" ? "strike" : action;
+      const pressed = liveEditor ? liveEditor.isActive(mark) : document.queryCommandState(action);
+      if (button) button.setAttribute("aria-pressed", String(pressed));
     }
     for (const [action, selector] of [["insertUnorderedList", "ul"], ["insertOrderedList", "ol"]]) {
       const button = ribbon.querySelector('.tool-button[data-action=' + action + ']');
-      if (button) button.setAttribute("aria-pressed", String(Boolean(focusElement?.closest(selector))));
+      const list = action === "insertUnorderedList" ? "bulletList" : "orderedList";
+      const pressed = liveEditor ? liveEditor.isActive(list) : Boolean(focusElement?.closest(selector));
+      if (button) button.setAttribute("aria-pressed", String(pressed));
     }
     const alignmentTarget = block || editor;
     const textAlign = getComputedStyle(alignmentTarget).textAlign;

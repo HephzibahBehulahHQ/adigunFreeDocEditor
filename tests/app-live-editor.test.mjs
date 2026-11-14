@@ -71,6 +71,7 @@ try {
   window.__testEditor.commands.setTextSelection({ from: 1, to: 10 });
   window.document.querySelector('#ribbon-tools [data-action="bold"]').click();
   assert.match(window.__testEditor.getHTML(), /<strong>Live text<\/strong>/, "the Home ribbon applies formatting through a live editor transaction");
+  assert.equal(window.document.querySelector('#ribbon-tools [data-action="bold"]').getAttribute("aria-pressed"), "true", "the Home ribbon shows bold as active for the live selection");
 
   const fontSize = window.document.querySelector('#ribbon-tools [data-tool="size"]');
   fontSize.value = "14pt";
@@ -107,6 +108,11 @@ try {
   assert.equal(saved.content.content[0].attrs["data-line-spacing"], "1.5", "saved documents retain the toolbar line spacing");
   assert.equal(saved.content.content[0].attrs["data-paragraph-spacing"], "12", "saved documents retain the toolbar paragraph spacing");
   assert.match(JSON.stringify(saved.content), /data-font-size.*14pt/, "saved documents retain the Home ribbon font size");
+
+  const listButton = window.document.querySelector('#ribbon-tools [data-action="insertUnorderedList"]');
+  listButton.click();
+  assert.equal(window.__testEditor.isActive("bulletList"), true, "the Home ribbon creates a real bulleted list");
+  assert.equal(listButton.getAttribute("aria-pressed"), "true", "the Home ribbon marks the active list state");
 
   window.document.querySelector('[data-view="recent"]').click();
   await new Promise((resolve) => setTimeout(resolve, 20));
