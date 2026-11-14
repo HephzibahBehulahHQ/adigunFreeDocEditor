@@ -142,7 +142,7 @@
   }
 
   function fromDOM(root) {
-    const content = [...root.childNodes].map(copyDomNode).flat().filter(Boolean);
+    const content = [...root.childNodes].map(copyDomNode).flat(Infinity).filter(Boolean);
     const merged = [];
     let previousFlowId = "";
     for (const node of content) {
