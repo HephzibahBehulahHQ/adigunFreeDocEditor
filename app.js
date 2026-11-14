@@ -237,21 +237,39 @@
     renderOutline();
   }
 
+  function editorOutlineHeadings() {
+    const seenFlows = new Set();
+    return [...editor.querySelectorAll("h1, h2, h3")].filter((heading) => {
+      const flowId = heading.getAttribute("data-page-flow-id");
+      if (!flowId) return true;
+      if (seenFlows.has(flowId)) return false;
+      seenFlows.add(flowId);
+      return true;
+    });
+  }
+  function outlineHeadingText(heading) {
+    const flowId = heading.getAttribute("data-page-flow-id");
+    if (!flowId) return heading.innerText.trim() || "Untitled heading";
+    return [...editor.querySelectorAll(`${heading.tagName.toLowerCase()}[data-page-flow-id="${flowId}"]`)]
+      .map((fragment) => fragment.innerText)
+      .join("")
+      .trim() || "Untitled heading";
+  }
   function renderOutline() {
     const panel = $("#document-outline");
     const list = $("#outline-list");
     if (!panel || !list || !panel.classList.contains("visible")) return;
-    const headings = [...editor.querySelectorAll("h1, h2, h3")];
+    const headings = editorOutlineHeadings();
     const query = $("#outline-search").value.trim().toLocaleLowerCase();
-    const visibleHeadings = headings.map((heading, index) => ({ heading, index })).filter(({ heading }) => (heading.innerText.trim() || "Untitled heading").toLocaleLowerCase().includes(query));
+    const visibleHeadings = headings.map((heading, index) => ({ heading, index, text: outlineHeadingText(heading) })).filter(({ text }) => text.toLocaleLowerCase().includes(query));
     $("#outline-count").textContent = `${headings.length} ${headings.length === 1 ? "heading" : "headings"}`;
     list.replaceChildren();
-    for (const { heading, index } of visibleHeadings) {
+    for (const { heading, index, text } of visibleHeadings) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "outline-item outline-" + heading.tagName.toLowerCase();
       button.dataset.outlineIndex = String(index);
-      button.textContent = heading.innerText.trim() || "Untitled heading";
+      button.textContent = text;
       list.append(button);
     }
     const empty = $("#outline-empty");
@@ -354,7 +372,7 @@
     let previousFlowId = "";
     let previousNode = null;
     for (const node of nodes) {
-      const flowId = node.nodeType === Node.ELEMENT_NODE && node.tagName === "P" ? node.getAttribute("data-page-flow-id") || "" : "";
+      const flowId = node.nodeType === Node.ELEMENT_NODE && /^(P|H[1-6]|UL|OL)$/.test(node.tagName) ? node.getAttribute("data-page-flow-id") || "" : "";
       if (flowId && flowId === previousFlowId) {
         while (node.firstChild) previousNode.append(node.firstChild);
         node.remove();
@@ -394,12 +412,12 @@
     range.setEnd(last.node, last.offset);
     return range;
   }
-  function splitLongParagraph(paragraph, capacity) {
-    if (paragraph.tagName !== "P" || paragraph.querySelector("img")) return [paragraph];
-    const textNodes = paragraphTextNodes(paragraph);
+  function splitLongTextBlock(block, capacity) {
+    if (!/^(P|H[1-6])$/.test(block.tagName) || block.querySelector("img")) return [block];
+    const textNodes = paragraphTextNodes(block);
     const text = textNodes.map((node) => node.nodeValue).join("");
-    if (!text.trim()) return [paragraph];
-    const style = getComputedStyle(paragraph);
+    if (!text.trim()) return [block];
+    const style = getComputedStyle(block);
     const verticalOverhead = ["marginTop", "marginBottom", "paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"]
       .reduce((sum, property) => sum + (parseFloat(style[property]) || 0), 0);
     const contentCapacity = Math.max(1, capacity - verticalOverhead);
@@ -412,7 +430,7 @@
     let start = 0;
     while (start < text.length) {
       const fits = (end) => {
-        const range = paragraphRange(paragraph, textNodes, start, end);
+        const range = paragraphRange(block, textNodes, start, end);
         if (!range) return false;
         const rect = range.getBoundingClientRect();
         return rect.height > 0 && rect.height <= contentCapacity + 1;
@@ -436,18 +454,52 @@
       };
       let end = largestFit(wordEnds);
       if (end < 0) end = largestFit(codePointEnds);
-      if (end < 0) return [paragraph];
-      const range = paragraphRange(paragraph, textNodes, start, end);
-      const fragment = paragraph.cloneNode(false);
+      if (end < 0) return [block];
+      const range = paragraphRange(block, textNodes, start, end);
+      const fragment = block.cloneNode(false);
       fragment.append(range.cloneContents());
       chunks.push(fragment);
       start = end;
     }
-    if (chunks.length < 2) return [paragraph];
+    if (chunks.length < 2) return [block];
     const flowId = crypto.randomUUID();
     for (const chunk of chunks) chunk.setAttribute("data-page-flow-id", flowId);
-    paragraph.replaceWith(...chunks);
+    block.replaceWith(...chunks);
     return chunks;
+  }
+  function splitListBetweenItems(list, capacity) {
+    if (!/^(UL|OL)$/.test(list.tagName)) return [list];
+    const items = [...list.children].filter((child) => child.tagName === "LI");
+    if (items.length < 2) return [list];
+    const style = getComputedStyle(list);
+    const overhead = ["marginTop", "marginBottom", "paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"]
+      .reduce((sum, property) => sum + (parseFloat(style[property]) || 0), 0);
+    const itemCapacity = Math.max(1, capacity - overhead);
+    const groups = [];
+    let group = [];
+    let used = 0;
+    for (const item of items) {
+      const itemStyle = getComputedStyle(item);
+      const height = item.getBoundingClientRect().height + parseFloat(itemStyle.marginTop || 0) + parseFloat(itemStyle.marginBottom || 0);
+      if (group.length && used + height > itemCapacity) { groups.push(group); group = []; used = 0; }
+      group.push(item);
+      used += height;
+    }
+    if (group.length) groups.push(group);
+    if (groups.length < 2) return [list];
+    const listStart = Number(list.getAttribute("start")) || 1;
+    let precedingItems = 0;
+    const fragments = groups.map((groupItems) => {
+      const fragment = list.cloneNode(false);
+      if (list.tagName === "OL" && precedingItems) fragment.setAttribute("start", String(listStart + precedingItems));
+      groupItems.forEach((item) => fragment.append(item));
+      precedingItems += groupItems.length;
+      return fragment;
+    });
+    const flowId = crypto.randomUUID();
+    for (const fragment of fragments) fragment.setAttribute("data-page-flow-id", flowId);
+    list.replaceWith(...fragments);
+    return fragments;
   }
   function paginateEditor() {
     if (editor.contentEditable !== "true" || $("#editor-card").classList.contains("landing")) return;
@@ -473,9 +525,9 @@
       const rectHeight = node.nodeType === Node.ELEMENT_NODE ? node.getBoundingClientRect().height : 0;
       const nodeStyle = node.nodeType === Node.ELEMENT_NODE ? getComputedStyle(node) : null;
       const blockHeight = rectHeight + (nodeStyle ? parseFloat(nodeStyle.marginTop || 0) + parseFloat(nodeStyle.marginBottom || 0) : 0);
-      if (node.tagName === "P" && blockHeight > capacity) {
+      if (blockHeight > capacity && (/^(P|H[1-6])$/.test(node.tagName || "") || /^(UL|OL)$/.test(node.tagName || ""))) {
         if (page.length) flush();
-        const fragments = splitLongParagraph(node, capacity);
+        const fragments = /^(UL|OL)$/.test(node.tagName || "") ? splitListBetweenItems(node, capacity) : splitLongTextBlock(node, capacity);
         if (fragments.length > 1) {
           fragments.forEach((fragment, index) => {
             const fragmentStyle = getComputedStyle(fragment);
@@ -514,6 +566,7 @@
     editor.replaceChildren(fragment);
     restoreEditorSelection(savedSelection);
     renderPageNavigation();
+    renderOutline();
     $("#page-count").textContent = `${pages.length} ${pages.length === 1 ? "page" : "pages"}`;
   }
   function captureEditorSelection() {
@@ -4005,7 +4058,7 @@
   $("#outline-list").addEventListener("click", (event) => {
     const button = event.target.closest("[data-outline-index]");
     if (!button) return;
-    const heading = editor.querySelectorAll("h1, h2, h3")[Number(button.dataset.outlineIndex)];
+    const heading = editorOutlineHeadings()[Number(button.dataset.outlineIndex)];
     if (!heading) return;
     editor.focus({ preventScroll: true });
     const range = document.createRange();
