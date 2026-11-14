@@ -1,6 +1,8 @@
 import { Extension, Mark, Node, getSchema, mergeAttributes } from "@tiptap/core";
 import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
+import ListItem from "@tiptap/extension-list-item";
+import OrderedList from "@tiptap/extension-ordered-list";
 import Link from "@tiptap/extension-link";
 import TextAlign from "@tiptap/extension-text-align";
 import { TextStyle } from "@tiptap/extension-text-style";
@@ -10,6 +12,15 @@ const modelFormat = "adigun-document";
 const paragraphTypes = ["paragraph", "heading", "listItem", "tableCell", "tableHeader"];
 const blockTypes = new Set(["paragraph", "heading", "bulletList", "orderedList", "listItem", "blockquote", "codeBlock", "horizontalRule", "table", "tableRow", "tableCell", "tableHeader"]);
 const inlineTypes = new Set(["text", "image", "hardBreak"]);
+
+function parseOrderedListOrdinal(value) {
+  if (typeof value === "number") return Number.isInteger(value) && value >= -2147483648 && value <= 2147483647 ? value : null;
+  if (typeof value !== "string") return null;
+  const source = value.trim();
+  if (!/^-?\d+$/.test(source)) return null;
+  const ordinal = Number(source);
+  return Number.isInteger(ordinal) && ordinal >= -2147483648 && ordinal <= 2147483647 ? ordinal : null;
+}
 
 const ModelTextStyle = TextStyle.extend({
   addAttributes() {
@@ -171,9 +182,45 @@ const DocumentSheet = Node.create({
   }, HTMLAttributes), 0],
 });
 
+const ModelOrderedList = OrderedList.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      start: {
+        default: 1,
+        parseHTML: (element) => parseOrderedListOrdinal(element.getAttribute("start")) ?? 1,
+        renderHTML: (attrs) => {
+          const start = parseOrderedListOrdinal(attrs.start);
+          return start !== null && start !== 1 ? { start: String(start) } : {};
+        },
+      },
+    };
+  },
+});
+
+const ModelListItem = ListItem.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      value: {
+        default: null,
+        parseHTML: (element) => element.parentElement?.tagName.toLowerCase() === "ol"
+          ? parseOrderedListOrdinal(element.getAttribute("value"))
+          : null,
+        renderHTML: (attrs) => {
+          const value = parseOrderedListOrdinal(attrs.value);
+          return value !== null ? { value: String(value) } : {};
+        },
+      },
+    };
+  },
+});
+
 export const editorExtensions = [
   DocumentSheet,
-  StarterKit.configure({ link: false, heading: { levels: [1, 2, 3, 4, 5, 6] } }),
+  StarterKit.configure({ link: false, orderedList: false, listItem: false, heading: { levels: [1, 2, 3, 4, 5, 6] } }),
+  ModelOrderedList,
+  ModelListItem,
   TableKit,
   Image.configure({ inline: true, allowBase64: true }),
   Link.configure({ openOnClick: false, autolink: false, linkOnPaste: false }),
@@ -202,6 +249,7 @@ function modelAttrsToEditor(attrs = {}) {
     indentLevel: attrs["data-indent-level"] || null,
     lineSpacing: attrs["data-line-spacing"] || null,
     paragraphSpacing: attrs["data-paragraph-spacing"] || null,
+    value: parseOrderedListOrdinal(attrs.value),
   };
 }
 
@@ -279,7 +327,7 @@ function modelNodeToEditor(node, marks = []) {
   if (tag === "p") return [{ type: "paragraph", attrs: modelAttrsToEditor(attrs), content: childrenToEditor(children, marks) }];
   if (/^h[1-6]$/.test(tag)) return [{ type: "heading", attrs: { ...modelAttrsToEditor(attrs), level: Number(tag.slice(1)) }, content: childrenToEditor(children, marks) }];
   if (tag === "ul") return [{ type: "bulletList", content: ensureEditorBlocks(childrenToEditor(children, marks)) }];
-  if (tag === "ol") return [{ type: "orderedList", attrs: { start: attrs.start ? Number(attrs.start) : 1 }, content: ensureEditorBlocks(childrenToEditor(children, marks)) }];
+  if (tag === "ol") return [{ type: "orderedList", attrs: { start: parseOrderedListOrdinal(attrs.start) ?? 1 }, content: ensureEditorBlocks(childrenToEditor(children, marks)) }];
   if (tag === "li") return [{ type: "listItem", attrs: modelAttrsToEditor(attrs), content: ensureEditorBlocks(childrenToEditor(children, marks)) }];
   if (tag === "blockquote") return [{ type: "blockquote", content: ensureEditorBlocks(childrenToEditor(children, marks)) }];
   if (tag === "pre") return [{ type: "codeBlock", content: [{ type: "text", text: children.map(modelPlainText).join("") }] }];
@@ -312,6 +360,8 @@ function editorAttrsToModel(attrs = {}) {
   if (attrs.indentLevel) result["data-indent-level"] = String(attrs.indentLevel);
   if (attrs.lineSpacing) result["data-line-spacing"] = String(attrs.lineSpacing);
   if (attrs.paragraphSpacing) result["data-paragraph-spacing"] = String(attrs.paragraphSpacing);
+  const value = parseOrderedListOrdinal(attrs.value);
+  if (value !== null) result.value = value;
   return result;
 }
 
@@ -361,7 +411,10 @@ function editorNodeToModel(node) {
     case "paragraph": return { type: "element", tag: "p", attrs, children };
     case "heading": return { type: "element", tag: `h${node.attrs.level}`, attrs, children };
     case "bulletList": return { type: "element", tag: "ul", attrs: {}, children };
-    case "orderedList": return { type: "element", tag: "ol", attrs: node.attrs.start > 1 ? { start: String(node.attrs.start) } : {}, children };
+    case "orderedList": {
+      const start = parseOrderedListOrdinal(node.attrs.start);
+      return { type: "element", tag: "ol", attrs: start !== null && start !== 1 ? { start: String(start) } : {}, children };
+    }
     case "listItem": return { type: "element", tag: "li", attrs, children };
     case "blockquote": return { type: "element", tag: "blockquote", attrs: {}, children };
     case "codeBlock": return { type: "element", tag: "pre", attrs: {}, children: [{ type: "text", text: (node.content || []).map((child) => child.text || "").join("") }] };
