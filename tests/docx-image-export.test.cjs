@@ -63,12 +63,23 @@ const insertionText = revisionText("new wording");
 const deletionText = revisionText("old wording");
 const insertion = { nodeType: 1, tagName: "INS", children: [insertionText], childNodes: [insertionText], style: {}, getAttribute(name) { return ({ "data-revision-id": "rev-ins-1", "data-revision-author": "Reviewer", "data-revision-created-at": "1762992000000" })[name] || null; } };
 const deletion = { nodeType: 1, tagName: "DEL", children: [deletionText], childNodes: [deletionText], style: {}, getAttribute(name) { return ({ "data-revision-id": "rev-del-1", "data-revision-author": "Reviewer", "data-revision-created-at": "1762992000000" })[name] || null; } };
-const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), paragraph(insertion), paragraph(deletion), verticalTable] }] };
+const heading = (level, value) => {
+  const child = { nodeType: Node.TEXT_NODE, nodeValue: value };
+  return { nodeType: 1, tagName: `H${level}`, children: [child], childNodes: [child], style: { textAlign: "" }, textContent: value, getAttribute() { return null; }, closest() { return null; } };
+};
+const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), paragraph(insertion), paragraph(deletion), heading(4, "Fourth-level heading"), heading(5, "Fifth-level heading"), heading(6, "Sixth-level heading"), verticalTable] }] };
 const page = { classList: { contains() { return false; } } };
 const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumbersEnabled", "pageHeaderText", "pageFooterText", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip, setPageNumbers(value) { pageNumbersEnabled = value; }, setHeaderFooter(header, footer) { pageHeaderText = header; pageFooterText = footer; } };`);
 const { makeWordPackage, makeStoredZip, setPageNumbers, setHeaderFooter } = factory(Node, root, () => "Image export QA", atob, () => page, true, "Project & scope", "Confidential");
 const result = makeWordPackage(root);
 assert.deepEqual(result.unsupported, []);
+const headingDocumentXml = result.files["word/document.xml"];
+const headingStylesXml = result.files["word/styles.xml"];
+for (const level of [4, 5, 6]) {
+  assert.match(headingDocumentXml, new RegExp(`<w:pStyle w:val="Heading${level}"`), `Heading ${level} keeps its semantic DOCX paragraph style`);
+  assert.match(headingDocumentXml, new RegExp(`<w:t>${["Fourth", "Fifth", "Sixth"][level - 4]}-level heading<\\/w:t>`), `Heading ${level} text is preserved`);
+  assert.match(headingStylesXml, new RegExp(`<w:style w:type="paragraph" w:styleId="Heading${level}">`), `Heading ${level} has a declared DOCX style`);
+}
 const zipBlob = makeStoredZip(result.files);
 
 zipBlob.arrayBuffer().then((arrayBuffer) => {
