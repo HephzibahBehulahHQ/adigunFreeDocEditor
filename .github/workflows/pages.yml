@@ -33,6 +33,8 @@ jobs:
         run: npm ci
       - name: Check structured editor schema compatibility
         run: npm run test:editor-schema
+      - name: Check editor HTML import and export compatibility
+        run: npm run test:editor-html
       - name: Validate document model
         run: |
           node --check app.js

@@ -29,14 +29,14 @@ const ModelTextStyle = TextStyle.extend({
   },
   renderHTML({ HTMLAttributes }) {
     const styles = [
-      HTMLAttributes.fontFamily && `font-family:${HTMLAttributes.fontFamily}`,
-      HTMLAttributes.textColor && `color:${HTMLAttributes.textColor}`,
-      HTMLAttributes.highlightColor && `background-color:${HTMLAttributes.highlightColor}`,
+      HTMLAttributes["data-font-family"] && `font-family:${HTMLAttributes["data-font-family"]}`,
+      HTMLAttributes["data-text-color"] && `color:${HTMLAttributes["data-text-color"]}`,
+      HTMLAttributes["data-highlight-color"] && `background-color:${HTMLAttributes["data-highlight-color"]}`,
     ].filter(Boolean).join(";");
     const attrs = {
-      "data-font-family": HTMLAttributes.fontFamily || null,
-      "data-text-color": HTMLAttributes.textColor || null,
-      "data-highlight-color": HTMLAttributes.highlightColor || null,
+      "data-font-family": HTMLAttributes["data-font-family"] || null,
+      "data-text-color": HTMLAttributes["data-text-color"] || null,
+      "data-highlight-color": HTMLAttributes["data-highlight-color"] || null,
       style: styles || null,
     };
     return ["span", mergeAttributes(HTMLAttributes, attrs), 0];
@@ -70,8 +70,8 @@ const ModelAttributes = Extension.create({
         attributes: {
           section: {
             default: "tbody",
-            parseHTML: (element) => element.parentElement?.tagName.toLowerCase() || "tbody",
-            renderHTML: () => ({}),
+            parseHTML: (element) => element.getAttribute("data-adigun-section") || element.parentElement?.tagName.toLowerCase() || "tbody",
+            renderHTML: (attrs) => attrs.section && attrs.section !== "tbody" ? { "data-adigun-section": attrs.section } : {},
           },
         },
       },
@@ -80,8 +80,8 @@ const ModelAttributes = Extension.create({
         attributes: {
           pageHeaderCopy: {
             default: false,
-            parseHTML: (element) => element.querySelector("thead[data-page-header-copy='true']") !== null,
-            renderHTML: () => ({}),
+            parseHTML: (element) => element.getAttribute("data-adigun-page-header-copy") === "true" || element.querySelector("thead[data-page-header-copy='true']") !== null,
+            renderHTML: (attrs) => attrs.pageHeaderCopy ? { "data-adigun-page-header-copy": "true" } : {},
           },
         },
       },
@@ -102,6 +102,7 @@ const ModelAttributes = Extension.create({
 function revisionMark(name, tag) {
   return Mark.create({
     name,
+    priority: 1000,
     inclusive: false,
     addAttributes() {
       return {
