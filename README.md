@@ -10,7 +10,15 @@ Serve the repository root with any static HTTP server. For example:
 python -m http.server 4173
 ```
 
-Open `http://localhost:4173`. The application has no build step. The DOCX converter is vendored locally; the app does not load it from a CDN.
+Build the bundled editor runtime and start the local server:
+
+```powershell
+npm ci
+npm run build:editor
+python -m http.server 4173
+```
+
+Open `http://localhost:4173`. The DOCX converter is vendored locally; the app does not load it from a CDN.
 
 ## Current support
 
