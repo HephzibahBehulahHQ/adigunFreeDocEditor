@@ -4149,7 +4149,7 @@
     const key = event.key.toLowerCase();
     if (key === "enter" && !event.shiftKey) {
       const selection = window.getSelection();
-      if (selection?.rangeCount && editor.contains(selection.anchorNode)) {
+      if (editor.contentEditable === "true" && !$("#editor-card").classList.contains("landing") && selection?.rangeCount && editor.contains(selection.anchorNode)) {
         event.preventDefault();
         runTool("page-break");
       }
