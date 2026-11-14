@@ -293,7 +293,7 @@
 
   function editorOutlineHeadings() {
     const seenFlows = new Set();
-    return [...editor.querySelectorAll("h1, h2, h3")].filter((heading) => {
+    return [...editor.querySelectorAll("h1, h2, h3, h4, h5, h6")].filter((heading) => {
       const flowId = heading.getAttribute("data-page-flow-id");
       if (!flowId) return true;
       if (seenFlows.has(flowId)) return false;

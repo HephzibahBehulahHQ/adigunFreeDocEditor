@@ -374,17 +374,26 @@ const outlineStart = source.indexOf("  function editorOutlineHeadings()");
 const outlineEnd = source.indexOf("  function renderOutline()", outlineStart);
 assert.ok(outlineStart >= 0 && outlineEnd > outlineStart);
 const headingFragments = [
+  { tagName: "H1", innerText: "Document title", attributes: {}, getAttribute(name) { return this.attributes[name] ?? null; } },
   { tagName: "H2", innerText: "Long heading ", attributes: { "data-page-flow-id": "cafe-1234" }, getAttribute(name) { return this.attributes[name] ?? null; } },
   { tagName: "H2", innerText: "across pages", attributes: { "data-page-flow-id": "cafe-1234" }, getAttribute(name) { return this.attributes[name] ?? null; } },
   { tagName: "H2", innerText: "Next section", attributes: {}, getAttribute(name) { return this.attributes[name] ?? null; } },
+  { tagName: "H3", innerText: "Third level", attributes: {}, getAttribute(name) { return this.attributes[name] ?? null; } },
+  { tagName: "H4", innerText: "Fourth level", attributes: {}, getAttribute(name) { return this.attributes[name] ?? null; } },
+  { tagName: "H5", innerText: "Fifth level", attributes: {}, getAttribute(name) { return this.attributes[name] ?? null; } },
+  { tagName: "H6", innerText: "Sixth level", attributes: {}, getAttribute(name) { return this.attributes[name] ?? null; } },
 ];
 const outlineApi = new Function("editor", source.slice(outlineStart, outlineEnd) + "\nreturn { editorOutlineHeadings, outlineHeadingText };")({
   querySelectorAll(selector) {
-    if (selector === "h1, h2, h3") return headingFragments;
+    if (selector === "h1, h2, h3, h4, h5, h6") return headingFragments;
     return headingFragments.filter((heading) => selector === `${heading.tagName.toLowerCase()}[data-page-flow-id="${heading.getAttribute("data-page-flow-id")}"]` && heading.getAttribute("data-page-flow-id"));
   },
 });
 const outlineHeadings = outlineApi.editorOutlineHeadings();
-assert.equal(outlineHeadings.length, 2, "split headings appear once in the document outline");
-assert.equal(outlineApi.outlineHeadingText(outlineHeadings[0]), "Long heading across pages", "the outline label includes every heading fragment");
+assert.equal(outlineHeadings.length, 7, "all six heading levels appear while split headings appear once");
+assert.deepEqual(outlineHeadings.map((heading) => heading.tagName), ["H1", "H2", "H2", "H3", "H4", "H5", "H6"], "the outline preserves document heading order and levels");
+assert.equal(outlineApi.outlineHeadingText(outlineHeadings[1]), "Long heading across pages", "the outline label includes every heading fragment");
+for (const [level, indent] of [[4, 31], [5, 39], [6, 47]]) {
+  assert.match(styles, new RegExp(`\\.outline-h${level}\\{padding-left:${indent}px`), `Heading ${level} receives a deeper outline indent`);
+}
 console.log("Document pagination checks passed");
