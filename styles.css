@@ -364,3 +364,5 @@ button:disabled{cursor:not-allowed;opacity:.48}
 
 
 @media(max-width:1050px){.sidebar.mobile-open .nav-item{min-height:44px}}
+
+.editor-layout:not(.has-outline) > .editor-card{width:min(100%,880px)}
