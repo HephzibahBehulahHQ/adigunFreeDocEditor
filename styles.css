@@ -167,7 +167,7 @@
 .template-dialog{width:min(620px,calc(100vw - 28px));max-height:calc(100vh - 28px);overflow:auto;background:var(--panel);color:var(--ink)}.template-library{padding:22px}.template-dialog .settings-head h2{margin-bottom:0}.template-library-note{margin:14px 0 18px;color:var(--muted);font-size:12px;line-height:1.5}.template-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.template-dialog .landing-template{min-height:118px}.template-dialog::backdrop{background:rgba(11,18,32,.48)}
 @media(max-width:560px){.template-library{padding:18px}.template-cards{grid-template-columns:1fr}.template-dialog .landing-template{min-height:82px}}
 
-@media(min-width:701px) and (max-width:900px){
+@media(min-width:701px) and (max-width:1050px){
   .app-shell{display:block}
   .sidebar{inset:0 0 auto;width:auto;height:calc(54px + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) 16px 0;flex-direction:row;align-items:center;justify-content:flex-start}
   .brand{padding:0;border:0;justify-content:flex-start}
