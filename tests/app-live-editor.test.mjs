@@ -74,11 +74,15 @@ try {
   window.__testEditor.commands.setContent("<p>Live text</p>");
   window.__testEditor.commands.setTextSelection({ from: 1, to: 10 });
   const blockStyle = window.document.querySelector('#ribbon-tools [data-tool="block"]');
-  assert.deepEqual([...blockStyle.options].map((option) => option.textContent), ["Normal", "Heading 1", "Heading 2", "Heading 3"], "the text-style menu labels match its semantic heading levels");
+  assert.deepEqual([...blockStyle.options].map((option) => option.textContent), ["Normal", "Heading 1", "Heading 2", "Heading 3", "Heading 4", "Heading 5", "Heading 6"], "the text-style menu exposes all supported semantic heading levels");
   blockStyle.value = "h1";
   blockStyle.dispatchEvent(new window.Event("change", { bubbles: true }));
   assert.equal(window.__testEditor.getJSON().content[0].attrs.level, 1, "Heading 1 applies the first-level heading node");
   assert.equal(blockStyle.value, "h1", "the heading control reflects the active live heading");
+  blockStyle.value = "h4";
+  blockStyle.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert.equal(window.__testEditor.getJSON().content[0].attrs.level, 4, "Heading 4 applies the fourth-level heading node");
+  assert.equal(blockStyle.value, "h4", "the heading control reflects deeper live heading levels");
   window.document.querySelector('#ribbon-tools [data-action="bold"]').click();
   assert.match(window.__testEditor.getHTML(), /<strong>Live text<\/strong>/, "the Home ribbon applies formatting through a live editor transaction");
   assert.equal(window.document.querySelector('#ribbon-tools [data-action="bold"]').getAttribute("aria-pressed"), "true", "the Home ribbon shows bold as active for the live selection");
