@@ -574,7 +574,7 @@
   function splitTableRowBetweenContent(row, capacity) {
     if (row.tagName !== "TR") return [row];
     const cells = [...row.children];
-    if (cells.length < 1 || cells.some((cell) => !["TD", "TH"].includes(cell.tagName) || Number(cell.getAttribute("colspan")) > 1 || Number(cell.getAttribute("rowspan")) > 1)) return [row];
+    if (cells.length < 1 || cells.some((cell) => !["TD", "TH"].includes(cell.tagName) || Number(cell.getAttribute("rowspan")) > 1)) return [row];
     const cellFragments = cells.map((cell) => splitLongTextBlock(cell, capacity, false));
     const fragmentCount = Math.max(...cellFragments.map((fragments) => fragments.length));
     if (fragmentCount < 2) return [row];
