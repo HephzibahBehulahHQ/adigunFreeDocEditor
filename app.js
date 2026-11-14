@@ -624,6 +624,8 @@
     const tableOverhead = Math.max(0, tableHeight - rowHeight) + margins;
     const bodyCapacity = capacity - tableOverhead - headerHeight;
     if (bodyCapacity < 1) return [table];
+    table.style?.setProperty("--table-image-max-height", `${Math.max(1, bodyCapacity - 24)}px`);
+    entries = bodies.flatMap((section) => [...section.children].filter((row) => row.tagName === "TR").map((row) => ({ section, row, height: row.getBoundingClientRect().height })));
     for (const entry of entries) {
       if (entry.height <= bodyCapacity) continue;
       const rowFragments = splitTableRowBetweenContent(entry.row, bodyCapacity);
