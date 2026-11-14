@@ -57,7 +57,7 @@ const verticalTable = (() => {
 })();
 const pageBreak = { nodeType: 1, tagName: "HR", children: [], childNodes: [], textContent: "", getAttribute(name) { return name === "data-page-break" ? "true" : null; } };
 const fontText = { nodeType: Node.TEXT_NODE, nodeValue: "Georgia type" };
-const fontSpan = { nodeType: 1, tagName: "SPAN", children: [fontText], childNodes: [fontText], style: { fontFamily: "Georgia" }, getAttribute(name) { return ({ "data-font-family": "Georgia", "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" })[name] || null; } };
+const fontSpan = { nodeType: 1, tagName: "SPAN", children: [fontText], childNodes: [fontText], style: { fontFamily: "Georgia", fontSize: "14pt" }, getAttribute(name) { return ({ "data-font-family": "Georgia", "data-font-size": "14pt", "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" })[name] || null; } };
 const revisionText = (value) => ({ nodeType: Node.TEXT_NODE, nodeValue: value });
 const insertionText = revisionText("new wording");
 const deletionText = revisionText("old wording");
@@ -97,6 +97,7 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
   assert.match(entries.get("[Content_Types].xml").toString("utf8"), /PartName="\/word\/footer1.xml"/);
   assert.deepEqual(entries.get("word/media/image1.png"), Buffer.from(png, "base64"));
   const documentXml = entries.get("word/document.xml").toString("utf8");
+  assert.match(documentXml, /<w:sz w:val="28"\/>/, "selected font sizes export as Word run properties");
   assert.equal((documentXml.match(/<wp:inline/g) || []).length, 2);
   assert.match(documentXml, /<w:br w:type="page"\/>/);
   assert.match(documentXml, /cx="19050" cy="9525"/);

@@ -12,6 +12,7 @@
   const lineSpacingValues = new Set(["1", "1.15", "1.5", "2"]);
   const paragraphSpacingValues = new Set(["0", "6", "12"]);
   const fontFamilies = new Set(["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"]);
+  const fontSizes = new Set(["11pt", "14pt", "18pt", "24pt"]);
   const supportedColors = new Set(["#000000", "#404040", "#C00000", "#ED7D31", "#FFC000", "#548235", "#4472C4", "#7030A0", "#00B0F0", "#FFFFFF", "#FFFF00", "#00FF00", "#00FFFF", "#FF00FF", "#0000FF", "#FF0000", "#000080", "#008080", "#008000", "#800080", "#800000", "#808000", "#808080", "#C0C0C0"]);
 
   function supportedFontFamily(value) {
@@ -62,6 +63,7 @@
     if (tag === "span") {
       const fontFamily = supportedFontFamily(attributes["data-font-family"]);
       if (fontFamily) result["data-font-family"] = fontFamily;
+      if (fontSizes.has(String(attributes["data-font-size"]))) result["data-font-size"] = String(attributes["data-font-size"]);
       for (const name of ["data-text-color", "data-highlight-color"]) {
         const color = supportedColor(attributes[name]);
         if (color) result[name] = color;
@@ -119,13 +121,15 @@
     const sourceTag = node.tagName.toLowerCase();
     const tag = sourceTag === "font" ? "span" : sourceTag;
     const attrs = {};
-    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-page-flow-id", "data-page-header-copy", "data-font-family", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level", "data-revision-id", "data-revision-author", "data-revision-created-at"]) {
+    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-page-flow-id", "data-page-header-copy", "data-font-family", "data-font-size", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level", "data-revision-id", "data-revision-author", "data-revision-created-at"]) {
       const value = node.getAttribute(name);
       if (value !== null) attrs[name] = value;
     }
     if (tag === "span") {
       const family = supportedFontFamily(sourceTag === "font" ? node.getAttribute("face") : node.getAttribute("data-font-family") || node.style?.fontFamily);
       if (family) attrs["data-font-family"] = family;
+      const fontSize = String(node.getAttribute("data-font-size") || node.style?.fontSize || "");
+      if (fontSizes.has(fontSize)) attrs["data-font-size"] = fontSize;
       const textColor = supportedColor(sourceTag === "font" ? node.getAttribute("color") : node.getAttribute("data-text-color") || node.style?.color);
       if (textColor) attrs["data-text-color"] = textColor;
       const highlightColor = supportedColor(node.getAttribute("data-highlight-color") || node.style?.backgroundColor || node.style?.background);
@@ -254,6 +258,7 @@
     }
     if (input.tag === "span") {
       if (attributes["data-font-family"]) styles.push(`font-family:${attributes["data-font-family"]}`);
+      if (attributes["data-font-size"]) styles.push(`font-size:${attributes["data-font-size"]}`);
       if (attributes["data-text-color"]) styles.push(`color:${attributes["data-text-color"]}`);
       if (attributes["data-highlight-color"]) styles.push(`background-color:${attributes["data-highlight-color"]}`);
     }

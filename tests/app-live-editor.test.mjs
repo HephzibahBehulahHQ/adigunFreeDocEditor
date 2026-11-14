@@ -72,6 +72,12 @@ try {
   window.document.querySelector('#ribbon-tools [data-action="bold"]').click();
   assert.match(window.__testEditor.getHTML(), /<strong>Live text<\/strong>/, "the Home ribbon applies formatting through a live editor transaction");
 
+  const fontSize = window.document.querySelector('#ribbon-tools [data-tool="size"]');
+  fontSize.value = "14pt";
+  fontSize.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert.equal(window.__testEditor.getAttributes("textStyle").fontSize, "14pt", "font size updates through the live text-style mark");
+  assert.match(window.__testEditor.getHTML(), /data-font-size="14pt"[^>]*style="[^"]*font-size:\s*14pt/, "font size remains visible on the live editor surface");
+
   window.document.querySelector('#ribbon-tools [data-action="indent"]').click();
   assert.equal(window.__testEditor.getJSON().content[0].attrs.indentLevel, "1", "Increase indent updates the structured paragraph attributes");
   assert.match(window.__testEditor.getHTML(), /data-indent-level="1"[^>]*style="[^"]*margin-left:\s*36pt/, "paragraph indent remains visible on the live editor surface");
@@ -100,6 +106,7 @@ try {
   assert.equal(saved.content.content[0].attrs["data-indent-level"], "2", "saved documents retain the paragraph ruler indent");
   assert.equal(saved.content.content[0].attrs["data-line-spacing"], "1.5", "saved documents retain the toolbar line spacing");
   assert.equal(saved.content.content[0].attrs["data-paragraph-spacing"], "12", "saved documents retain the toolbar paragraph spacing");
+  assert.match(JSON.stringify(saved.content), /data-font-size.*14pt/, "saved documents retain the Home ribbon font size");
 
   window.document.querySelector('[data-view="recent"]').click();
   await new Promise((resolve) => setTimeout(resolve, 20));

@@ -23,6 +23,11 @@ const ModelTextStyle = TextStyle.extend({
     return {
       ...this.parent?.(),
       fontFamily: attribute("data-font-family", "font-family"),
+      fontSize: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-font-size") || (["11pt", "14pt", "18pt", "24pt"].includes(element.style?.fontSize) ? element.style.fontSize : null),
+        renderHTML: (attrs) => ["11pt", "14pt", "18pt", "24pt"].includes(String(attrs.fontSize)) ? { "data-font-size": String(attrs.fontSize) } : {},
+      },
       textColor: attribute("data-text-color", "color"),
       highlightColor: attribute("data-highlight-color", "background-color"),
     };
@@ -30,11 +35,13 @@ const ModelTextStyle = TextStyle.extend({
   renderHTML({ HTMLAttributes }) {
     const styles = [
       HTMLAttributes["data-font-family"] && `font-family:${HTMLAttributes["data-font-family"]}`,
+      HTMLAttributes["data-font-size"] && `font-size:${HTMLAttributes["data-font-size"]}`,
       HTMLAttributes["data-text-color"] && `color:${HTMLAttributes["data-text-color"]}`,
       HTMLAttributes["data-highlight-color"] && `background-color:${HTMLAttributes["data-highlight-color"]}`,
     ].filter(Boolean).join(";");
     const attrs = {
       "data-font-family": HTMLAttributes["data-font-family"] || null,
+      "data-font-size": HTMLAttributes["data-font-size"] || null,
       "data-text-color": HTMLAttributes["data-text-color"] || null,
       "data-highlight-color": HTMLAttributes["data-highlight-color"] || null,
       style: styles || null,
@@ -218,6 +225,7 @@ function inlineMarkForTag(tag, attrs = {}) {
   if (tag === "span") {
     const styleAttrs = {
       fontFamily: attrs["data-font-family"] || null,
+      fontSize: attrs["data-font-size"] || null,
       textColor: attrs["data-text-color"] || null,
       highlightColor: attrs["data-highlight-color"] || null,
     };
@@ -317,7 +325,7 @@ function markToModel(mark) {
     case "code": return { tag: "code", attrs: {} };
     case "link": return { tag: "a", attrs: attrs.href ? { href: attrs.href } : {} };
     case "textStyle": return { tag: "span", attrs: Object.fromEntries([
-      ["data-font-family", attrs.fontFamily], ["data-text-color", attrs.textColor], ["data-highlight-color", attrs.highlightColor],
+      ["data-font-family", attrs.fontFamily], ["data-font-size", attrs.fontSize], ["data-text-color", attrs.textColor], ["data-highlight-color", attrs.highlightColor],
     ].filter(([, value]) => value)) };
     case "trackedInsertion": return { tag: "ins", attrs: Object.fromEntries([
       ["data-revision-id", attrs.revisionId], ["data-revision-author", attrs.revisionAuthor], ["data-revision-created-at", attrs.revisionCreatedAt],
