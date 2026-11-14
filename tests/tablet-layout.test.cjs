@@ -19,7 +19,8 @@ const tablet = css.slice(mediaStart, mediaEnd + 1);
 
 assert.match(html, /id="mobile-menu"[^>]*aria-controls="workspace-nav"/);
 assert.match(tablet, /\.app-shell\{display:block\}/);
-assert.match(tablet, /\.sidebar\{[^}]*height:54px/);
+assert.match(tablet, /\.sidebar\{[^}]*height:calc\(54px \+ env\(safe-area-inset-top,0px\)\)/);
+assert.match(tablet, /env\(safe-area-inset-bottom,0px\)/);
 assert.match(tablet, /\.mobile-menu-button\{display:grid\}/);
 assert.match(tablet, /\.sidebar:not\(\.mobile-open\) \.nav-item\{display:none!important\}/);
 assert.match(tablet, /\.sidebar\.mobile-open \.nav-item\{display:flex!important/);
