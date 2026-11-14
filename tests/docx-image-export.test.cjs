@@ -67,7 +67,21 @@ const heading = (level, value) => {
   const child = { nodeType: Node.TEXT_NODE, nodeValue: value };
   return { nodeType: 1, tagName: `H${level}`, children: [child], childNodes: [child], style: { textAlign: "" }, textContent: value, getAttribute() { return null; }, closest() { return null; } };
 };
-const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), paragraph(insertion), paragraph(deletion), heading(4, "Fourth-level heading"), heading(5, "Fifth-level heading"), heading(6, "Sixth-level heading"), verticalTable] }] };
+const exportElement = (tagName, children = []) => {
+  const element = {
+    nodeType: 1, tagName, childNodes: children, style: { textAlign: "" },
+    get children() { return this.childNodes.filter((child) => child.nodeType === Node.ELEMENT_NODE); },
+    get textContent() { return this.childNodes.map((child) => child.nodeType === Node.TEXT_NODE ? child.nodeValue : child.textContent).join(""); },
+    getAttribute() { return null; }, closest() { return null; },
+    cloneNode() { return exportElement(tagName, this.childNodes.map((child) => child.nodeType === Node.TEXT_NODE ? { nodeType: Node.TEXT_NODE, nodeValue: child.nodeValue } : child.cloneNode(true))); },
+    remove() { const siblings = this.parentElement?.childNodes; const index = siblings?.indexOf(this) ?? -1; if (index >= 0) siblings.splice(index, 1); this.parentElement = null; },
+  };
+  children.forEach((child) => { if (child.nodeType === Node.ELEMENT_NODE) child.parentElement = element; });
+  return element;
+};
+const makeListItem = (value, nested = []) => exportElement("LI", [{ nodeType: Node.TEXT_NODE, nodeValue: value }, ...nested]);
+const nestedLists = exportElement("UL", [makeListItem("Outer bullet", [exportElement("UL", [makeListItem("Inner bullet", [exportElement("OL", [makeListItem("Nested number")])])])])]);
+const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), paragraph(insertion), paragraph(deletion), heading(4, "Fourth-level heading"), heading(5, "Fifth-level heading"), heading(6, "Sixth-level heading"), nestedLists, verticalTable] }] };
 const page = { classList: { contains() { return false; } } };
 const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumbersEnabled", "pageHeaderText", "pageFooterText", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip, setPageNumbers(value) { pageNumbersEnabled = value; }, setHeaderFooter(header, footer) { pageHeaderText = header; pageFooterText = footer; } };`);
 const { makeWordPackage, makeStoredZip, setPageNumbers, setHeaderFooter } = factory(Node, root, () => "Image export QA", atob, () => page, true, "Project & scope", "Confidential");
@@ -84,6 +98,14 @@ for (const level of [1, 2, 3, 4, 5, 6]) {
   const style = headingStylesXml.match(new RegExp(`<w:style w:type="paragraph" w:styleId="Heading${level}">([\\s\\S]*?)<\\/w:style>`));
   assert.match(style?.[1] || "", /<w:keepNext\/>/, `Heading ${level} stays with the paragraph that follows it`);
 }
+const listParagraphs = [...headingDocumentXml.matchAll(new RegExp('<w:numPr><w:ilvl w:val="(\\d+)"/><w:numId w:val="(\\d+)"/></w:numPr>', "g"))];
+assert.deepEqual(listParagraphs.map((match) => [match[1], match[2]]), [["0", "1"], ["1", "1"], ["2", "2"]], "nested bullet and numbered lists preserve their depth and type");
+const numberingXml = result.files["word/numbering.xml"];
+for (const abstractNumId of [0, 1]) {
+  const abstract = numberingXml.match(new RegExp(`<w:abstractNum w:abstractNumId="${abstractNumId}">([\\s\\S]*?)</w:abstractNum>`));
+  assert.equal([...(abstract?.[1] || "").matchAll(new RegExp("<w:lvl\\b", "g"))].length, 9, "each numbering type declares nine levels");
+}
+assert.ok(numberingXml.includes('<w:lvl w:ilvl="2"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%3."/>'), "numbering definitions include the matching depth placeholder");
 const zipBlob = makeStoredZip(result.files);
 
 zipBlob.arrayBuffer().then((arrayBuffer) => {
