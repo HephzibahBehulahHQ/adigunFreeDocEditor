@@ -353,5 +353,8 @@ button:disabled{cursor:not-allowed;opacity:.48}
 
 @media(max-width:1050px){.open-document-tabs{height:48px;padding:0 10px}.open-document-tab{min-height:44px}.open-document-tab-close,.new-document-tab{width:44px;min-width:44px;height:44px}}
 
+@media(min-width:701px) and (max-width:1050px){.ribbon-tools{height:64px}.tool-group{height:48px}.tool-button,.tool-select{height:44px}.tool-button{min-width:44px}.tool-select{max-width:160px}}
+
+
 
 
