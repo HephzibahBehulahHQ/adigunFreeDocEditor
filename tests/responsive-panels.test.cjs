@@ -43,7 +43,7 @@ const nodes = {
 const assistantResizeHandle = { addEventListener() {}, setAttribute() {}, setPointerCapture() {} };
 nodes["#review-comments"].hidden = true;
 const assistant = element();
-const window = { innerWidth: 1000, matchMedia(query) { const maximum = Number(query.match(/\\d+/)?.[0]); return { matches: this.innerWidth <= maximum }; }, addEventListener() {} };
+const window = { innerWidth: 1000, matchMedia(query) { const maximum = Number(query.match(/[0-9]+/)?.[0]); return { matches: this.innerWidth <= maximum }; }, addEventListener() {} };
 const appShell = nodes[".app-shell"];
 const api = new Function("window", "$", "assistant", "appShell", "assistantResizeHandle", "renderReviewComments", [
   source.slice(reviewStart, reviewEnd),
