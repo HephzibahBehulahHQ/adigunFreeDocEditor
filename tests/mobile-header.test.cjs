@@ -24,6 +24,9 @@ assert.match(mobileRules, /\.workspace\.mode-no-document-title \.topbar-actions\
 assert.match(mobileRules, /safe-area-inset-top/);
 assert.match(mobileRules, /safe-area-inset-right/);
 assert.match(mobileRules, /safe-area-inset-bottom/);
+assert.match(css, /\.toast\{[^}]*bottom:calc\(24px \+ env\(safe-area-inset-bottom,0px\)\)/, "toasts clear the device bottom inset");
+assert.match(mobileRules, /\.toast\{left:50%;bottom:calc\(78px \+ env\(safe-area-inset-bottom,0px\)\)\}/);
+assert.match(mobileRules, /\.adigun-window\.minimized\{top:auto;bottom:calc\(18px \+ env\(safe-area-inset-bottom,0px\)\)/);
 assert.match(mobileRules, /\.workspace\.mode-no-document-title \.mobile-menu-button\{color:#fff\}/);
 assert.match(mobileRules, /@media\(max-width:420px\)\{[\s\S]*?\.document-title\{width:min\(110px,28vw\)/);
 assert.match(mobileRules, /\.icon-button\{width:26px\}/);
