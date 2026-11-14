@@ -104,7 +104,7 @@ const firstOrderedList = exportElement("OL", [
 const secondOrderedList = exportElement("OL", [makeListItem("Restarted sequence item")], { start: 5 });
 const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), paragraph(insertion), paragraph(deletion), heading(4, "Fourth-level heading"), heading(5, "Fifth-level heading"), heading(6, "Sixth-level heading"), nestedLists, firstOrderedList, secondOrderedList, verticalTable] }] };
 const page = { classList: { contains() { return false; } } };
-const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumbersEnabled", "pageHeaderText", "pageFooterText", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip, setPageNumbers(value) { pageNumbersEnabled = value; }, setHeaderFooter(header, footer) { pageHeaderText = header; pageFooterText = footer; } };`);
+const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumbersEnabled", "pageHeaderText", "pageFooterText", `${source.slice(ordinalStart, ordinalEnd)}\n${source.slice(start, end)}; return { makeWordPackage, makeStoredZip, setPageNumbers(value) { pageNumbersEnabled = value; }, setHeaderFooter(header, footer) { pageHeaderText = header; pageFooterText = footer; } };`);
 const { makeWordPackage, makeStoredZip, setPageNumbers, setHeaderFooter } = factory(Node, root, () => "Image export QA", atob, () => page, true, "Project & scope", "Confidential");
 const result = makeWordPackage(root);
 assert.deepEqual(result.unsupported, []);
