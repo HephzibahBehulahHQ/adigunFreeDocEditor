@@ -4146,7 +4146,14 @@
     const mod = event.ctrlKey || event.metaKey;
     if (!mod || event.altKey) return;
     const key = event.key.toLowerCase();
-    if (key === "s") { event.preventDefault(); saveDocument(true); notify("Saved in this browser."); }
+    if (key === "enter" && !event.shiftKey) {
+      const selection = window.getSelection();
+      if (selection?.rangeCount && editor.contains(selection.anchorNode)) {
+        event.preventDefault();
+        runTool("page-break");
+      }
+    }
+    else if (key === "s") { event.preventDefault(); saveDocument(true); notify("Saved in this browser."); }
     else if (key === "f") { event.preventDefault(); openFindDialog(); }
     else if (key === "h") { event.preventDefault(); openFindDialog(true); }
   }
