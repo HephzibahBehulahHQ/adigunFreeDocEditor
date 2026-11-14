@@ -3856,16 +3856,20 @@
     const body = [];
     const listNumberingInstances = [];
     const listNumberingIds = new WeakMap();
+    function createListNumberingInstance(kind, level = 0, start = 1) {
+      const id = listNumberingInstances.length + 1;
+      listNumberingInstances.push({ id, abstractNumId: kind === "ol" ? 1 : 0, start, level });
+      return id;
+    }
     function listNumberingId(list, level = 0) {
       let id = listNumberingIds.get(list);
       if (id) return id;
-      id = listNumberingInstances.length + 1;
-      listNumberingIds.set(list, id);
       const isOrdered = list.tagName.toLowerCase() === "ol";
       const rawStart = list.getAttribute?.("start");
       const requestedStart = rawStart === null || rawStart === "" ? 1 : Number(rawStart);
       const start = isOrdered && Number.isSafeInteger(requestedStart) && requestedStart > 0 ? requestedStart : 1;
-      listNumberingInstances.push({ id, abstractNumId: isOrdered ? 1 : 0, start, level });
+      id = createListNumberingInstance(isOrdered ? "ol" : "ul", level, start);
+      listNumberingIds.set(list, id);
       return id;
     }
     const letterPaper = exportLayout.paper === "letter";
@@ -3984,6 +3988,7 @@
       return xml + "</w:tbl>";
     }
     function walkBlocks(node, listKind = "", listLevel = 0, output = body, listNumId = 0) {
+      let activeListNumId = listNumId;
       for (const child of [...node.children]) {
         const tag = child.tagName.toLowerCase();
         if (tag === "ul" || tag === "ol") { walkBlocks(child, tag, listLevel, output, listNumberingId(child, listLevel)); continue; }
@@ -3992,19 +3997,24 @@
           if (listLevel > 8) unsupported.add("list nesting deeper than nine levels");
           const copy = child.cloneNode(true);
           for (const nested of [...copy.children]) if (["ul", "ol"].includes(nested.tagName.toLowerCase())) nested.remove();
-          addParagraph(copy, listKind || "ul", listLevel, output, listNumId);
+          const rawValue = listKind === "ol" ? child.getAttribute?.("value") : null;
+          const itemValue = rawValue === null || rawValue === "" ? null : Number(rawValue);
+          if (Number.isSafeInteger(itemValue) && itemValue > 0) {
+            activeListNumId = createListNumberingInstance("ol", listLevel, itemValue);
+          }
+          addParagraph(copy, listKind || "ul", listLevel, output, activeListNumId);
           for (const nested of inlineChildren) walkBlocks(nested, nested.tagName.toLowerCase(), listLevel + 1, output, listNumberingId(nested, listLevel + 1));
           continue;
         }
         if (["p", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"].includes(tag)) {
           if (tag === "blockquote" || tag === "pre") unsupported.add(tag === "pre" ? "code blocks" : "block quotes");
-          addParagraph(child, listKind, listLevel, output, listNumId);
+          addParagraph(child, listKind, listLevel, output, activeListNumId);
           continue;
         }
         if (tag === "table") { output.push(tableXml(child)); continue; }
         if (tag === "hr") { output.push(child.getAttribute("data-page-break") === "true" ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="808080"/></w:pBdr></w:pPr><w:r><w:t></w:t></w:r></w:p>'); continue; }
         if (child.children.length) walkBlocks(child, listKind, listLevel, output, listNumId);
-        else if (child.textContent.trim()) addParagraph(child, listKind, listLevel, output, listNumId);
+        else if (child.textContent.trim()) addParagraph(child, listKind, listLevel, output, activeListNumId);
       }
     }
     walkBlocks(source);
