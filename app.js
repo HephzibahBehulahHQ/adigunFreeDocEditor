@@ -4521,6 +4521,13 @@
     tabs[nextIndex].focus();
     activateRibbonTab(tabs[nextIndex]);
   });
+  function openKeyboardShortcuts() {
+    const dialog = $("#keyboard-shortcuts-dialog");
+    if (!dialog.open) dialog.showModal();
+  }
+  $("#keyboard-shortcuts").addEventListener("click", openKeyboardShortcuts);
+  $("#keyboard-shortcuts-nav").addEventListener("click", openKeyboardShortcuts);
+
   function openSettings(activeItem) {
     setMobileMenu(false);
     setActiveNavigationItem(activeItem || document.querySelector('[data-view="settings"]'));
