@@ -574,18 +574,20 @@
     showFindMatch(currentFindIndex);
   }
 
-  function openFindDialog() {
+  function openFindDialog(focusReplacement = false) {
     if (activePdfFile || $("#editor-card").classList.contains("landing") || editor.hidden) {
       notify("Open an editable document to use Find and replace.");
       return;
     }
     const selection = window.getSelection();
     if (selection?.toString() && editor.contains(selection.anchorNode)) $("#find-query").value = selection.toString().slice(0, 2000);
-    $("#find-dialog").showModal();
+    const dialog = $("#find-dialog");
+    if (!dialog.open) dialog.showModal();
     refreshFindMatches(true);
     if (findMatches.length) showFindMatch(0);
-    $("#find-query").focus();
-    $("#find-query").select();
+    const input = $(focusReplacement ? "#replace-query" : "#find-query");
+    input.focus();
+    input.select();
   }
 
   function replaceFindMatch(match, replacement, reopenDialog = true) {
@@ -4061,15 +4063,20 @@
     saveDocument();
     notify(comment.resolved ? "Comment resolved." : "Comment reopened.");
   });
-  document.addEventListener("keydown", (event) => {
+  function handleKeyboardShortcut(event) {
     if (event.key === "Escape" && $("#workspace-nav").classList.contains("mobile-open")) {
       setMobileMenu(false);
       $("#mobile-menu").focus();
       return;
     }
     const mod = event.ctrlKey || event.metaKey;
-    if (mod && event.key.toLowerCase() === "s") { event.preventDefault(); saveDocument(true); notify("Saved in this browser."); }
-  });
+    if (!mod || event.altKey) return;
+    const key = event.key.toLowerCase();
+    if (key === "s") { event.preventDefault(); saveDocument(true); notify("Saved in this browser."); }
+    else if (key === "f") { event.preventDefault(); openFindDialog(); }
+    else if (key === "h") { event.preventDefault(); openFindDialog(true); }
+  }
+  document.addEventListener("keydown", handleKeyboardShortcut);
   const documentStage = $("#document-stage");
   let fileDragDepth = 0;
   function isFileDrag(event) {
