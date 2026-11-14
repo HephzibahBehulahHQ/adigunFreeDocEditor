@@ -41,6 +41,7 @@ jobs:
           node tests/local-data-privacy.test.cjs
           node tests/assistant-docked-layout.test.cjs
           node tests/document-tabs.test.cjs
+          node tests/page-navigation-thumbnails.test.cjs
           node tests/mobile-header.test.cjs
           node tests/save-status.test.cjs
           node tests/keyboard-accessibility.test.cjs
