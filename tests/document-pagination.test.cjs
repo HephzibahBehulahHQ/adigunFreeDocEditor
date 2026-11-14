@@ -57,6 +57,8 @@ assert.ok(fragments.slice(0, -1).every((fragment) => /\s$/.test(fragment.textCon
 assert.ok(fragments.every((fragment) => fragment.attributes["data-page-flow-id"] === "f00d-1234"), "fragments retain a shared serialization identity");
 assert.match(source, /const imageMaxHeight = Math\.max\(96, capacity - 32\)/, "page image limits follow the content area remaining after page margins");
 assert.match(styles, /\.document-page img\{[^}]*max-height:var\(--page-image-max-height,70vh\)/, "images fit within the page content height while retaining their aspect ratio");
+assert.match(source, /table\.style\?\.setProperty\("--table-image-max-height"/, "nested table images use the remaining table-body height");
+assert.match(styles, /\.document-page table img\{max-height:var\(--table-image-max-height,var\(--page-image-max-height,70vh\)\)/, "table images respect the header and cell-content space available on the sheet");
 assert.deepEqual(inserted, fragments, "the paragraph is replaced by its visual fragments");
 const unbroken = "🧪".repeat(30);
 const unbrokenFragments = split(makeTextBlock(unbroken), 32);
@@ -197,6 +199,14 @@ assert.equal(rowFragments[0].children[1].textNodes?.map((node) => node.nodeValue
 assert.ok(rowFragments.slice(1).every((fragment) => !fragment.children[1].textContent), "short neighboring cells are blank on continuation fragments");
 assert.ok(rowFragments.every((fragment) => fragment.attributes["data-page-flow-id"] === "a22e-1234"), "row fragments retain a shared serialization identity");
 assert.ok(rowFragments.every((fragment) => fragment.children[0].attributes.colspan === "2"), "horizontal merged cells keep their column span across row fragments");
+const imageRow = {
+  tagName: "TR", children: [makeTextBlock("Image", "TD", true, 100), makeTextBlock(text, "TD", false, 100)],
+  cloneNode() { return { tagName: "TR", children: [], attributes: {}, append(cell) { this.children.push(cell); }, setAttribute(name, value) { this.attributes[name] = value; } }; },
+};
+const imageRowFragments = splitTableRow(imageRow, 50);
+assert.ok(imageRowFragments.length > 1, "a row can split its text cell while retaining an image in a neighboring cell");
+assert.equal(imageRowFragments[0].children[0].textContent, "Image", "the neighboring image cell appears in the first row fragment");
+assert.ok(imageRowFragments.slice(1).every((fragment) => !fragment.children[0].textContent), "the image cell does not repeat on continuation rows");
 const verticallyMergedCell = makeTextBlock(text, "TD", false, 100);
 verticallyMergedCell.setAttribute("rowspan", "2");
 const verticallyMergedRow = { tagName: "TR", children: [verticallyMergedCell] };
@@ -256,6 +266,7 @@ const oversizedRow = {
 const oversizedBody = makeSection("TBODY", [oversizedRow, makeTableRow(20, "Next row")]);
 const tallTable = {
   tagName: "TABLE", children: [oversizedTableHeader, oversizedBody],
+  style: { values: {}, setProperty(name, value) { this.values[name] = value; } },
   getBoundingClientRect: () => ({ height: 135 }),
   cloneNode() { return { tagName: "TABLE", children: [], attributes: {}, append(child) { this.children.push(child); }, setAttribute(name, value) { this.attributes[name] = value; } }; },
   replaceWith(...nodes) { oversizedRowTableFragments.push(...nodes); },
@@ -270,6 +281,7 @@ const tallTableFragments = splitTallTable(tallTable, 65);
 assert.equal(tallTableFragments.length, 2, "an oversized text row can flow across sheets before the next table row");
 assert.ok(tallTableFragments.every((fragment) => fragment.children.some((child) => child.tagName === "THEAD")), "the table header repeats on each sheet with a split row");
 assert.equal(tallTableFragments.map((fragment) => fragment.children.find((child) => child.tagName === "TBODY").children.length).join(","), "1,2", "table rows remain in order around row fragments");
+assert.equal(tallTable.style.values["--table-image-max-height"], "26px", "nested image height accounts for the repeated table header and cell space");
 assert.deepEqual(oversizedRowTableFragments, tallTableFragments);
 
 const verticalSpanRows = [
