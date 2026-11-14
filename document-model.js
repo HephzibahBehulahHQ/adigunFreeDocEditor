@@ -8,7 +8,7 @@
   ]);
   const voidTags = new Set(["br", "hr", "img"]);
   const paragraphTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "th", "td"]);
-  const pageFlowTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "table"]);
+  const pageFlowTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "table"]);
   const lineSpacingValues = new Set(["1", "1.15", "1.5", "2"]);
   const paragraphSpacingValues = new Set(["0", "6", "12"]);
   const fontFamilies = new Set(["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"]);
@@ -150,7 +150,32 @@
       else merged.push(node);
       previousFlowId = flowId;
     }
-    for (const node of merged) if (node.type === "element") delete node.attrs["data-page-flow-id"];
+    const mergeNestedListItemFlows = (node) => {
+      if (node.type !== "element") return;
+      node.children.forEach(mergeNestedListItemFlows);
+      if (!["ul", "ol"].includes(node.tag)) return;
+      const children = [];
+      let previousItem = null;
+      for (const child of node.children) {
+        const flowId = child.type === "element" && child.tag === "li" ? child.attrs["data-page-flow-id"] || "" : "";
+        if (flowId && flowId === previousItem?.attrs["data-page-flow-id"]) {
+          previousItem.children.push(...child.children);
+        } else {
+          children.push(child);
+          previousItem = child.type === "element" && child.tag === "li" ? child : null;
+        }
+      }
+      node.children = children;
+    };
+    const stripPageFlowIds = (node) => {
+      if (node.type !== "element") return;
+      delete node.attrs["data-page-flow-id"];
+      node.children.forEach(stripPageFlowIds);
+    };
+    for (const node of merged) {
+      mergeNestedListItemFlows(node);
+      stripPageFlowIds(node);
+    }
     return normalize({ type: format, version, content: merged });
   }
 
