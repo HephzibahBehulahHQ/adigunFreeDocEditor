@@ -24,6 +24,7 @@
         <button class="nav-item" data-view="trash" type="button"><span class="nav-icon" aria-hidden="true">⌫</span>Trash</button>
         <div class="sidebar-divider"></div>
         <button class="nav-item" data-view="settings" type="button"><span class="nav-icon" aria-hidden="true">⚙</span>Settings</button>
+        <button class="nav-item" id="keyboard-shortcuts-nav" type="button"><span class="nav-icon" aria-hidden="true">?</span>Help &amp; shortcuts</button>
         <div class="sidebar-footer checking" id="local-storage-status" role="status" aria-live="polite"><span class="privacy-dot" aria-hidden="true"></span><span id="local-storage-label">Checking local storage…</span></div>
       </aside>
 
@@ -40,6 +41,7 @@
             <button class="icon-button" id="save-document" type="button" aria-label="Save now" title="Save now (Ctrl+S)">▣</button>
             <button class="icon-button" id="undo" type="button" aria-label="Undo" title="Undo (Ctrl+Z)">↶</button>
             <button class="icon-button" id="redo" type="button" aria-label="Redo" title="Redo (Ctrl+Y)">↷</button>
+            <button class="icon-button help-button" id="keyboard-shortcuts" type="button" aria-label="Help and keyboard shortcuts" title="Help and keyboard shortcuts">?</button>
             <span class="action-divider"></span>
             <button class="button button-outline" id="export-docx" type="button" aria-label="Download as Word document"><span aria-hidden="true">↓</span><span class="export-label">Word</span></button>
             <button class="button button-outline" id="export-html" type="button" aria-label="Export as HTML"><span aria-hidden="true">↓</span><span class="export-label">HTML</span></button>
@@ -249,6 +251,19 @@
         </div>
         <p class="custom-margin-error" id="custom-margin-error" role="alert" aria-live="polite"></p>
         <div class="settings-foot"><span>0–100 mm per side.</span><div><button class="button button-outline" value="cancel">Cancel</button> <button class="button button-primary" id="apply-custom-margins" type="button">Apply</button></div></div>
+      </form>
+    </dialog>
+    <dialog class="settings-dialog keyboard-shortcuts-dialog" id="keyboard-shortcuts-dialog" aria-labelledby="keyboard-shortcuts-title">
+      <form method="dialog">
+        <div class="settings-head"><div><span class="eyebrow">EDITOR HELP</span><h2 id="keyboard-shortcuts-title">Keyboard shortcuts</h2></div><button class="window-control" value="cancel" aria-label="Close keyboard shortcuts">×</button></div>
+        <p class="keyboard-shortcuts-intro">Use these shortcuts while working in your documents. On Mac, use Command instead of Ctrl.</p>
+        <dl class="keyboard-shortcut-list">
+          <div><dt>Save in this browser</dt><dd><kbd>Ctrl</kbd><span>+</span><kbd>S</kbd></dd></div>
+          <div><dt>Find in document</dt><dd><kbd>Ctrl</kbd><span>+</span><kbd>F</kbd></dd></div>
+          <div><dt>Find and replace</dt><dd><kbd>Ctrl</kbd><span>+</span><kbd>H</kbd></dd></div>
+          <div><dt>Insert page break</dt><dd><kbd>Ctrl</kbd><span>+</span><kbd>Enter</kbd></dd></div>
+        </dl>
+        <div class="settings-foot"><span>Page break is available while a document is being edited.</span><button class="button button-primary" value="close">Done</button></div>
       </form>
     </dialog>
     <dialog class="settings-dialog" id="page-header-footer-dialog" aria-labelledby="page-header-footer-title">

@@ -45,6 +45,26 @@ handleShortcut(saveEvent);
 assert.equal(saveEvent.prevented, true);
 assert.deepEqual(shortcutCalls, ["find", "replace", "save"]);
 
+assert.match(html, /id="keyboard-shortcuts"[^>]*aria-label="Help and keyboard shortcuts"/);
+assert.match(html, /id="keyboard-shortcuts-nav"[^>]*>.*?Help &amp; shortcuts/);
+assert.match(html, /<dialog class="settings-dialog keyboard-shortcuts-dialog" id="keyboard-shortcuts-dialog" aria-labelledby="keyboard-shortcuts-title">/);
+assert.match(html, /<h2 id="keyboard-shortcuts-title">Keyboard shortcuts<\/h2>/);
+for (const shortcut of ["Ctrl", "S", "F", "H", "Enter"]) assert.ok(html.includes(`<kbd>${shortcut}</kbd>`), shortcut + " appears in the help dialog");
+assert.match(app, /\$\("#keyboard-shortcuts"\)\.addEventListener\("click", openKeyboardShortcuts\)/);
+assert.match(app, /\$\("#keyboard-shortcuts-nav"\)\.addEventListener\("click", openKeyboardShortcuts\)/);
+const helpSource = app.match(/function openKeyboardShortcuts\(\) \{[\s\S]*?\n  \}/)?.[0];
+assert.ok(helpSource, "help control opens the keyboard shortcut dialog");
+let helpOpenCount = 0;
+const helpDialog = { open: false, showModal() { this.open = true; helpOpenCount += 1; } };
+const openHelp = new Function("$", `${helpSource}; return openKeyboardShortcuts;`)(() => helpDialog);
+openHelp();
+assert.equal(helpOpenCount, 1);
+openHelp();
+assert.equal(helpOpenCount, 1, "reopening help does not call showModal on an already-open dialog");
+helpDialog.open = false;
+openHelp();
+assert.equal(helpOpenCount, 2);
+
 function luminance(hex) {
   const channels = hex.slice(1).match(/.{2}/g).map((channel) => parseInt(channel, 16) / 255);
   const linear = channels.map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
