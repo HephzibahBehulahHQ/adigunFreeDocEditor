@@ -163,6 +163,19 @@ assert.deepEqual(numberedListFragments, numberedFragments);
 const tableStart = source.indexOf("  function splitTableBetweenRows(table, capacity)");
 const tableEnd = source.indexOf("  function paginateEditor()", tableStart);
 assert.ok(tableStart >= 0 && tableEnd > tableStart);
+const spanGroupStart = source.indexOf("  function groupTableRowsBySpans(bodies)");
+assert.ok(spanGroupStart >= 0 && spanGroupStart < tableStart);
+const groupTableRows = new Function(source.slice(spanGroupStart, tableStart) + "\nreturn groupTableRowsBySpans;")();
+const mergedSpanRows = [
+  { tagName: "TR", children: [{ getAttribute: (name) => name === "rowspan" ? "2" : null }], getBoundingClientRect: () => ({ height: 20 }) },
+  { tagName: "TR", children: [], getBoundingClientRect: () => ({ height: 20 }) },
+  { tagName: "TR", children: [], getBoundingClientRect: () => ({ height: 20 }) },
+];
+assert.deepEqual(groupTableRows([{ tagName: "TBODY", children: mergedSpanRows }]).map((group) => group.length), [2, 1], "vertical merge rows stay together when tables paginate between row groups");
+assert.deepEqual(groupTableRows([
+  { tagName: "TBODY", children: mergedSpanRows.slice(0, 1) },
+  { tagName: "TBODY", children: mergedSpanRows.slice(1) },
+]).map((group) => group.length), [1, 1, 1], "row groups do not cross tbody boundaries");
 const rowSplitStart = source.indexOf("  function splitTableRowBetweenContent(row, capacity)");
 assert.ok(rowSplitStart >= 0 && rowSplitStart < tableStart, "oversized table rows have a text-cell splitting path");
 const splitTableRow = new Function("splitLongTextBlock", "crypto", source.slice(rowSplitStart, tableStart) + "\nreturn splitTableRowBetweenContent;")(
@@ -191,7 +204,7 @@ assert.deepEqual(splitTableRow(verticallyMergedRow, 50), [verticallyMergedRow], 
 assert.equal(splitTableRow({ tagName: "TR", children: [makeTextBlock(text, "TD", true, 100)] }, 50).length, 1, "rows with nested images, lists, or tables remain intact");
 assert.match(source.slice(tableStart, tableEnd), /splitTableRowBetweenContent\(entry\.row, bodyCapacity\)/, "table pagination splits rows that exceed sheet capacity");
 const makeTableRow = (height, text) => ({
-  tagName: "TR", text, getBoundingClientRect: () => ({ height }),
+  tagName: "TR", text, children: [], getBoundingClientRect: () => ({ height }),
   cloneNode() { return makeTableRow(height, text); },
 });
 const makeSection = (tagName, children = []) => ({
@@ -210,10 +223,11 @@ const table = {
   cloneNode() { return { tagName: "TABLE", children: [], attributes: {}, append(child) { this.children.push(child); }, setAttribute(name, value) { this.attributes[name] = value; } }; },
   replaceWith(...nodes) { tableFragmentsInserted.push(...nodes); },
 };
-const splitTable = new Function("getComputedStyle", "crypto", "splitTableRowBetweenContent", source.slice(tableStart, tableEnd) + "\nreturn splitTableBetweenRows;")(
+const splitTable = new Function("getComputedStyle", "crypto", "splitTableRowBetweenContent", "groupTableRowsBySpans", source.slice(tableStart, tableEnd) + "\nreturn splitTableBetweenRows;")(
   () => ({ marginTop: "0", marginBottom: "0" }),
   { randomUUID: () => "d00d-1234" },
-  splitTableRow
+  splitTableRow,
+  groupTableRows
 );
 const tableFragments = splitTable(table, 75);
 assert.deepEqual(tableFragments.map((fragment) => fragment.children.find((child) => child.tagName === "TBODY").children.length), [2, 1], "tables flow between whole rows");
@@ -246,16 +260,32 @@ const tallTable = {
   cloneNode() { return { tagName: "TABLE", children: [], attributes: {}, append(child) { this.children.push(child); }, setAttribute(name, value) { this.attributes[name] = value; } }; },
   replaceWith(...nodes) { oversizedRowTableFragments.push(...nodes); },
 };
-const splitTallTable = new Function("getComputedStyle", "crypto", "splitTableRowBetweenContent", source.slice(tableStart, tableEnd) + "\nreturn splitTableBetweenRows;")(
+const splitTallTable = new Function("getComputedStyle", "crypto", "splitTableRowBetweenContent", "groupTableRowsBySpans", source.slice(tableStart, tableEnd) + "\nreturn splitTableBetweenRows;")(
   () => ({ marginTop: "0", marginBottom: "0" }),
   { randomUUID: () => "b22e-1234" },
-  splitTableRow
+  splitTableRow,
+  groupTableRows
 );
 const tallTableFragments = splitTallTable(tallTable, 65);
 assert.equal(tallTableFragments.length, 2, "an oversized text row can flow across sheets before the next table row");
 assert.ok(tallTableFragments.every((fragment) => fragment.children.some((child) => child.tagName === "THEAD")), "the table header repeats on each sheet with a split row");
 assert.equal(tallTableFragments.map((fragment) => fragment.children.find((child) => child.tagName === "TBODY").children.length).join(","), "1,2", "table rows remain in order around row fragments");
 assert.deepEqual(oversizedRowTableFragments, tallTableFragments);
+
+const verticalSpanRows = [
+  { ...makeTableRow(20, "Merged start"), children: [{ getAttribute: (name) => name === "rowspan" ? "2" : null }] },
+  makeTableRow(20, "Merged continuation"),
+  makeTableRow(20, "Following row"),
+];
+const verticalSpanBody = makeSection("TBODY", verticalSpanRows);
+const verticalSpanTable = {
+  tagName: "TABLE", children: [makeSection("THEAD", [makeTableRow(15, "Header")]), verticalSpanBody],
+  getBoundingClientRect: () => ({ height: 75 }),
+  cloneNode() { return { tagName: "TABLE", children: [], attributes: {}, append(child) { this.children.push(child); }, setAttribute(name, value) { this.attributes[name] = value; } }; },
+  replaceWith(...nodes) { this.fragments = nodes; },
+};
+const verticalSpanFragments = splitTable(verticalSpanTable, 65);
+assert.equal(verticalSpanFragments.map((fragment) => fragment.children.find((child) => child.tagName === "TBODY").children.length).join(","), "2,1", "vertical merges stay inside one paginated table fragment");
 
 const outlineStart = source.indexOf("  function editorOutlineHeadings()");
 const outlineEnd = source.indexOf("  function renderOutline()", outlineStart);
