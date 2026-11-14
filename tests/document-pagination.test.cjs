@@ -9,15 +9,22 @@ const end = source.indexOf("  function splitListBetweenItems(list, capacity)", s
 assert.ok(start >= 0 && end > start);
 
 const inserted = [];
-const makeTextBlock = (text, tagName = "P", hasImage = false) => {
+const makeTextBlock = (text, tagName = "P", hasImage = false, measuredHeight = null) => {
   const block = {
     tagName,
+    attributes: {},
     textNodes: [{ nodeValue: text }],
+    getBoundingClientRect: () => ({ height: measuredHeight ?? Math.max(16, Math.ceil(text.length / 24) * 16) }),
     querySelector: () => hasImage ? {} : null,
+    getAttribute(name) { return this.attributes[name] ?? null; },
+    setAttribute(name, value) { this.attributes[name] = value; },
     cloneNode: () => ({
+      tagName,
       textContent: "",
       attributes: {},
+      getAttribute(name) { return this.attributes[name] ?? null; },
       append(fragment) { this.textContent += fragment.textContent; },
+      getBoundingClientRect() { return { height: Math.max(16, Math.ceil(this.textContent.length / 24) * 16) }; },
       setAttribute(name, value) { this.attributes[name] = value; },
     }),
     replaceWith(...nodes) { inserted.push(...nodes); },
@@ -55,6 +62,14 @@ assert.ok(unbrokenFragments.length > 1, "an unbroken word can split when it exce
 assert.equal(unbrokenFragments.map((fragment) => fragment.textContent).join(""), unbroken, "code point fallback preserves supplementary Unicode characters");
 assert.ok(split(makeTextBlock(text, "H2"), 32).length > 1, "long headings can flow across sheets without losing their heading tag");
 assert.deepEqual(split(makeTextBlock(text, "P", true), 32).map((fragment) => fragment.tagName), ["P"], "paragraphs containing images are left intact");
+inserted.length = 0;
+const listItemFragments = split(makeTextBlock(text, "LI"), 32);
+assert.ok(listItemFragments.length > 1, "an oversized plain list item splits across sheets");
+assert.equal(listItemFragments.map((fragment) => fragment.textContent).join(""), text, "list-item splitting preserves every character in order");
+assert.equal(listItemFragments[0].attributes["data-page-flow-continuation"], undefined, "the first list-item fragment keeps its list marker");
+assert.ok(listItemFragments.slice(1).every((fragment) => fragment.attributes["data-page-flow-continuation"] === "true"), "continuation fragments do not create extra list markers");
+assert.ok(listItemFragments.every((fragment) => fragment.attributes["data-page-flow-id"] === "f00d-1234"), "list-item fragments share a serialization identity");
+assert.match(styles, /\.document-page li\[data-page-flow-continuation="true"\]\{list-style:none\}/, "continued list-item fragments do not display duplicate bullets or numbers");
 
 const listStart = source.indexOf("  function splitListBetweenItems(list, capacity)");
 const listEnd = source.indexOf("  function paginateEditor()", listStart);
@@ -82,9 +97,10 @@ const orderedList = {
   },
   replaceWith(...nodes) { listFragmentsInserted.push(...nodes); },
 };
-const splitList = new Function("getComputedStyle", "crypto", source.slice(listStart, listEnd) + "\nreturn splitListBetweenItems;")(
+const splitList = new Function("getComputedStyle", "crypto", "splitLongTextBlock", source.slice(listStart, listEnd) + "\nreturn splitListBetweenItems;")(
   () => ({ marginTop: "0", marginBottom: "0", paddingTop: "0", paddingBottom: "0", borderTopWidth: "0", borderBottomWidth: "0" }),
-  { randomUUID: () => "beef-1234" }
+  { randomUUID: () => "beef-1234" },
+  split
 );
 const listFragments = splitList(orderedList, 50);
 assert.deepEqual(listFragments.map((fragment) => fragment.children.length), [2, 2, 1], "lists flow between whole list items");
@@ -93,6 +109,54 @@ assert.equal(listFragments[1].attributes.start, "5", "ordered list numbering con
 assert.equal(listFragments.map((fragment) => fragment.children).flat().length, listItems.length, "list splitting preserves every item");
 assert.ok(listFragments.every((fragment) => fragment.attributes["data-page-flow-id"] === "beef-1234"));
 assert.deepEqual(listFragmentsInserted, listFragments);
+
+const oversizedItemListFragments = [];
+const oversizedList = {
+  tagName: "UL", children: [], attributes: {},
+  getAttribute(name) { return this.attributes[name] ?? null; },
+  cloneNode() {
+    return {
+      tagName: "UL", children: [], attributes: {},
+      getAttribute(name) { return this.attributes[name] ?? null; },
+      setAttribute(name, value) { this.attributes[name] = value; },
+      append(item) { this.children.push(item); },
+    };
+  },
+  replaceWith(...nodes) { oversizedItemListFragments.push(...nodes); },
+};
+const oversizedItem = makeTextBlock(text, "LI", false, 100);
+oversizedItem.replaceWith = (...nodes) => { oversizedList.children.splice(oversizedList.children.indexOf(oversizedItem), 1, ...nodes); };
+oversizedList.children.push(oversizedItem);
+const oversizedListFragments = splitList(oversizedList, 50);
+assert.ok(oversizedListFragments.length > 1, "a list with one oversized text item flows across sheets");
+assert.equal(oversizedListFragments.flatMap((fragment) => fragment.children).map((item) => item.textContent).join(""), text, "list pagination keeps split item text in order");
+assert.ok(oversizedListFragments.flatMap((fragment) => fragment.children).slice(1).every((item) => item.attributes["data-page-flow-continuation"] === "true"), "continuation list fragments carry no repeated markers");
+
+const numberedListFragments = [];
+const numberedList = {
+  tagName: "OL", children: [], attributes: { start: "4" },
+  getAttribute(name) { return this.attributes[name] ?? null; },
+  cloneNode() {
+    return {
+      tagName: "OL", children: [], attributes: { ...this.attributes },
+      getAttribute(name) { return this.attributes[name] ?? null; },
+      setAttribute(name, value) { this.attributes[name] = value; },
+      append(item) { this.children.push(item); },
+    };
+  },
+  replaceWith(...nodes) { numberedListFragments.push(...nodes); },
+};
+const numberedOversizedItem = makeTextBlock(text, "LI", false, 100);
+numberedOversizedItem.parentElement = numberedList;
+numberedOversizedItem.replaceWith = (...nodes) => { numberedList.children.splice(numberedList.children.indexOf(numberedOversizedItem), 1, ...nodes); nodes.forEach((node) => { node.parentElement = numberedList; }); };
+const followingItem = { tagName: "LI", attributes: {}, getAttribute(name) { return this.attributes[name] ?? null; }, getBoundingClientRect: () => ({ height: 20 }) };
+numberedList.children.push(numberedOversizedItem, followingItem);
+const numberedFragments = splitList(numberedList, 50);
+const continuedPage = numberedFragments.find((fragment) => fragment.children.some((item) => item.attributes["data-page-flow-continuation"] === "true"));
+assert.ok(continuedPage, "an oversized ordered-list item continues onto a later sheet");
+assert.equal(continuedPage.getAttribute("start"), "5", "the next logical ordered-list item keeps the correct number");
+assert.equal(continuedPage.children.find((item) => item.attributes["data-page-flow-continuation"] === "true").getAttribute("value"), "4", "a hidden continuation preserves the ordered-list counter");
+assert.deepEqual(numberedListFragments, numberedFragments);
 
 const tableStart = source.indexOf("  function splitTableBetweenRows(table, capacity)");
 const tableEnd = source.indexOf("  function paginateEditor()", tableStart);
