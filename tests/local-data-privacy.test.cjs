@@ -79,8 +79,8 @@ async function run() {
   assert.equal(storageClasses.has("available"), false);
   assert.match(markup, /id="local-storage-status" role="status" aria-live="polite"/);
   assert.match(markup, /id="local-storage-label">Checking local storage…/);
-  assert.match(source, /openDatabase().then(() => { setStorageAvailability(true);/);
-  assert.match(source, /.catch(() => { setStorageAvailability(false); setSaveStatus("Local save unavailable")/);
+  assert.match(source, /openDatabase\(\)\.then\(\(\) => \{ setStorageAvailability\(true\);/);
+  assert.match(source, /\.catch\(\(\) => \{ setStorageAvailability\(false\); setSaveStatus\("Local save unavailable"\)/);
   assert.match(fs.readFileSync(path.join(root, "styles.css"), "utf8"), /.sidebar-footer.unavailable .privacy-dot\{background:#e45f52\}/);
 
   process.stdout.write("Local data privacy tests passed: deletion is confirmed, clears only IndexedDB documents, and reports transaction errors.\n");
