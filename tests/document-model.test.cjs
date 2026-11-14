@@ -99,6 +99,18 @@ const splitNestedListCell = element("div", {}, [
   element("div", {}, [element("table", { "data-page-flow-id": "f33e-123" }, [element("tbody", {}, [element("tr", { "data-page-flow-id": "a33e-123" }, [element("td", {}, [element("ul", { "data-page-flow-id": "b33e-123" }, [element("li", {}, [text("Second nested item")])])])])])])]),
 ]);
 assert.equal(modelApi.toHTML(modelApi.fromDOM(splitNestedListCell)), "<table><tbody><tr><td><ul><li>First nested item</li><li>Second nested item</li></ul></td></tr></tbody></table>", "nested list fragments inside a split table row save as one list");
+const splitNestedTables = element("div", {}, [
+  element("div", {}, [element("table", { "data-page-flow-id": "c44e-123" }, [element("tbody", {}, [
+    element("tr", { "data-page-flow-id": "e44e-123" }, [element("td", {}, [element("table", { "data-page-flow-id": "d44e-123" }, [element("tbody", {}, [element("tr", {}, [element("td", {}, [text("Nested first")])])])])])]),
+  ])])]),
+  element("div", {}, [element("table", { "data-page-flow-id": "c44e-123" }, [element("tbody", {}, [
+    element("tr", { "data-page-flow-id": "e44e-123" }, [element("td", {}, [element("table", { "data-page-flow-id": "d44e-123" }, [element("tbody", {}, [
+      element("tr", {}, [element("td", {}, [text("Nested second")])]),
+      element("tr", {}, [element("td", {}, [text("Nested third")])]),
+    ])])])]),
+  ])])]),
+]);
+assert.equal(modelApi.toHTML(modelApi.fromDOM(splitNestedTables)), "<table><tbody><tr><td><table><tbody><tr><td>Nested first</td></tr><tr><td>Nested second</td></tr><tr><td>Nested third</td></tr></tbody></table></td></tr></tbody></table>", "nested table fragments rejoin inside their parent cell");
 assert.match(html, /unsafe link/);
 assert.doesNotMatch(html, /javascript:|<script|https:\/\/invalid\.example/);
 assert.match(html, /<img src="data:image\/png;base64,aGVsbG8=" alt="Diagram">/);
