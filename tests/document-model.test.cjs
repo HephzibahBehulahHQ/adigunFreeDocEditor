@@ -73,6 +73,11 @@ const splitOrderedList = element("div", {}, [
   element("div", {}, [element("ol", { start: 5, "data-page-flow-id": "b33f-123" }, [element("li", {}, [text("Third")])])]),
 ]);
 assert.equal(modelApi.toHTML(modelApi.fromDOM(splitOrderedList)), '<ol start="3"><li>First</li><li>Second</li><li>Third</li></ol>', "visual ordered-list pages save and export as one correctly numbered list");
+const splitListItem = element("div", {}, [
+  element("div", {}, [element("ul", { "data-page-flow-id": "f11e-123" }, [element("li", { "data-page-flow-id": "a11e-123" }, [text("One long item ")])])]),
+  element("div", {}, [element("ul", { "data-page-flow-id": "f11e-123" }, [element("li", { "data-page-flow-id": "a11e-123" }, [text("continued on another sheet")])])]),
+]);
+assert.equal(modelApi.toHTML(modelApi.fromDOM(splitListItem)), "<ul><li>One long item continued on another sheet</li></ul>", "page-fragmented list items save as one item without pagination metadata");
 const splitTable = element("div", {}, [
   element("div", {}, [element("table", { "data-page-flow-id": "d00d-123" }, [
     element("thead", {}, [element("tr", {}, [element("th", {}, [text("Name")])])]),
