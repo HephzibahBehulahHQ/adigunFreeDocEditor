@@ -29,6 +29,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Install pinned editor schema dependencies
+        run: npm ci
+      - name: Check structured editor schema compatibility
+        run: npm run test:editor-schema
       - name: Validate document model
         run: |
           node --check app.js
@@ -91,6 +95,7 @@ jobs:
         uses: actions/deploy-pages@v5
         with:
           artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+
 
 
 
