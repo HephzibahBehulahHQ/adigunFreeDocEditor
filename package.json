@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:editor-schema": "node tests/editor-schema.test.mjs"
+    "test:editor-schema": "node tests/editor-schema.test.mjs",
+    "test:editor-html": "node tests/editor-html.test.mjs"
   },
   "devDependencies": {
     "@tiptap/core": "3.31.3",
@@ -13,7 +14,7 @@
     "@tiptap/extension-text-align": "3.31.3",
     "@tiptap/extension-text-style": "3.31.3",
     "@tiptap/pm": "3.31.3",
-    "@tiptap/starter-kit": "3.31.3"
+    "@tiptap/starter-kit": "3.31.3",
+    "jsdom": "26.1.0"
   }
 }
-
