@@ -372,9 +372,13 @@
     let previousFlowId = "";
     let previousNode = null;
     for (const node of nodes) {
-      const flowId = node.nodeType === Node.ELEMENT_NODE && /^(P|H[1-6]|UL|OL)$/.test(node.tagName) ? node.getAttribute("data-page-flow-id") || "" : "";
+      const flowId = node.nodeType === Node.ELEMENT_NODE && /^(P|H[1-6]|UL|OL|TABLE)$/.test(node.tagName) ? node.getAttribute("data-page-flow-id") || "" : "";
       if (flowId && flowId === previousFlowId) {
-        while (node.firstChild) previousNode.append(node.firstChild);
+        while (node.firstChild) {
+          const child = node.firstChild;
+          if (node.tagName === "TABLE" && (child.tagName === "COLGROUP" || child.tagName === "THEAD" && child.getAttribute("data-page-header-copy") === "true")) child.remove();
+          else previousNode.append(child);
+        }
         node.remove();
         continue;
       }
@@ -501,6 +505,54 @@
     list.replaceWith(...fragments);
     return fragments;
   }
+  function splitTableBetweenRows(table, capacity) {
+    if (table.tagName !== "TABLE") return [table];
+    const sections = [...table.children];
+    if (sections.some((section) => !["THEAD", "TBODY"].includes(section.tagName)) || sections.filter((section) => section.tagName === "THEAD").length > 1) return [table];
+    const headers = sections.filter((section) => section.tagName === "THEAD");
+    const bodies = sections.filter((section) => section.tagName === "TBODY");
+    const entries = bodies.flatMap((section) => [...section.children].filter((row) => row.tagName === "TR").map((row) => ({ section, row, height: row.getBoundingClientRect().height })));
+    if (entries.length < 2) return [table];
+    const headerHeight = headers.flatMap((section) => [...section.children]).reduce((sum, row) => sum + row.getBoundingClientRect().height, 0);
+    const rowHeight = entries.reduce((sum, entry) => sum + entry.height, headerHeight);
+    const tableStyle = getComputedStyle(table);
+    const tableHeight = table.getBoundingClientRect().height;
+    const margins = parseFloat(tableStyle.marginTop || 0) + parseFloat(tableStyle.marginBottom || 0);
+    const tableOverhead = Math.max(0, tableHeight - rowHeight) + margins;
+    const bodyCapacity = capacity - tableOverhead - headerHeight;
+    if (bodyCapacity < 1) return [table];
+    const groups = [];
+    let group = [];
+    let used = 0;
+    for (const entry of entries) {
+      if (group.length && used + entry.height > bodyCapacity) { groups.push(group); group = []; used = 0; }
+      group.push(entry);
+      used += entry.height;
+    }
+    if (group.length) groups.push(group);
+    if (groups.length < 2) return [table];
+    const fragments = groups.map((groupEntries, index) => {
+      const fragment = table.cloneNode(false);
+      for (const section of sections) {
+        if (section.tagName === "THEAD") {
+          const header = section.cloneNode(true);
+          if (index) header.setAttribute("data-page-header-copy", "true");
+          fragment.append(header);
+          continue;
+        }
+        const rows = groupEntries.filter((entry) => entry.section === section).map((entry) => entry.row);
+        if (!rows.length) continue;
+        const body = section.cloneNode(false);
+        rows.forEach((row) => body.append(row));
+        fragment.append(body);
+      }
+      return fragment;
+    });
+    const flowId = crypto.randomUUID();
+    for (const fragment of fragments) fragment.setAttribute("data-page-flow-id", flowId);
+    table.replaceWith(...fragments);
+    return fragments;
+  }
   function paginateEditor() {
     if (editor.contentEditable !== "true" || $("#editor-card").classList.contains("landing")) return;
     const savedSelection = captureEditorSelection();
@@ -525,9 +577,9 @@
       const rectHeight = node.nodeType === Node.ELEMENT_NODE ? node.getBoundingClientRect().height : 0;
       const nodeStyle = node.nodeType === Node.ELEMENT_NODE ? getComputedStyle(node) : null;
       const blockHeight = rectHeight + (nodeStyle ? parseFloat(nodeStyle.marginTop || 0) + parseFloat(nodeStyle.marginBottom || 0) : 0);
-      if (blockHeight > capacity && (/^(P|H[1-6])$/.test(node.tagName || "") || /^(UL|OL)$/.test(node.tagName || ""))) {
+      if (blockHeight > capacity && (/^(P|H[1-6])$/.test(node.tagName || "") || /^(UL|OL|TABLE)$/.test(node.tagName || ""))) {
         if (page.length) flush();
-        const fragments = /^(UL|OL)$/.test(node.tagName || "") ? splitListBetweenItems(node, capacity) : splitLongTextBlock(node, capacity);
+        const fragments = /^(UL|OL)$/.test(node.tagName || "") ? splitListBetweenItems(node, capacity) : node.tagName === "TABLE" ? splitTableBetweenRows(node, capacity) : splitLongTextBlock(node, capacity);
         if (fragments.length > 1) {
           fragments.forEach((fragment, index) => {
             const fragmentStyle = getComputedStyle(fragment);
