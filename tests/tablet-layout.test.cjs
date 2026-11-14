@@ -29,7 +29,7 @@ assert.ok(tabletLandingRule?.includes(".workspace.mode-no-document-title .mobile
 assert.match(css, /@media\(min-width:1051px\)\{\.workspace\.mode-no-document-title \.topbar\{display:none\}\}/, "desktop landing hides the document toolbar");
 assert.match(tablet, /\.sidebar:not\(\.mobile-open\) \.nav-item\{display:none!important\}/);
 assert.match(tablet, /\.sidebar\.mobile-open \.nav-item\{display:flex!important/);
-assert.match(css, /@media\\(max-width:1050px\\)\\{\\.sidebar\\.mobile-open \\.nav-item\\{min-height:44px\\}\\}/, "open tablet and phone navigation links have 44-pixel touch targets");
+assert.match(css, /@media\(max-width:1050px\)\{\.sidebar\.mobile-open \.nav-item\{min-height:44px\}\}/, "open tablet and phone navigation links have 44-pixel touch targets");
 assert.match(tablet, /\.ribbon-tabs\{[^}]*overflow-x:auto/);
 assert.match(tablet, /\.ribbon-tools\{height:58px/);
 assert.match(tablet, /\.tool-button\{height:36px;min-width:36px/);
