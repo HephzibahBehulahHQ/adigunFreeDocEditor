@@ -65,7 +65,7 @@ const paginationStart = source.indexOf("  function paginateEditor()");
 const paginationEnd = source.indexOf("  function normalizeReviewComments(", paginationStart);
 assert.ok(paginationStart >= 0 && paginationEnd > paginationStart);
 const paginationSource = source.slice(paginationStart, paginationEnd);
-assert.match(source, /function splitLongTextBlock\(block, capacity\)/, "pagination can split over-height paragraphs and headings at text boundaries");
+assert.match(source, /function splitLongTextBlock\(block, capacity(?:, replaceBlock = true)?\)/, "pagination can split over-height paragraphs, headings, list items, and table cells at text boundaries");
 assert.match(source, /function splitListBetweenItems\(list, capacity\)/, "pagination can split lists between whole list items");
 assert.match(source, /function splitTableBetweenRows\(table, capacity\)/, "pagination can split standard tables between rows");
 assert.match(source, /function mergePageFlowFragments\(nodes\)/, "pagination rejoins existing fragments before reflow");
