@@ -22,4 +22,3 @@ assert.match(importedReviewUi, /activeTab = "review"/);
 assert.match(importedReviewUi, /showReviewPanel\(true\)/);
 
 process.stdout.write("DOCX revision warning tests passed: warnings reflect source revision counts and inspection uncertainty.\n");
-

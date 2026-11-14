@@ -379,4 +379,3 @@ export function editorJSONToDocumentModel(editorDocument) {
   return { type: modelFormat, version: 1, content };
 }
 
-

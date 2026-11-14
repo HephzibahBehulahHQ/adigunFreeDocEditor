@@ -17,4 +17,3 @@ export function createLiveEditor({ element, onUpdate }) {
 if (typeof window !== "undefined") {
   window.AdigunEditorRuntime = { createLiveEditor };
 }
-

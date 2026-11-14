@@ -33,4 +33,3 @@ try {
 }
 
 process.stdout.write("Live editor tests passed: page sheets mount in the schema, formatting dispatches transactions, and model output flattens visual wrappers.\n");
-
