@@ -323,6 +323,7 @@
       button.type = "button";
       button.className = "outline-item outline-" + heading.tagName.toLowerCase();
       button.dataset.outlineIndex = String(index);
+      button.setAttribute("aria-label", `Heading ${heading.tagName.slice(1)}: ${text}`);
       button.textContent = text;
       list.append(button);
     }

@@ -71,6 +71,10 @@ try {
   assert.equal(window.document.querySelector("#undo").disabled, true, "Undo is disabled when the new document has no history");
   assert.equal(window.document.querySelector("#redo").disabled, true, "Redo is disabled when the new document has no redo history");
 
+  window.__testEditor.commands.setContent("<h1>Chapter</h1><h6>Footnote</h6>");
+  const outlineItems = [...window.document.querySelectorAll("#outline-list .outline-item")];
+  assert.deepEqual(outlineItems.map((item) => item.textContent), ["Chapter", "Footnote"], "the document outline renders real heading text");
+  assert.deepEqual(outlineItems.map((item) => item.getAttribute("aria-label")), ["Heading 1: Chapter", "Heading 6: Footnote"], "assistive technology can distinguish heading levels in the outline");
   window.__testEditor.commands.setContent("<p>Live text</p>");
   window.__testEditor.commands.setTextSelection({ from: 1, to: 10 });
   const blockStyle = window.document.querySelector('#ribbon-tools [data-tool="block"]');
