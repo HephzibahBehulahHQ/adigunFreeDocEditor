@@ -18,4 +18,6 @@ assert.match(styles, /\.break-navigation-item\.page-thumbnail-item\{display:grid
 assert.match(styles, /\.page-thumbnail-preview\{position:relative;display:block;width:68px;height:92px;overflow:hidden/);
 assert.match(styles, /\.page-thumbnail-item\.active \.page-thumbnail-preview\{border-color:var\(--purple\)/);
 
+assert.match(styles, /@media\(max-width:700px\)\{[\s\S]*?\.break-navigation-list\{max-height:42vh;overscroll-behavior:contain;-webkit-overflow-scrolling:touch\}/, "mobile page navigation has a larger contained scroll area");
+
 process.stdout.write("Page navigation thumbnail tests passed: previews are bounded and the visible page is announced.\n");
