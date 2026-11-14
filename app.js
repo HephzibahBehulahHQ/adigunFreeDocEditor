@@ -368,17 +368,34 @@
     editorPaginationTimer = setTimeout(paginateEditor, 120);
   }
   function mergePageFlowFragments(nodes) {
+    const mergeListItemFragments = (list) => {
+      if (!list || !/^(UL|OL)$/.test(list.tagName)) return;
+      let previousItem = null;
+      for (const item of [...list.children]) {
+        if (item.tagName !== "LI") continue;
+        mergeListItemFragments(item.querySelector("ul, ol"));
+        const flowId = item.getAttribute("data-page-flow-id") || "";
+        if (flowId && flowId === previousItem?.getAttribute("data-page-flow-id")) {
+          while (item.firstChild) previousItem.append(item.firstChild);
+          item.remove();
+          previousItem.removeAttribute("data-page-flow-id");
+          previousItem.removeAttribute("data-page-flow-continuation");
+        } else previousItem = item;
+      }
+    };
     const merged = [];
     let previousFlowId = "";
     let previousNode = null;
     for (const node of nodes) {
       const flowId = node.nodeType === Node.ELEMENT_NODE && /^(P|H[1-6]|UL|OL|TABLE)$/.test(node.tagName) ? node.getAttribute("data-page-flow-id") || "" : "";
       if (flowId && flowId === previousFlowId) {
+        if (/^(UL|OL)$/.test(node.tagName)) mergeListItemFragments(previousNode);
         while (node.firstChild) {
           const child = node.firstChild;
           if (node.tagName === "TABLE" && (child.tagName === "COLGROUP" || child.tagName === "THEAD" && child.getAttribute("data-page-header-copy") === "true")) child.remove();
           else previousNode.append(child);
         }
+        if (/^(UL|OL)$/.test(node.tagName)) mergeListItemFragments(previousNode);
         node.remove();
         continue;
       }
@@ -386,7 +403,10 @@
       previousNode = node;
       previousFlowId = flowId;
     }
-    for (const node of merged) node.removeAttribute?.("data-page-flow-id");
+    for (const node of merged) {
+      node.removeAttribute?.("data-page-flow-id");
+      if (/^(UL|OL)$/.test(node.tagName)) mergeListItemFragments(node);
+    }
     return merged;
   }
   function paragraphTextNodes(paragraph) {
@@ -417,7 +437,7 @@
     return range;
   }
   function splitLongTextBlock(block, capacity) {
-    if (!/^(P|H[1-6])$/.test(block.tagName) || block.querySelector("img")) return [block];
+    if (!/^(P|H[1-6]|LI)$/.test(block.tagName) || block.querySelector("img, ul, ol, table")) return [block];
     const textNodes = paragraphTextNodes(block);
     const text = textNodes.map((node) => node.nodeValue).join("");
     if (!text.trim()) return [block];
@@ -467,18 +487,41 @@
     }
     if (chunks.length < 2) return [block];
     const flowId = crypto.randomUUID();
-    for (const chunk of chunks) chunk.setAttribute("data-page-flow-id", flowId);
+    for (const [index, chunk] of chunks.entries()) {
+      chunk.setAttribute("data-page-flow-id", flowId);
+      if (block.tagName === "LI" && index) {
+        chunk.setAttribute("data-page-flow-continuation", "true");
+        const list = block.parentElement;
+        if (list?.tagName === "OL") {
+          let ordinal = Number(list.getAttribute("start")) || 1;
+          for (const item of list.children) {
+            if (item.tagName !== "LI") continue;
+            const value = Number(item.getAttribute("value"));
+            if (Number.isInteger(value) && value > 0) ordinal = value;
+            if (item === block) break;
+            if (item.getAttribute("data-page-flow-continuation") !== "true") ordinal++;
+          }
+          chunk.setAttribute("value", String(ordinal));
+        }
+      }
+    }
     block.replaceWith(...chunks);
     return chunks;
   }
   function splitListBetweenItems(list, capacity) {
     if (!/^(UL|OL)$/.test(list.tagName)) return [list];
-    const items = [...list.children].filter((child) => child.tagName === "LI");
-    if (items.length < 2) return [list];
+    let items = [...list.children].filter((child) => child.tagName === "LI");
+    if (!items.length) return [list];
     const style = getComputedStyle(list);
     const overhead = ["marginTop", "marginBottom", "paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"]
       .reduce((sum, property) => sum + (parseFloat(style[property]) || 0), 0);
     const itemCapacity = Math.max(1, capacity - overhead);
+    for (const item of items) {
+      const itemStyle = getComputedStyle(item);
+      const height = item.getBoundingClientRect().height + parseFloat(itemStyle.marginTop || 0) + parseFloat(itemStyle.marginBottom || 0);
+      if (height > itemCapacity) splitLongTextBlock(item, itemCapacity);
+    }
+    items = [...list.children].filter((child) => child.tagName === "LI");
     const groups = [];
     let group = [];
     let used = 0;
@@ -497,7 +540,7 @@
       const fragment = list.cloneNode(false);
       if (list.tagName === "OL" && precedingItems) fragment.setAttribute("start", String(listStart + precedingItems));
       groupItems.forEach((item) => fragment.append(item));
-      precedingItems += groupItems.length;
+      precedingItems += groupItems.filter((item) => item.getAttribute?.("data-page-flow-continuation") !== "true").length;
       return fragment;
     });
     const flowId = crypto.randomUUID();
