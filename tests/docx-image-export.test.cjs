@@ -67,13 +67,13 @@ const heading = (level, value) => {
   const child = { nodeType: Node.TEXT_NODE, nodeValue: value };
   return { nodeType: 1, tagName: `H${level}`, children: [child], childNodes: [child], style: { textAlign: "" }, textContent: value, getAttribute() { return null; }, closest() { return null; } };
 };
-const exportElement = (tagName, children = []) => {
+const exportElement = (tagName, children = [], attributes = {}) => {
   const element = {
     nodeType: 1, tagName, childNodes: children, style: { textAlign: "" },
     get children() { return this.childNodes.filter((child) => child.nodeType === Node.ELEMENT_NODE); },
     get textContent() { return this.childNodes.map((child) => child.nodeType === Node.TEXT_NODE ? child.nodeValue : child.textContent).join(""); },
-    getAttribute() { return null; }, closest() { return null; },
-    cloneNode() { return exportElement(tagName, this.childNodes.map((child) => child.nodeType === Node.TEXT_NODE ? { nodeType: Node.TEXT_NODE, nodeValue: child.nodeValue } : child.cloneNode(true))); },
+    getAttribute(name) { return Object.hasOwn(attributes, name) ? String(attributes[name]) : null; }, closest() { return null; },
+    cloneNode() { return exportElement(tagName, this.childNodes.map((child) => child.nodeType === Node.TEXT_NODE ? { nodeType: Node.TEXT_NODE, nodeValue: child.nodeValue } : child.cloneNode(true)), attributes); },
     remove() { const siblings = this.parentElement?.childNodes; const index = siblings?.indexOf(this) ?? -1; if (index >= 0) siblings.splice(index, 1); this.parentElement = null; },
   };
   children.forEach((child) => { if (child.nodeType === Node.ELEMENT_NODE) child.parentElement = element; });
@@ -82,7 +82,7 @@ const exportElement = (tagName, children = []) => {
 const makeListItem = (value, nested = []) => exportElement("LI", [{ nodeType: Node.TEXT_NODE, nodeValue: value }, ...nested]);
 const nestedLists = exportElement("UL", [makeListItem("Outer bullet", [exportElement("UL", [makeListItem("Inner bullet", [exportElement("OL", [makeListItem("Nested number")])])])])]);
 const firstOrderedList = exportElement("OL", [makeListItem("First sequence item"), makeListItem("Second sequence item")]);
-const secondOrderedList = exportElement("OL", [makeListItem("Restarted sequence item")]);
+const secondOrderedList = exportElement("OL", [makeListItem("Restarted sequence item")], { start: 5 });
 const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), paragraph(insertion), paragraph(deletion), heading(4, "Fourth-level heading"), heading(5, "Fifth-level heading"), heading(6, "Sixth-level heading"), nestedLists, firstOrderedList, secondOrderedList, verticalTable] }] };
 const page = { classList: { contains() { return false; } } };
 const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumbersEnabled", "pageHeaderText", "pageFooterText", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip, setPageNumbers(value) { pageNumbersEnabled = value; }, setHeaderFooter(header, footer) { pageHeaderText = header; pageFooterText = footer; } };`);
@@ -109,8 +109,9 @@ for (const abstractNumId of [0, 1]) {
 }
 assert.ok(numberingXml.includes('<w:lvl w:ilvl="2"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%3."/>'), "numbering definitions include the matching depth placeholder");
 for (const [numId, abstractNumId] of [[1, 0], [2, 0], [3, 1], [4, 1], [5, 1]]) {
-  assert.ok(numberingXml.includes(`<w:num w:numId="${numId}"><w:abstractNumId w:val="${abstractNumId}"/></w:num>`), `list numbering instance ${numId} uses the matching list type`);
+  assert.match(numberingXml, new RegExp(`<w:num w:numId="${numId}"><w:abstractNumId w:val="${abstractNumId}"/>`), `list numbering instance ${numId} uses the matching list type`);
 }
+assert.ok(numberingXml.includes('<w:num w:numId="5"><w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="5"/></w:lvlOverride></w:num>'), "ordered-list start values are preserved in DOCX numbering overrides");
 const zipBlob = makeStoredZip(result.files);
 
 zipBlob.arrayBuffer().then((arrayBuffer) => {
