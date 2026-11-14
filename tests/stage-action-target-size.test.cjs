@@ -12,4 +12,3 @@ assert.match(css, /@media\(min-width:701px\) and \(max-width:1050px\)\{\.stage-a
 assert.match(css, /@media\(max-width:700px\)\{\.stage-actions \.text-button\{min-height:44px\}\}/, "mobile stage actions have 44-pixel targets");
 
 process.stdout.write("Stage action target tests passed: Outline and Adigun meet responsive touch sizes.\n");
-
