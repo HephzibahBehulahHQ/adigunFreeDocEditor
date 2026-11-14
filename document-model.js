@@ -38,6 +38,15 @@
     return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
   }
 
+  function parseOrderedListOrdinal(value) {
+    if (typeof value === "number") return Number.isInteger(value) && value >= -2147483648 && value <= 2147483647 ? value : null;
+    if (typeof value !== "string") return null;
+    const source = value.trim();
+    if (!/^-?\d+$/.test(source)) return null;
+    const ordinal = Number(source);
+    return Number.isInteger(ordinal) && ordinal >= -2147483648 && ordinal <= 2147483647 ? ordinal : null;
+  }
+
   function safeAttributes(tag, attributes = {}) {
     const result = {};
     if (tag === "a" && typeof attributes.href === "string") {
@@ -78,8 +87,12 @@
     if (tag === "hr" && attributes["data-page-break"] === "true") result["data-page-break"] = "true";
     if (tag === "thead" && attributes["data-page-header-copy"] === "true") result["data-page-header-copy"] = "true";
     if (tag === "ol") {
-      const start = Number(attributes.start);
-      if (Number.isInteger(start) && start > 1 && start <= 100000) result.start = start;
+      const start = parseOrderedListOrdinal(attributes.start);
+      if (start !== null && start !== 1) result.start = start;
+    }
+    if (tag === "li") {
+      const value = parseOrderedListOrdinal(attributes.value);
+      if (value !== null) result.value = value;
     }
     if (pageFlowTags.has(tag) && typeof attributes["data-page-flow-id"] === "string" && /^[\da-f-]{1,80}$/i.test(attributes["data-page-flow-id"])) result["data-page-flow-id"] = attributes["data-page-flow-id"];
     if (paragraphTags.has(tag)) {
@@ -121,7 +134,7 @@
     const sourceTag = node.tagName.toLowerCase();
     const tag = sourceTag === "font" ? "span" : sourceTag;
     const attrs = {};
-    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-page-flow-id", "data-page-header-copy", "data-font-family", "data-font-size", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level", "data-revision-id", "data-revision-author", "data-revision-created-at"]) {
+    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "value", "data-page-break", "data-page-flow-id", "data-page-header-copy", "data-font-family", "data-font-size", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level", "data-revision-id", "data-revision-author", "data-revision-created-at"]) {
       const value = node.getAttribute(name);
       if (value !== null) attrs[name] = value;
     }
