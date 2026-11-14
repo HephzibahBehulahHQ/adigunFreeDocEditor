@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { JSDOM } = require("jsdom");
 
 global.Node = { TEXT_NODE: 3, ELEMENT_NODE: 1 };
 const source = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
@@ -14,6 +15,16 @@ assert.match(html, /id="image-properties-dialog"[\s\S]*?id="image-alt-text"[\s\S
 const start = source.indexOf("  function wordXmlText(");
 const end = source.indexOf("  async function exportDocx(", start);
 assert.ok(start >= 0 && end > start, "DOCX serializer functions are present");
+const ordinalStart = source.indexOf("  function parseOrderedListOrdinal(");
+const ordinalEnd = source.indexOf("\n  function wordXmlText(", ordinalStart);
+const sanitizerStart = source.indexOf("  function sanitizeDocxHtml(");
+const sanitizerEnd = source.indexOf("\n  async function openSaved(", sanitizerStart);
+assert.ok(ordinalStart >= 0 && ordinalEnd > ordinalStart && sanitizerStart >= 0 && sanitizerEnd > sanitizerStart, "list parser and DOCX HTML sanitizer are present");
+const importDom = new JSDOM("");
+const sanitizerSource = source.slice(ordinalStart, ordinalEnd) + "\n" + source.slice(sanitizerStart, sanitizerEnd) + "\nreturn sanitizeDocxHtml;";
+const sanitizeDocxHtml = new Function("DOMParser", "document", "Node", sanitizerSource)(importDom.window.DOMParser, importDom.window.document, importDom.window.Node);
+const sanitizedList = sanitizeDocxHtml('<ol start="0"><li value="0">Zero</li><li value="-2">Negative</li><li value="2147483648">Out of range</li></ol>');
+assert.equal(sanitizedList.html, '<ol start="0"><li value="0">Zero</li><li value="-2">Negative</li><li>Out of range</li></ol>', "DOCX import keeps supported signed list ordinals and strips out-of-range values");
 
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/S2sAAAAASUVORK5CYII=";
 const src = `data:image/png;base64,${png}`;
@@ -81,11 +92,19 @@ const exportElement = (tagName, children = [], attributes = {}) => {
 };
 const makeListItem = (value, nested = [], attributes = {}) => exportElement("LI", [{ nodeType: Node.TEXT_NODE, nodeValue: value }, ...nested], attributes);
 const nestedLists = exportElement("UL", [makeListItem("Outer bullet", [exportElement("UL", [makeListItem("Inner bullet", [exportElement("OL", [makeListItem("Nested number")], { start: 3 })])])])]);
-const firstOrderedList = exportElement("OL", [makeListItem("First sequence item"), makeListItem("Reset to eight", [], { value: 8 }), makeListItem("Continues at nine")]);
+const firstOrderedList = exportElement("OL", [
+  makeListItem("First sequence item"),
+  makeListItem("Reset to eight", [], { value: 8 }),
+  makeListItem("Continues at nine"),
+  makeListItem("Reset to zero", [], { value: 0 }),
+  makeListItem("Continues at one"),
+  makeListItem("Reset to negative two", [], { value: -2 }),
+  makeListItem("Continues at negative one"),
+]);
 const secondOrderedList = exportElement("OL", [makeListItem("Restarted sequence item")], { start: 5 });
 const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), paragraph(insertion), paragraph(deletion), heading(4, "Fourth-level heading"), heading(5, "Fifth-level heading"), heading(6, "Sixth-level heading"), nestedLists, firstOrderedList, secondOrderedList, verticalTable] }] };
 const page = { classList: { contains() { return false; } } };
-const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumbersEnabled", "pageHeaderText", "pageFooterText", `${source.slice(start, end)}; return { makeWordPackage, makeStoredZip, setPageNumbers(value) { pageNumbersEnabled = value; }, setHeaderFooter(header, footer) { pageHeaderText = header; pageFooterText = footer; } };`);
+const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumbersEnabled", "pageHeaderText", "pageFooterText", `${source.slice(ordinalStart, ordinalEnd)}\n${source.slice(start, end)}; return { makeWordPackage, makeStoredZip, setPageNumbers(value) { pageNumbersEnabled = value; }, setHeaderFooter(header, footer) { pageHeaderText = header; pageFooterText = footer; } };`);
 const { makeWordPackage, makeStoredZip, setPageNumbers, setHeaderFooter } = factory(Node, root, () => "Image export QA", atob, () => page, true, "Project & scope", "Confidential");
 const result = makeWordPackage(root);
 assert.deepEqual(result.unsupported, []);
@@ -101,19 +120,21 @@ for (const level of [1, 2, 3, 4, 5, 6]) {
   assert.match(style?.[1] || "", /<w:keepNext\/>/, `Heading ${level} stays with the paragraph that follows it`);
 }
 const listParagraphs = [...headingDocumentXml.matchAll(new RegExp('<w:numPr><w:ilvl w:val="(\\d+)"/><w:numId w:val="(\\d+)"/></w:numPr>', "g"))];
-assert.deepEqual(listParagraphs.map((match) => [match[1], match[2]]), [["0", "1"], ["1", "2"], ["2", "3"], ["0", "4"], ["0", "5"], ["0", "5"], ["0", "6"]], "nested list depth is preserved and separate ordered lists restart independently");
+assert.deepEqual(listParagraphs.map((match) => [match[1], match[2]]), [["0", "1"], ["1", "2"], ["2", "3"], ["0", "4"], ["0", "5"], ["0", "5"], ["0", "6"], ["0", "6"], ["0", "7"], ["0", "7"], ["0", "8"]], "nested list depth is preserved and ordered lists retain signed starts and resets");
 const numberingXml = result.files["word/numbering.xml"];
 for (const abstractNumId of [0, 1]) {
   const abstract = numberingXml.match(new RegExp(`<w:abstractNum w:abstractNumId="${abstractNumId}">([\\s\\S]*?)</w:abstractNum>`));
   assert.equal([...(abstract?.[1] || "").matchAll(new RegExp("<w:lvl\\b", "g"))].length, 9, "each numbering type declares nine levels");
 }
 assert.ok(numberingXml.includes('<w:lvl w:ilvl="2"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%3."/>'), "numbering definitions include the matching depth placeholder");
-for (const [numId, abstractNumId] of [[1, 0], [2, 0], [3, 1], [4, 1], [5, 1], [6, 1]]) {
+for (const [numId, abstractNumId] of [[1, 0], [2, 0], [3, 1], [4, 1], [5, 1], [6, 1], [7, 1], [8, 1]]) {
   assert.match(numberingXml, new RegExp(`<w:num w:numId="${numId}"><w:abstractNumId w:val="${abstractNumId}"/>`), `list numbering instance ${numId} uses the matching list type`);
 }
 assert.ok(numberingXml.includes('<w:num w:numId="5"><w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="8"/></w:lvlOverride></w:num>'), "list-item value resets are preserved in DOCX numbering overrides");
 assert.ok(numberingXml.includes('<w:num w:numId="3"><w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="2"><w:startOverride w:val="3"/></w:lvlOverride></w:num>'), "nested ordered-list starts override their own list level");
-assert.ok(numberingXml.includes('<w:num w:numId="6"><w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="5"/></w:lvlOverride></w:num>'), "subsequent ordered lists keep their own starts after a list-item value reset");
+assert.ok(numberingXml.includes('<w:num w:numId="6"><w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="0"/></w:lvlOverride></w:num>'), "zero list-item resets are preserved in DOCX numbering");
+assert.ok(numberingXml.includes('<w:num w:numId="7"><w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="-2"/></w:lvlOverride></w:num>'), "negative list-item resets are preserved in DOCX numbering");
+assert.ok(numberingXml.includes('<w:num w:numId="8"><w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="5"/></w:lvlOverride></w:num>'), "subsequent ordered lists keep their own starts after signed list-item resets");
 const zipBlob = makeStoredZip(result.files);
 
 zipBlob.arrayBuffer().then((arrayBuffer) => {

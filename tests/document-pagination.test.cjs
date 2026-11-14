@@ -6,7 +6,10 @@ const source = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
 const styles = fs.readFileSync(path.join(__dirname, "..", "styles.css"), "utf8");
 const start = source.indexOf("  function splitLongTextBlock(block, capacity, replaceBlock = true)");
 const end = source.indexOf("  function splitListBetweenItems(list, capacity)", start);
-assert.ok(start >= 0 && end > start);
+const ordinalStart = source.indexOf("  function parseOrderedListOrdinal(");
+const ordinalEnd = source.indexOf("\n  function wordXmlText(", ordinalStart);
+assert.ok(start >= 0 && end > start && ordinalStart >= 0 && ordinalEnd > ordinalStart);
+const ordinalParser = source.slice(ordinalStart, ordinalEnd);
 
 const inserted = [];
 const makeTextBlock = (text, tagName = "P", hasImage = false, measuredHeight = null) => {
@@ -41,7 +44,7 @@ const paragraphRange = (block, _nodes, first, last) => {
   };
 };
 const split = new Function("getComputedStyle", "paragraphTextNodes", "paragraphRange", "crypto",
-  source.slice(start, end) + "\nreturn splitLongTextBlock;")(
+  ordinalParser + "\n" + source.slice(start, end) + "\nreturn splitLongTextBlock;")(
   () => ({ marginTop: "0", marginBottom: "0", paddingTop: "0", paddingBottom: "0", borderTopWidth: "0", borderBottomWidth: "0" }),
   (root) => root.textNodes,
   paragraphRange,
@@ -101,7 +104,7 @@ const orderedList = {
   },
   replaceWith(...nodes) { listFragmentsInserted.push(...nodes); },
 };
-const splitList = new Function("getComputedStyle", "crypto", "splitLongTextBlock", source.slice(listStart, listEnd) + "\nreturn splitListBetweenItems;")(
+const splitList = new Function("getComputedStyle", "crypto", "splitLongTextBlock", ordinalParser + "\n" + source.slice(listStart, listEnd) + "\nreturn splitListBetweenItems;")(
   () => ({ marginTop: "0", marginBottom: "0", paddingTop: "0", paddingBottom: "0", borderTopWidth: "0", borderBottomWidth: "0" }),
   { randomUUID: () => "beef-1234" },
   split
