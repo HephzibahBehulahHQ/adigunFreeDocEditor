@@ -78,6 +78,7 @@
       if (Number.isInteger(start) && start > 1 && start <= 100000) result.start = start;
     }
     if (paragraphTags.has(tag)) {
+      if (tag === "p" && typeof attributes["data-page-flow-id"] === "string" && /^[\da-f-]{1,80}$/i.test(attributes["data-page-flow-id"])) result["data-page-flow-id"] = attributes["data-page-flow-id"];
       const indentLevel = Number(attributes["data-indent-level"]);
       if (Number.isInteger(indentLevel) && indentLevel >= 1 && indentLevel <= 4) result["data-indent-level"] = String(indentLevel);
       if (lineSpacingValues.has(String(attributes["data-line-spacing"]))) result["data-line-spacing"] = String(attributes["data-line-spacing"]);
@@ -116,7 +117,7 @@
     const sourceTag = node.tagName.toLowerCase();
     const tag = sourceTag === "font" ? "span" : sourceTag;
     const attrs = {};
-    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-font-family", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level", "data-revision-id", "data-revision-author", "data-revision-created-at"]) {
+    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "data-page-break", "data-page-flow-id", "data-font-family", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level", "data-revision-id", "data-revision-author", "data-revision-created-at"]) {
       const value = node.getAttribute(name);
       if (value !== null) attrs[name] = value;
     }
@@ -135,7 +136,17 @@
   }
 
   function fromDOM(root) {
-    return normalize({ type: format, version, content: [...root.childNodes].map(copyDomNode).flat().filter(Boolean) });
+    const content = [...root.childNodes].map(copyDomNode).flat().filter(Boolean);
+    const merged = [];
+    let previousFlowId = "";
+    for (const node of content) {
+      const flowId = node.type === "element" && node.tag === "p" ? node.attrs["data-page-flow-id"] || "" : "";
+      if (flowId && flowId === previousFlowId) merged[merged.length - 1].children.push(...node.children);
+      else merged.push(node);
+      previousFlowId = flowId;
+    }
+    for (const node of merged) if (node.type === "element") delete node.attrs["data-page-flow-id"];
+    return normalize({ type: format, version, content: merged });
   }
 
   function fromHTML(html) {
@@ -146,6 +157,7 @@
   function renderNode(input) {
     if (input.type === "text") return escapeHtml(input.text);
     const attributes = { ...input.attrs };
+    delete attributes["data-page-flow-id"];
     const styles = [];
     if (attributes.align) { styles.push(`text-align:${attributes.align}`); delete attributes.align; }
     if (paragraphTags.has(input.tag)) {

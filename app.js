@@ -349,10 +349,111 @@
     clearTimeout(editorPaginationTimer);
     editorPaginationTimer = setTimeout(paginateEditor, 120);
   }
+  function mergePageFlowFragments(nodes) {
+    const merged = [];
+    let previousFlowId = "";
+    let previousNode = null;
+    for (const node of nodes) {
+      const flowId = node.nodeType === Node.ELEMENT_NODE && node.tagName === "P" ? node.getAttribute("data-page-flow-id") || "" : "";
+      if (flowId && flowId === previousFlowId) {
+        while (node.firstChild) previousNode.append(node.firstChild);
+        node.remove();
+        continue;
+      }
+      merged.push(node);
+      previousNode = node;
+      previousFlowId = flowId;
+    }
+    for (const node of merged) node.removeAttribute?.("data-page-flow-id");
+    return merged;
+  }
+  function paragraphTextNodes(paragraph) {
+    const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let node;
+    while ((node = walker.nextNode())) nodes.push(node);
+    return nodes;
+  }
+  function paragraphRange(paragraph, textNodes, start, end) {
+    const pointAt = (offset, useNextAtBoundary) => {
+      let total = 0;
+      for (let index = 0; index < textNodes.length; index++) {
+        const node = textNodes[index];
+        const next = total + node.nodeValue.length;
+        if (offset < next || offset === next && (!useNextAtBoundary || index === textNodes.length - 1)) return { node, offset: offset - total };
+        total = next;
+      }
+      const last = textNodes[textNodes.length - 1];
+      return last ? { node: last, offset: last.nodeValue.length } : null;
+    };
+    const first = pointAt(start, true);
+    const last = pointAt(end, false);
+    if (!first || !last) return null;
+    const range = document.createRange();
+    range.setStart(first.node, first.offset);
+    range.setEnd(last.node, last.offset);
+    return range;
+  }
+  function splitLongParagraph(paragraph, capacity) {
+    if (paragraph.tagName !== "P" || paragraph.querySelector("img")) return [paragraph];
+    const textNodes = paragraphTextNodes(paragraph);
+    const text = textNodes.map((node) => node.nodeValue).join("");
+    if (!text.trim()) return [paragraph];
+    const style = getComputedStyle(paragraph);
+    const verticalOverhead = ["marginTop", "marginBottom", "paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"]
+      .reduce((sum, property) => sum + (parseFloat(style[property]) || 0), 0);
+    const contentCapacity = Math.max(1, capacity - verticalOverhead);
+    const wordEnds = [...text.matchAll(/\S+\s*/gu)].map((match) => match.index + match[0].length);
+    if (!wordEnds.length || wordEnds[wordEnds.length - 1] !== text.length) wordEnds.push(text.length);
+    const codePointEnds = [];
+    let codePointOffset = 0;
+    for (const character of text) { codePointOffset += character.length; codePointEnds.push(codePointOffset); }
+    const chunks = [];
+    let start = 0;
+    while (start < text.length) {
+      const fits = (end) => {
+        const range = paragraphRange(paragraph, textNodes, start, end);
+        if (!range) return false;
+        const rect = range.getBoundingClientRect();
+        return rect.height > 0 && rect.height <= contentCapacity + 1;
+      };
+      const largestFit = (boundaries) => {
+        let low = 0;
+        let high = boundaries.length - 1;
+        while (low <= high) {
+          const middle = (low + high) >> 1;
+          if (boundaries[middle] <= start) low = middle + 1;
+          else high = middle - 1;
+        }
+        high = boundaries.length - 1;
+        let best = -1;
+        while (low <= high) {
+          const middle = (low + high) >> 1;
+          if (fits(boundaries[middle])) { best = boundaries[middle]; low = middle + 1; }
+          else high = middle - 1;
+        }
+        return best;
+      };
+      let end = largestFit(wordEnds);
+      if (end < 0) end = largestFit(codePointEnds);
+      if (end < 0) return [paragraph];
+      const range = paragraphRange(paragraph, textNodes, start, end);
+      const fragment = paragraph.cloneNode(false);
+      fragment.append(range.cloneContents());
+      chunks.push(fragment);
+      start = end;
+    }
+    if (chunks.length < 2) return [paragraph];
+    const flowId = crypto.randomUUID();
+    for (const chunk of chunks) chunk.setAttribute("data-page-flow-id", flowId);
+    paragraph.replaceWith(...chunks);
+    return chunks;
+  }
   function paginateEditor() {
     if (editor.contentEditable !== "true" || $("#editor-card").classList.contains("landing")) return;
+    const savedSelection = captureEditorSelection();
     const existing = [...editor.children];
-    const nodes = existing.flatMap((child) => child.classList?.contains("document-sheet") ? [...child.childNodes] : [child]);
+    const nodes = mergePageFlowFragments(existing.flatMap((child) => child.classList?.contains("document-sheet") ? [...child.childNodes] : [child]));
     const minHeight = parseFloat(getComputedStyle(editor).getPropertyValue("--paper-min-height")) || editor.clientHeight || 900;
     const probe = existing.find((child) => child.classList?.contains("document-sheet"));
     const style = probe ? getComputedStyle(probe) : getComputedStyle(editor);
@@ -372,7 +473,22 @@
       const rectHeight = node.nodeType === Node.ELEMENT_NODE ? node.getBoundingClientRect().height : 0;
       const nodeStyle = node.nodeType === Node.ELEMENT_NODE ? getComputedStyle(node) : null;
       const blockHeight = rectHeight + (nodeStyle ? parseFloat(nodeStyle.marginTop || 0) + parseFloat(nodeStyle.marginBottom || 0) : 0);
-      if (!isBreak && page.length && used + blockHeight > capacity) flush();
+      if (node.tagName === "P" && blockHeight > capacity) {
+        if (page.length) flush();
+        const fragments = splitLongParagraph(node, capacity);
+        if (fragments.length > 1) {
+          fragments.forEach((fragment, index) => {
+            const fragmentStyle = getComputedStyle(fragment);
+            const fragmentHeight = fragment.getBoundingClientRect().height + parseFloat(fragmentStyle.marginTop || 0) + parseFloat(fragmentStyle.marginBottom || 0);
+            if (page.length && used + fragmentHeight > capacity) flush();
+            page.push(fragment);
+            used += fragmentHeight;
+            if (index < fragments.length - 1) flush();
+          });
+          continue;
+        }
+      }
+      if (page.length && used + blockHeight > capacity) flush();
       page.push(node);
       used += blockHeight;
     }
@@ -383,7 +499,6 @@
     const unchanged = oldSheets.length === pages.length && pages.every((items, index) =>
       items.length === oldSheets[index].childNodes.length && items.every((node, childIndex) => node === oldSheets[index].childNodes[childIndex]));
     if (unchanged) { renderPageNavigation(); return; }
-    const savedSelection = captureEditorSelection();
     $("#editor-card").classList.add("paper-layout");
     const fragment = document.createDocumentFragment();
     pages.forEach((items, index) => {
