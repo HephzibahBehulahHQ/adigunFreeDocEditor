@@ -18,7 +18,7 @@ const fixture = modelApi.normalize({
   version: 1,
   content: [
     element("p", { align: "center", "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }, [
-      element("span", { "data-font-family": "Georgia", "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" }, [
+      element("span", { "data-font-family": "Georgia", "data-font-size": "14pt", "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" }, [
         element("strong", {}, [text("Styled text")]),
       ]),
       text(" "),
@@ -76,6 +76,7 @@ assert.ok(editorDocument.eq(restoredDocument), "model nodes, marks, table sectio
 const roundTripHtml = modelApi.toHTML(normalizedRoundTrip);
 assert.match(roundTripHtml, /data-indent-level="2"/);
 assert.match(roundTripHtml, /data-font-family="Georgia"/);
+assert.match(roundTripHtml, /data-font-size="14pt"/);
 assert.match(roundTripHtml, /data-revision-created-at="1762992000000"/);
 assert.match(roundTripHtml, /rowspan="2"/);
 assert.match(roundTripHtml, /data-page-break="true"/);

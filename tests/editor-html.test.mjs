@@ -22,7 +22,7 @@ const fixture = modelApi.normalize({
   version: 1,
   content: [
     element("p", { align: "center", "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }, [
-      element("span", { "data-font-family": "Georgia", "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" }, [element("strong", {}, [text("Styled text")])]),
+      element("span", { "data-font-family": "Georgia", "data-font-size": "14pt", "data-text-color": "#C00000", "data-highlight-color": "#FFFF00" }, [element("strong", {}, [text("Styled text")])]),
       text(" "), element("a", { href: "https://example.com/" }, [text("link")]), text(" "),
       element("ins", { "data-revision-id": "rev-1", "data-revision-author": "Editor", "data-revision-created-at": "1762992000000" }, [text("inserted")]),
       text(" "), element("del", { "data-revision-id": "rev-2", "data-revision-author": "Editor", "data-revision-created-at": "1762992000001" }, [text("deleted")]),

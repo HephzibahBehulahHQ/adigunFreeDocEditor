@@ -162,7 +162,7 @@
   const toolsets = {
     home: [
       [{ label: "Undo", action: "undo", icon: "↶" }, { label: "Redo", action: "redo", icon: "↷" }],
-      [{ label: "Font family", select: "font", options: [["", "Font"], ...supportedFontFamilies.map((family) => [family, family])] }, { label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Title"], ["h2", "Heading 1"], ["h3", "Heading 2"]] }, { label: "Font size", select: "size", options: [["3", "11"], ["4", "14"], ["5", "18"], ["6", "24"]] }],
+      [{ label: "Font family", select: "font", options: [["", "Font"], ...supportedFontFamilies.map((family) => [family, family])] }, { label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Title"], ["h2", "Heading 1"], ["h3", "Heading 2"]] }, { label: "Font size", select: "size", options: [["11pt", "11"], ["14pt", "14"], ["18pt", "18"], ["24pt", "24"]] }],
       [{ label: "Text color", select: "text-color", options: [["", "Text color"], ...textColorOptions] }, { label: "Highlight color", select: "highlight-color", options: [["", "Highlight"], ...highlightColorOptions] }],
       [{ label: "Line spacing", select: "line-spacing", options: [["", "Default"], ["1", "Single"], ["1.15", "1.15"], ["1.5", "1.5"], ["2", "Double"]] }, { label: "Paragraph spacing after", select: "paragraph-spacing", options: [["", "Default"], ["0", "None"], ["6", "Compact"], ["12", "Relaxed"]] }],
       [{ label: "Bold", action: "bold", icon: "B", pressed: true }, { label: "Italic", action: "italic", icon: "I", pressed: true }, { label: "Underline", action: "underline", icon: "U", pressed: true }, { label: "Strikethrough", action: "strikeThrough", icon: "S̶ Strike", pressed: true }, { label: "Clear character formatting", action: "removeFormat", icon: "T× Clear" }],
@@ -2897,7 +2897,7 @@
     if (outdentButton) outdentButton.disabled = !indentLevels.some((level) => level > 0);
     if (indentButton) indentButton.disabled = !indentLevels.some((level) => level < 4);
     const fontSelect = ribbon.querySelector("[data-tool=size]");
-    const fontSize = document.queryCommandValue("fontSize");
+    const fontSize = liveEditor?.getAttributes("textStyle").fontSize || document.queryCommandValue("fontSize");
     if (fontSelect && [...fontSelect.options].some((option) => option.value === fontSize)) fontSelect.value = fontSize;
     for (const action of ["bold", "italic", "underline", "strikeThrough"]) {
       const button = ribbon.querySelector('.tool-button[data-action=' + action + ']');
@@ -3024,7 +3024,7 @@
       return;
     }
     const indentLevel = Math.max(0, Math.min(4, Math.round(Number(level) || 0)));
-    if (liveEditor && updateLiveParagraphAttributes(blocks, () => ({ indentLevel: indentLevel ? String(indentLevel) : null }))) {
+    if (typeof liveEditor !== "undefined" && liveEditor && updateLiveParagraphAttributes(blocks, () => ({ indentLevel: indentLevel ? String(indentLevel) : null }))) {
       paragraphRulerBlocks = blocks;
       paragraphRulerRange = range;
       liveEditor.view.focus();
@@ -3103,7 +3103,7 @@
       notify("Place the cursor in a paragraph or select paragraph text first.");
       return;
     }
-    if (liveEditor) {
+    if (typeof liveEditor !== "undefined" && liveEditor) {
       updateLiveParagraphAttributes(blocks, (block) => {
         const current = Number(block.getAttribute("data-indent-level")) || 0;
         const next = Math.max(0, Math.min(4, current + amount));
@@ -3142,7 +3142,7 @@
       notify("Place the cursor in a paragraph or select paragraph text first.");
       return;
     }
-    if (liveEditor) {
+    if (typeof liveEditor !== "undefined" && liveEditor) {
       const attribute = kind === "line" ? "lineSpacing" : "paragraphSpacing";
       updateLiveParagraphAttributes(blocks, () => ({ [attribute]: value === "" ? null : value }));
       updateRibbonSelection();
@@ -3190,6 +3190,7 @@
       case "insertText": return chain.insertContent(value).run();
       case "insertHTML": return chain.insertContent(value).run();
       case "fontName": return chain.setMark("textStyle", { fontFamily: value }).run();
+      case "fontSize": return ["11pt", "14pt", "18pt", "24pt"].includes(String(value)) ? chain.setMark("textStyle", { fontSize: String(value) }).run() : null;
       case "foreColor": return chain.setMark("textStyle", { textColor: value }).run();
       case "hiliteColor": return chain.setMark("textStyle", { highlightColor: value }).run();
       case "formatBlock": {
@@ -3701,7 +3702,8 @@
       const fontFamily = marks.fontFamily;
       const color = marks.textColor ? marks.textColor.slice(1) : "";
       const highlight = marks.highlightColor ? exportableHighlightColors.get(marks.highlightColor) : "";
-      const properties = [fontFamily && '<w:rFonts w:ascii="' + wordXmlText(fontFamily) + '" w:hAnsi="' + wordXmlText(fontFamily) + '"/>', color && '<w:color w:val="' + wordXmlText(color) + '"/>', highlight && '<w:highlight w:val="' + highlight + '"/>', marks.bold && "<w:b/>", marks.italic && "<w:i/>", marks.underline && '<w:u w:val="single"/>', marks.strike && "<w:strike/>"].filter(Boolean).join("");
+      const fontSize = [11, 14, 18, 24].includes(marks.fontSize) ? '<w:sz w:val="' + marks.fontSize * 2 + '"/>' : "";
+      const properties = [fontFamily && '<w:rFonts w:ascii="' + wordXmlText(fontFamily) + '" w:hAnsi="' + wordXmlText(fontFamily) + '"/>', fontSize, color && '<w:color w:val="' + wordXmlText(color) + '"/>', highlight && '<w:highlight w:val="' + highlight + '"/>', marks.bold && "<w:b/>", marks.italic && "<w:i/>", marks.underline && '<w:u w:val="single"/>', marks.strike && "<w:strike/>"].filter(Boolean).join("");
       const textTag = marks.revisionType === "deletion" ? "w:delText" : "w:t";
       return '<w:r>' + (properties ? "<w:rPr>" + properties + "</w:rPr>" : "") + "<" + textTag + preserve + ">" + wordXmlText(text) + "</" + textTag + "></w:r>";
     }
@@ -3782,6 +3784,8 @@
       const requestedFont = String(node.getAttribute("data-font-family") || node.getAttribute("face") || node.style?.fontFamily || "").split(",")[0].trim().replace(/^["\']|["\']$/g, "");
       const fontFamily = [...exportableFontFamilies].find((family) => family.toLowerCase() === requestedFont.toLowerCase());
       if (fontFamily) next.fontFamily = fontFamily;
+      const requestedSize = String(node.getAttribute("data-font-size") || node.style?.fontSize || "");
+      if (["11pt", "14pt", "18pt", "24pt"].includes(requestedSize)) next.fontSize = Number.parseInt(requestedSize, 10);
       const textColor = normalizeExportColor(node.getAttribute("data-text-color") || node.getAttribute("color") || node.style?.color, exportableTextColors);
       if (textColor) next.textColor = textColor;
       const requestedHighlight = normalizeExportColor(node.getAttribute("data-highlight-color") || node.style?.backgroundColor || node.style?.background, new Set(exportableHighlightColors.keys()));
