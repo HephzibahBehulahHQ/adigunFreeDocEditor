@@ -20,7 +20,7 @@ assert.match(mobileRules, /\.sidebar\.mobile-open \.nav-item\{[^}]*min-height:44
 assert.match(mobileRules, /\.product-name\{display:flex/);
 assert.match(mobileRules, /\.mobile-brand\{display:none\}/);
 assert.match(mobileRules, /\.workspace\.mode-no-document-title \.topbar\{height:0/);
-assert.match(css, /@media\(min-width:901px\)\{\.workspace\.mode-no-document-title \.topbar\{display:none\}\}/);
+assert.match(css, /@media\(min-width:1051px\)\{\.workspace\.mode-no-document-title \.topbar\{display:none\}\}/);
 assert.match(mobileRules, /\.workspace\.mode-no-document-title \.topbar-actions\{position:fixed/);
 assert.match(mobileRules, /safe-area-inset-top/);
 assert.match(mobileRules, /safe-area-inset-right/);

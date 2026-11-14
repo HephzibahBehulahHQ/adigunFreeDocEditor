@@ -292,7 +292,7 @@
 @media(max-width:1050px){.editor-layout.has-outline{grid-template-columns:minmax(0,1fr)}.document-outline.visible:not(.mobile-open){display:none}.document-outline.visible.mobile-open{display:block;position:static;grid-column:1}.outline-toggle:not([hidden]){display:inline-flex}}
 
 button:disabled{cursor:not-allowed;opacity:.48}
-@media(min-width:901px){.workspace.mode-no-document-title .topbar{display:none}}
+@media(min-width:1051px){.workspace.mode-no-document-title .topbar{display:none}}
 
 .settings-dialog{max-height:calc(100vh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 24px)}
 @supports(height:100dvh){.settings-dialog{max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 24px)}}
@@ -344,3 +344,5 @@ button:disabled{cursor:not-allowed;opacity:.48}
 @media(max-width:700px){.stage-actions .text-button{min-height:44px}}
 
 @media(max-width:700px){.ribbon-tabs{height:44px}}
+
+@media(min-width:701px) and (max-width:1050px){.workspace.mode-no-document-title .topbar{height:0;padding:0;border:0;overflow:visible}.workspace.mode-no-document-title .topbar-actions{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));z-index:4}.workspace.mode-no-document-title .mobile-menu-button{color:#fff;width:44px;height:44px}}
