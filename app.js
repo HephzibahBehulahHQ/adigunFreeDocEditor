@@ -1102,7 +1102,7 @@
   function showReviewPanel(open = true) {
     const panel = $("#review-comments");
     if (!panel) return;
-    if (open && window.matchMedia("(max-width: 900px)").matches) toggleAssistant(false);
+    if (open && window.matchMedia("(max-width: 1050px)").matches) toggleAssistant(false);
     panel.hidden = !open;
     $("#editor-layout").classList.toggle("has-review", open);
     if (open) {
@@ -1118,7 +1118,7 @@
     panel.classList.toggle("mobile-open", open);
     if (open) {
       showReviewPanel(false);
-      if (window.matchMedia("(max-width: 900px)").matches) toggleAssistant(false);
+      if (window.matchMedia("(max-width: 1050px)").matches) toggleAssistant(false);
     }
     $("#toggle-outline").setAttribute("aria-expanded", String(open));
   }
@@ -3968,7 +3968,7 @@
 
   function toggleAssistant(open = assistant.classList.contains("hidden"), userInitiated = false) {
     if (userInitiated) assistantManuallyControlled = true;
-    if (open && window.matchMedia("(max-width: 900px)").matches) {
+    if (open && window.matchMedia("(max-width: 1050px)").matches) {
       showReviewPanel(false);
       $("#document-outline").classList.remove("mobile-open");
       $("#toggle-outline").setAttribute("aria-expanded", "false");
@@ -4028,7 +4028,7 @@
   });
 
   function useAssistantFind() {
-    if (window.matchMedia("(max-width: 900px)").matches) toggleAssistant(false);
+    if (window.matchMedia("(max-width: 1050px)").matches) toggleAssistant(false);
     openFindDialog();
   }
 
@@ -4582,7 +4582,7 @@
   document.addEventListener("selectionchange", updateRibbonSelection);
   for (const event of ["click", "keyup", "mouseup", "input", "focus"]) editor.addEventListener(event, updateRibbonSelection);
   window.addEventListener("resize", () => {
-    if (window.matchMedia("(max-width: 900px)").matches && (!$("#review-comments").hidden || $("#document-outline").classList.contains("mobile-open"))) toggleAssistant(false);
+    if (window.matchMedia("(max-width: 1050px)").matches && (!$("#review-comments").hidden || $("#document-outline").classList.contains("mobile-open"))) toggleAssistant(false);
     scheduleEditorPagination();
   }, { passive: true });
   renderRibbon(); setupAssistantDrag(); countWords();

@@ -39,7 +39,7 @@ let reviewOpened = false;
 let ribbonRenders = 0;
 const script = `let activeTab = "home";\n${source.slice(start, end)}\nreturn { useAssistantFind, useAssistantReview, getActiveTab: () => activeTab };`;
 const api = new Function("window", "$", "assistant", "appShell", "assistantResizeHandle", "editor", "activePdfFile", "openFindDialog", "renderRibbon", "showReviewPanel", "notify", script)(
-  { matchMedia: (query) => ({ matches: query === "(max-width: 900px)" }), addEventListener() {} },
+  { innerWidth: 1000, matchMedia(query) { const range = query.match(/(min|max)-width: ?([0-9]+)px/); const threshold = Number(range?.[2]); return { matches: range?.[1] === "min" ? this.innerWidth >= threshold : this.innerWidth <= threshold }; }, addEventListener() {} },
   (selector) => selector === "#assist-button" ? assistButton : selector === "#assistant-dock-resize" ? assistantResizeHandle : appShell,
   assistant,
   appShell,
