@@ -25,8 +25,9 @@ assert.match(tablet, /\.mobile-menu-button\{display:grid\}/);
 assert.match(tablet, /\.sidebar:not\(\.mobile-open\) \.nav-item\{display:none!important\}/);
 assert.match(tablet, /\.sidebar\.mobile-open \.nav-item\{display:flex!important/);
 assert.match(tablet, /\.ribbon-tabs\{[^}]*overflow-x:auto/);
-assert.match(tablet, /\.ribbon-tools\{height:52px/);
-assert.match(tablet, /\.tool-button\{height:28px/);
+assert.match(tablet, /\.ribbon-tools\{height:58px/);
+assert.match(tablet, /\.tool-button\{height:36px;min-width:36px/);
+assert.match(tablet, /\.tool-select\{height:36px/);
 
 const braceDelta = [...css].reduce((count, character) => count + (character === "{" ? 1 : character === "}" ? -1 : 0), 0);
 assert.equal(braceDelta, 0, "stylesheet braces remain balanced");
