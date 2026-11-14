@@ -43,9 +43,15 @@ window.indexedDB = {
   },
 };
 
-for (const file of ["document-model.js", "editor-runtime.js", "app.js"]) {
+for (const file of ["document-model.js", "editor-runtime.js"]) {
   window.eval(fs.readFileSync(path.join(root, file), "utf8"));
 }
+const createLiveEditor = window.AdigunEditorRuntime.createLiveEditor;
+window.AdigunEditorRuntime.createLiveEditor = (options) => {
+  window.__testEditor = createLiveEditor(options);
+  return window.__testEditor;
+};
+window.eval(fs.readFileSync(path.join(root, "app.js"), "utf8"));
 
 try {
   await new Promise((resolve) => setTimeout(resolve, 10));
@@ -58,6 +64,11 @@ try {
   assert.equal(liveRoot.contentEditable, "true", "the ProseMirror root owns document editing");
   assert.equal(host.contentEditable, "false", "the persistent document host is not an editable ancestor");
   assert.equal(liveRoot.getAttribute("role"), "textbox", "the live editing root keeps the accessible textbox role");
+
+  window.__testEditor.commands.setContent("<p>Live text</p>");
+  window.__testEditor.commands.setTextSelection({ from: 1, to: 10 });
+  window.document.querySelector('#ribbon-tools [data-action="bold"]').click();
+  assert.match(window.__testEditor.getHTML(), /<strong>Live text<\/strong>/, "the Home ribbon applies formatting through a live editor transaction");
 
   window.document.querySelector('[data-view="recent"]').click();
   await new Promise((resolve) => setTimeout(resolve, 20));
