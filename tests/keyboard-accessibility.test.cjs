@@ -65,6 +65,12 @@ helpDialog.open = false;
 openHelp();
 assert.equal(helpOpenCount, 2);
 
+assert.match(html, /id="ribbon-tab-references"[^>]*data-tab="references"[^>]*>References<\/button>/);
+assert.match(app, /references: \[\s*\[\{ label: "Document outline", action: "outline"/);
+assert.match(app, /case "outline": \$\("#toggle-outline"\)\.click\(\); break;/);
+assert.match(app, /case "quick-overview": toggleAssistant\(true\); buildOverview\(\); break;/);
+assert.match(css, /@media\(max-width:700px\)\{\.ribbon-tabs\{justify-content:flex-start;overflow-x:auto;scrollbar-width:thin\}/);
+
 function luminance(hex) {
   const channels = hex.slice(1).match(/.{2}/g).map((channel) => parseInt(channel, 16) / 255);
   const linear = channels.map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
