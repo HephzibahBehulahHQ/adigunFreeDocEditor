@@ -181,6 +181,9 @@
     layout: [
       [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"], ["custom", "Custom"]] }, { label: "Custom margins", action: "custom-margins", icon: "↔ Custom margins" }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }, { label: "Header & footer", action: "page-header-footer", icon: "↕ Header / footer" }, { label: "Page numbers", action: "page-numbers", icon: "＃ Pages" }],
     ],
+    references: [
+      [{ label: "Document outline", action: "outline", icon: "☷ Outline" }, { label: "Quick overview", action: "quick-overview", icon: "✧ Quick overview" }],
+    ],
     review: [
       [{ label: "Track changes", action: "track-changes", icon: "▤ Track changes" }, { label: "Add comment", action: "add-comment", icon: "▧ Comment" }, { label: "Review comments", action: "show-comments", icon: "☷ Comments" }],
       [{ label: "Spellcheck", action: "spellcheck", icon: "✓ Spellcheck", pressed: true }, { label: "Word count", action: "wordcount", icon: "# Word count" }],
@@ -3449,6 +3452,8 @@
   function runTool(action, button) {
     switch (action) {
       case "page-numbers": setPageNumbers(!pageNumbersEnabled, button); break;
+      case "outline": $("#toggle-outline").click(); break;
+      case "quick-overview": toggleAssistant(true); buildOverview(); break;
       case "track-changes":
         trackChangesEnabled = !trackChangesEnabled;
         button.setAttribute("aria-pressed", String(trackChangesEnabled));
