@@ -3024,6 +3024,16 @@
       return;
     }
     const indentLevel = Math.max(0, Math.min(4, Math.round(Number(level) || 0)));
+    if (liveEditor && updateLiveParagraphAttributes(blocks, () => ({ indentLevel: indentLevel ? String(indentLevel) : null }))) {
+      paragraphRulerBlocks = blocks;
+      paragraphRulerRange = range;
+      liveEditor.view.focus();
+      updateParagraphRuler();
+      updateRibbonSelection();
+      countWords();
+      saveDocument();
+      return;
+    }
     for (const block of blocks) {
       if (indentLevel) {
         block.setAttribute("data-indent-level", String(indentLevel));
@@ -3065,6 +3075,22 @@
     ruler.dataset.mixed = String(mixed);
   }
 
+  function updateLiveParagraphAttributes(blocks, attributesForBlock) {
+    if (!liveEditor) return false;
+    const attributesByElement = new Map(blocks.map((block) => [block, attributesForBlock(block)]));
+    const transaction = liveEditor.state.tr;
+    let updated = 0;
+    liveEditor.state.doc.descendants((node, position) => {
+      const attributes = attributesByElement.get(liveEditor.view.nodeDOM(position));
+      if (!attributes || !node.isBlock) return;
+      transaction.setNodeMarkup(position, undefined, { ...node.attrs, ...attributes });
+      updated += 1;
+    });
+    if (!updated) return false;
+    liveEditor.view.dispatch(transaction);
+    return true;
+  }
+
   function applyParagraphIndent(amount) {
     const selection = window.getSelection();
     if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) {
@@ -3075,6 +3101,17 @@
     const blocks = selectedParagraphBlocks();
     if (!blocks.length) {
       notify("Place the cursor in a paragraph or select paragraph text first.");
+      return;
+    }
+    if (liveEditor) {
+      updateLiveParagraphAttributes(blocks, (block) => {
+        const current = Number(block.getAttribute("data-indent-level")) || 0;
+        const next = Math.max(0, Math.min(4, current + amount));
+        return { indentLevel: next ? String(next) : null };
+      });
+      updateRibbonSelection();
+      countWords();
+      saveDocument();
       return;
     }
     for (const block of blocks) {
@@ -3103,6 +3140,14 @@
     const blocks = [...editor.querySelectorAll(selector)].filter((block) => range.collapsed ? block.contains(focusNode) : range.intersectsNode(block));
     if (!blocks.length) {
       notify("Place the cursor in a paragraph or select paragraph text first.");
+      return;
+    }
+    if (liveEditor) {
+      const attribute = kind === "line" ? "lineSpacing" : "paragraphSpacing";
+      updateLiveParagraphAttributes(blocks, () => ({ [attribute]: value === "" ? null : value }));
+      updateRibbonSelection();
+      countWords();
+      saveDocument();
       return;
     }
     for (const block of blocks) {

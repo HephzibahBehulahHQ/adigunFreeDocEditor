@@ -50,17 +50,26 @@ const ModelAttributes = Extension.create({
       indentLevel: {
         default: null,
         parseHTML: (element) => element.getAttribute("data-indent-level"),
-        renderHTML: (attrs) => attrs.indentLevel ? { "data-indent-level": String(attrs.indentLevel) } : {},
+        renderHTML: (attrs) => {
+          const level = Number(attrs.indentLevel);
+          return Number.isInteger(level) && level >= 1 && level <= 4
+            ? { "data-indent-level": String(level), style: `margin-left:${level * 36}pt` }
+            : {};
+        },
       },
       lineSpacing: {
         default: null,
         parseHTML: (element) => element.getAttribute("data-line-spacing"),
-        renderHTML: (attrs) => attrs.lineSpacing ? { "data-line-spacing": String(attrs.lineSpacing) } : {},
+        renderHTML: (attrs) => ["1", "1.15", "1.5", "2"].includes(String(attrs.lineSpacing))
+          ? { "data-line-spacing": String(attrs.lineSpacing), style: `line-height:${attrs.lineSpacing}` }
+          : {},
       },
       paragraphSpacing: {
         default: null,
         parseHTML: (element) => element.getAttribute("data-paragraph-spacing"),
-        renderHTML: (attrs) => attrs.paragraphSpacing ? { "data-paragraph-spacing": String(attrs.paragraphSpacing) } : {},
+        renderHTML: (attrs) => ["0", "6", "12"].includes(String(attrs.paragraphSpacing))
+          ? { "data-paragraph-spacing": String(attrs.paragraphSpacing), style: `margin-bottom:${attrs.paragraphSpacing}pt` }
+          : {},
       },
     };
     return [
