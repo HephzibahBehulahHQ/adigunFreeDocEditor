@@ -18,15 +18,17 @@ const makeTextBlock = (text, tagName = "P", hasImage = false, measuredHeight = n
     querySelector: () => hasImage ? {} : null,
     getAttribute(name) { return this.attributes[name] ?? null; },
     setAttribute(name, value) { this.attributes[name] = value; },
-    cloneNode: (deep) => ({
+    cloneNode(deep) {
+      return {
       tagName,
       textContent: deep ? text : "",
-      attributes: {},
+      attributes: { ...this.attributes },
       getAttribute(name) { return this.attributes[name] ?? null; },
       append(fragment) { this.textContent += fragment.textContent; },
       getBoundingClientRect() { return { height: Math.max(16, Math.ceil(this.textContent.length / 24) * 16) }; },
       setAttribute(name, value) { this.attributes[name] = value; },
-    }),
+      };
+    },
     replaceWith(...nodes) { inserted.push(...nodes); },
   };
   return block;
@@ -168,6 +170,7 @@ const splitTableRow = new Function("splitLongTextBlock", "crypto", source.slice(
   { randomUUID: () => "a22e-1234" }
 );
 const longCell = makeTextBlock(text, "TD", false, 100);
+longCell.setAttribute("colspan", "2");
 const shortCell = makeTextBlock("Label", "TD", false, 20);
 const tableRow = {
   tagName: "TR", children: [longCell, shortCell],
@@ -180,6 +183,12 @@ assert.equal(rowFragments.map((fragment) => fragment.children[0].textContent).jo
 assert.equal(rowFragments[0].children[1].textNodes?.map((node) => node.nodeValue).join("") ?? rowFragments[0].children[1].textContent, "Label", "the first fragment retains short neighboring cell content");
 assert.ok(rowFragments.slice(1).every((fragment) => !fragment.children[1].textContent), "short neighboring cells are blank on continuation fragments");
 assert.ok(rowFragments.every((fragment) => fragment.attributes["data-page-flow-id"] === "a22e-1234"), "row fragments retain a shared serialization identity");
+assert.ok(rowFragments.every((fragment) => fragment.children[0].attributes.colspan === "2"), "horizontal merged cells keep their column span across row fragments");
+const verticallyMergedCell = makeTextBlock(text, "TD", false, 100);
+verticallyMergedCell.setAttribute("rowspan", "2");
+const verticallyMergedRow = { tagName: "TR", children: [verticallyMergedCell] };
+assert.deepEqual(splitTableRow(verticallyMergedRow, 50), [verticallyMergedRow], "vertical merges remain intact because they span adjacent table rows");
+assert.equal(splitTableRow({ tagName: "TR", children: [makeTextBlock(text, "TD", true, 100)] }, 50).length, 1, "rows with nested images, lists, or tables remain intact");
 assert.match(source.slice(tableStart, tableEnd), /splitTableRowBetweenContent\(entry\.row, bodyCapacity\)/, "table pagination splits rows that exceed sheet capacity");
 const makeTableRow = (height, text) => ({
   tagName: "TR", text, getBoundingClientRect: () => ({ height }),
