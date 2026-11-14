@@ -68,6 +68,11 @@ const flowFragments = element("div", {}, [
 const joinedFlow = modelApi.toHTML(modelApi.fromDOM(flowFragments));
 assert.equal(joinedFlow, "<p>A paragraph split <strong>across pages</strong></p>", "visual page fragments persist and export as the original paragraph");
 assert.doesNotMatch(joinedFlow, /data-page-flow-id/);
+const splitOrderedList = element("div", {}, [
+  element("div", {}, [element("ol", { start: 3, "data-page-flow-id": "b33f-123" }, [element("li", {}, [text("First")]), element("li", {}, [text("Second")])])]),
+  element("div", {}, [element("ol", { start: 5, "data-page-flow-id": "b33f-123" }, [element("li", {}, [text("Third")])])]),
+]);
+assert.equal(modelApi.toHTML(modelApi.fromDOM(splitOrderedList)), '<ol start="3"><li>First</li><li>Second</li><li>Third</li></ol>', "visual ordered-list pages save and export as one correctly numbered list");
 assert.match(html, /unsafe link/);
 assert.doesNotMatch(html, /javascript:|<script|https:\/\/invalid\.example/);
 assert.match(html, /<img src="data:image\/png;base64,aGVsbG8=" alt="Diagram">/);
