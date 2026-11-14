@@ -37,6 +37,9 @@ assert.match(mobileRules, /\.adigun-window\.minimized\{top:auto;bottom:calc\(18p
 assert.match(mobileRules, /\.workspace\.mode-no-document-title \.mobile-menu-button\{color:#fff\}/);
 assert.match(mobileRules, /@media\(max-width:420px\)\{[\s\S]*?\.document-title\{width:min\(110px,28vw\)/);
 assert.match(mobileRules, /\.icon-button\{width:26px\}/);
+assert.match(mobileRules, /\.ribbon-tools\{height:62px\}/, "mobile ribbon has room for full-size controls");
+assert.match(mobileRules, /\.tool-button\{min-width:44px\}/, "mobile ribbon buttons meet the touch target width");
+assert.match(mobileRules, /\.tool-button,\.tool-select\{height:44px\}/, "mobile ribbon controls meet the touch target height");
 
 const braceDelta = [...css].reduce((count, character) => count + (character === "{" ? 1 : character === "}" ? -1 : 0), 0);
 assert.equal(braceDelta, 0, "stylesheet braces remain balanced");
