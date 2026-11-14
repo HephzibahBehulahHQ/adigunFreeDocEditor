@@ -21,6 +21,7 @@
   let liveEditor;
   let editorResizeObserver;
   let database;
+  let storageAvailability;
   let activeId = crypto.randomUUID();
   let lastSavedFor = activeId;
   let lastSavedAt = null;
@@ -189,6 +190,23 @@
       [{ label: "Find and replace", action: "find", icon: "⌕ Find & replace" }, { label: "Toggle Adigun", action: "assistant", icon: "✧ Adigun" }],
     ],
   };
+
+  function setStorageAvailability(available) {
+    storageAvailability = available;
+    const status = $("#local-storage-status");
+    const label = $("#local-storage-label");
+    const message = available ? "Saved on this device" : "Local saving unavailable";
+    label.textContent = message;
+    status.classList.toggle("checking", false);
+    status.classList.toggle("available", available);
+    status.classList.toggle("unavailable", !available);
+    status.setAttribute("aria-label", message);
+    if (activeWorkspaceMode === "landing") {
+      $("#file-kind").textContent = available
+        ? "Private by default · saved in this browser"
+        : "Local saving unavailable · export documents to keep changes";
+    }
+  }
 
   function openDatabase() {
     return new Promise((resolve, reject) => {
@@ -1703,7 +1721,11 @@
     setWorkspaceMode("landing");
     setTitle("Workspace");
     $("#stage-title").textContent = "Your workspace";
-    $("#file-kind").textContent = "Private by default · saved in this browser";
+    $("#file-kind").textContent = storageAvailability === true
+      ? "Private by default · saved in this browser"
+      : storageAvailability === false
+        ? "Local saving unavailable · export documents to keep changes"
+        : "Checking local storage…";
     $("#page-count").textContent = "No document open";
     $("#word-count").textContent = "Ready to write";
     $("#editor-card").classList.remove("pdf-preview");
@@ -4750,7 +4772,7 @@
   }, { passive: true });
   renderRibbon(); setupAssistantDrag(); countWords();
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
-  openDatabase().then(() => { setSaveStatus("Saved"); return restoreOpenDocumentTabs(); }).catch(() => { setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
+  openDatabase().then(() => { setStorageAvailability(true); setSaveStatus("Saved"); return restoreOpenDocumentTabs(); }).catch(() => { setStorageAvailability(false); setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
 })();
 
 
