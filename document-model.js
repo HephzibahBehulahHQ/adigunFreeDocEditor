@@ -8,6 +8,7 @@
   ]);
   const voidTags = new Set(["br", "hr", "img"]);
   const paragraphTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "th", "td"]);
+  const pageFlowTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol"]);
   const lineSpacingValues = new Set(["1", "1.15", "1.5", "2"]);
   const paragraphSpacingValues = new Set(["0", "6", "12"]);
   const fontFamilies = new Set(["Arial", "Calibri", "Cambria", "Courier New", "Georgia", "Tahoma", "Times New Roman", "Verdana"]);
@@ -77,8 +78,8 @@
       const start = Number(attributes.start);
       if (Number.isInteger(start) && start > 1 && start <= 100000) result.start = start;
     }
+    if (pageFlowTags.has(tag) && typeof attributes["data-page-flow-id"] === "string" && /^[\da-f-]{1,80}$/i.test(attributes["data-page-flow-id"])) result["data-page-flow-id"] = attributes["data-page-flow-id"];
     if (paragraphTags.has(tag)) {
-      if (tag === "p" && typeof attributes["data-page-flow-id"] === "string" && /^[\da-f-]{1,80}$/i.test(attributes["data-page-flow-id"])) result["data-page-flow-id"] = attributes["data-page-flow-id"];
       const indentLevel = Number(attributes["data-indent-level"]);
       if (Number.isInteger(indentLevel) && indentLevel >= 1 && indentLevel <= 4) result["data-indent-level"] = String(indentLevel);
       if (lineSpacingValues.has(String(attributes["data-line-spacing"]))) result["data-line-spacing"] = String(attributes["data-line-spacing"]);
@@ -140,7 +141,7 @@
     const merged = [];
     let previousFlowId = "";
     for (const node of content) {
-      const flowId = node.type === "element" && node.tag === "p" ? node.attrs["data-page-flow-id"] || "" : "";
+      const flowId = node.type === "element" && pageFlowTags.has(node.tag) ? node.attrs["data-page-flow-id"] || "" : "";
       if (flowId && flowId === previousFlowId) merged[merged.length - 1].children.push(...node.children);
       else merged.push(node);
       previousFlowId = flowId;
