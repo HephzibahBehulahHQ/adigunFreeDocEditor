@@ -310,7 +310,39 @@
       list.append(button);
     });
     $("#break-navigation-empty").hidden = sheets.length > 0;
+    updateCurrentPageNavigation();
   }
+  function updateCurrentPageNavigation() {
+    const sheets = [...editor.querySelectorAll(".document-sheet")];
+    if (!sheets.length) return;
+    const viewportCenter = window.innerHeight / 2;
+    let currentIndex = 0;
+    let closestDistance = Infinity;
+    sheets.forEach((sheet, index) => {
+      const rect = sheet.getBoundingClientRect();
+      const distance = Math.abs((rect.top + rect.bottom) / 2 - viewportCenter);
+      if (distance < closestDistance) { closestDistance = distance; currentIndex = index; }
+    });
+    $("#break-navigation-list").querySelectorAll("[data-page-index]").forEach((button, index) => {
+      if (index === currentIndex) {
+        button.classList.add("active");
+        button.setAttribute("aria-current", "page");
+      } else {
+        button.classList.remove("active");
+        button.removeAttribute("aria-current");
+      }
+    });
+  }
+  let pageNavigationFrame = 0;
+  function scheduleCurrentPageNavigation() {
+    if (pageNavigationFrame) return;
+    pageNavigationFrame = window.requestAnimationFrame(() => {
+      pageNavigationFrame = 0;
+      updateCurrentPageNavigation();
+    });
+  }
+  window.addEventListener("scroll", scheduleCurrentPageNavigation, { passive: true });
+  window.addEventListener("resize", scheduleCurrentPageNavigation);
   function scheduleEditorPagination() {
     clearTimeout(editorPaginationTimer);
     editorPaginationTimer = setTimeout(paginateEditor, 120);
@@ -3776,6 +3808,7 @@
     selection?.removeAllRanges();
     selection?.addRange(range);
     sheet.scrollIntoView({ block: "center", behavior: "auto" });
+    scheduleCurrentPageNavigation();
   });
   $("#outline-list").addEventListener("click", (event) => {
     const button = event.target.closest("[data-outline-index]");
