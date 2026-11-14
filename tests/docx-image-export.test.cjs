@@ -80,7 +80,7 @@ const exportElement = (tagName, children = [], attributes = {}) => {
   return element;
 };
 const makeListItem = (value, nested = []) => exportElement("LI", [{ nodeType: Node.TEXT_NODE, nodeValue: value }, ...nested]);
-const nestedLists = exportElement("UL", [makeListItem("Outer bullet", [exportElement("UL", [makeListItem("Inner bullet", [exportElement("OL", [makeListItem("Nested number")])])])])]);
+const nestedLists = exportElement("UL", [makeListItem("Outer bullet", [exportElement("UL", [makeListItem("Inner bullet", [exportElement("OL", [makeListItem("Nested number")], { start: 3 })])])])]);
 const firstOrderedList = exportElement("OL", [makeListItem("First sequence item"), makeListItem("Second sequence item")]);
 const secondOrderedList = exportElement("OL", [makeListItem("Restarted sequence item")], { start: 5 });
 const root = { children: [{ tagName: "DIV", children: [paragraph(image()), pageBreak, paragraph(image()), paragraph(fontSpan, { "data-indent-level": "2", "data-line-spacing": "1.5", "data-paragraph-spacing": "12" }), paragraph(insertion), paragraph(deletion), heading(4, "Fourth-level heading"), heading(5, "Fifth-level heading"), heading(6, "Sixth-level heading"), nestedLists, firstOrderedList, secondOrderedList, verticalTable] }] };
@@ -112,6 +112,7 @@ for (const [numId, abstractNumId] of [[1, 0], [2, 0], [3, 1], [4, 1], [5, 1]]) {
   assert.match(numberingXml, new RegExp(`<w:num w:numId="${numId}"><w:abstractNumId w:val="${abstractNumId}"/>`), `list numbering instance ${numId} uses the matching list type`);
 }
 assert.ok(numberingXml.includes('<w:num w:numId="5"><w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="5"/></w:lvlOverride></w:num>'), "ordered-list start values are preserved in DOCX numbering overrides");
+assert.ok(numberingXml.includes('<w:num w:numId="3"><w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="2"><w:startOverride w:val="3"/></w:lvlOverride></w:num>'), "nested ordered-list starts override their own list level");
 const zipBlob = makeStoredZip(result.files);
 
 zipBlob.arrayBuffer().then((arrayBuffer) => {

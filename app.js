@@ -3856,7 +3856,7 @@
     const body = [];
     const listNumberingInstances = [];
     const listNumberingIds = new WeakMap();
-    function listNumberingId(list) {
+    function listNumberingId(list, level = 0) {
       let id = listNumberingIds.get(list);
       if (id) return id;
       id = listNumberingInstances.length + 1;
@@ -3865,7 +3865,7 @@
       const rawStart = list.getAttribute?.("start");
       const requestedStart = rawStart === null || rawStart === "" ? 1 : Number(rawStart);
       const start = isOrdered && Number.isSafeInteger(requestedStart) && requestedStart > 0 ? requestedStart : 1;
-      listNumberingInstances.push({ id, abstractNumId: isOrdered ? 1 : 0, start });
+      listNumberingInstances.push({ id, abstractNumId: isOrdered ? 1 : 0, start, level });
       return id;
     }
     const letterPaper = exportLayout.paper === "letter";
@@ -3986,14 +3986,14 @@
     function walkBlocks(node, listKind = "", listLevel = 0, output = body, listNumId = 0) {
       for (const child of [...node.children]) {
         const tag = child.tagName.toLowerCase();
-        if (tag === "ul" || tag === "ol") { walkBlocks(child, tag, listLevel, output, listNumberingId(child)); continue; }
+        if (tag === "ul" || tag === "ol") { walkBlocks(child, tag, listLevel, output, listNumberingId(child, listLevel)); continue; }
         if (tag === "li") {
           const inlineChildren = [...child.children].filter((item) => ["ul", "ol"].includes(item.tagName.toLowerCase()));
           if (listLevel > 8) unsupported.add("list nesting deeper than nine levels");
           const copy = child.cloneNode(true);
           for (const nested of [...copy.children]) if (["ul", "ol"].includes(nested.tagName.toLowerCase())) nested.remove();
           addParagraph(copy, listKind || "ul", listLevel, output, listNumId);
-          for (const nested of inlineChildren) walkBlocks(nested, nested.tagName.toLowerCase(), listLevel + 1, output, listNumberingId(nested));
+          for (const nested of inlineChildren) walkBlocks(nested, nested.tagName.toLowerCase(), listLevel + 1, output, listNumberingId(nested, listLevel + 1));
           continue;
         }
         if (["p", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"].includes(tag)) {
@@ -4064,7 +4064,7 @@
     const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="20"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="18"/></w:rPr></w:style></w:styles>';
     const bulletGlyphs = ["•", "○", "▪"];
     const numberingLevels = (format) => Array.from({ length: 9 }, (_, level) => `<w:lvl w:ilvl="${level}"><w:start w:val="1"/><w:numFmt w:val="${format}"/><w:lvlText w:val="${format === "bullet" ? bulletGlyphs[level % bulletGlyphs.length] : `%${level + 1}.`}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${(level + 1) * 720}" w:hanging="360"/></w:pPr></w:lvl>`).join("");
-    const listNumberingXml = listNumberingInstances.map(({ id, abstractNumId, start }) => `<w:num w:numId="${id}"><w:abstractNumId w:val="${abstractNumId}"/>${start > 1 ? `<w:lvlOverride w:ilvl="0"><w:startOverride w:val="${start}"/></w:lvlOverride>` : ""}</w:num>`).join("");
+    const listNumberingXml = listNumberingInstances.map(({ id, abstractNumId, start, level }) => `<w:num w:numId="${id}"><w:abstractNumId w:val="${abstractNumId}"/>${start > 1 ? `<w:lvlOverride w:ilvl="${level}"><w:startOverride w:val="${start}"/></w:lvlOverride>` : ""}</w:num>`).join("");
     const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="multilevel"/>${numberingLevels("bullet")}</w:abstractNum><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="multilevel"/>${numberingLevels("decimal")}</w:abstractNum>${listNumberingXml}</w:numbering>`;
     const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>${exportedComments.length ? '<Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/commentsExtended.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"/>' : ""}${hasHeader ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : ""}${hasFooter ? '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' : ""}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`;
     const rootRelationships = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>';
