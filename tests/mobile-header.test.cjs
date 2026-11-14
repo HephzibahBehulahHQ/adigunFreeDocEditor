@@ -16,6 +16,7 @@ for (const id of ["mobile-menu", "save-document", "undo", "redo", "export-docx",
 
 const mobileRules = css.split("@media(max-width:700px){").slice(1).join("\n");
 assert.match(mobileRules, /\.sidebar\{justify-content:flex-start\}/);
+assert.match(mobileRules, /\.sidebar\.mobile-open \.nav-item\{[^}]*min-height:44px/, "expanded mobile navigation rows meet the touch target");
 assert.match(mobileRules, /\.product-name\{display:flex/);
 assert.match(mobileRules, /\.mobile-brand\{display:none\}/);
 assert.match(mobileRules, /\.workspace\.mode-no-document-title \.topbar\{height:0/);
