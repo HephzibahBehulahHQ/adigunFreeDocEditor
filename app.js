@@ -2052,7 +2052,7 @@
       }
       const outputText = translated.join("\n");
       const format = $("#translate-output-format").value || "pdf";
-      const baseName = safeFilename(file.name.replace(/\\.[^.]+$/, "")) || "translated-document";
+      const baseName = safeFilename(file.name.split(".").slice(0, -1).join(".")) || "translated-document";
       const warnings = [];
       if (format === "pdf") {
         const pdf = makePdfBytes(conversionHTMLFromText(outputText), baseName + " translated");
