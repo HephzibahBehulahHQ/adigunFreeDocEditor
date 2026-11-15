@@ -187,7 +187,8 @@ try {
     assert.equal(window.document.querySelectorAll(".file-tool-workspace:not([hidden])").length, view === "convert" ? 0 : 1, "only the selected file tool is visible");
   }
   assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["html", "docx", "markdown", "pdf", "png", "svg", "pptx"], "conversion lists the requested output formats");
-  assert.equal(window.document.querySelector("#conversion-target").options[2].disabled, false, "Markdown output is available");\n  const conversionInput = window.document.querySelector("#conversion-file-picker");
+  assert.equal(window.document.querySelector("#conversion-target").options[2].disabled, false, "Markdown output is available");
+  const conversionInput = window.document.querySelector("#conversion-file-picker");
   const markdownSource = { name: "notes.txt", size: 16, text: async () => "# Heading\nA **bold** line." };
   Object.defineProperty(conversionInput, "files", { configurable: true, value: [markdownSource] });
   conversionInput.dispatchEvent(new window.Event("change", { bubbles: true }));
