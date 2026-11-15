@@ -1806,7 +1806,7 @@
     const previous = target.value;
     const extension = file?.name.split(".").pop().toLowerCase() || "";
     const textSources = ["docx", "txt", "md", "markdown", "html", "htm"];
-    const imageSources = ["png", "jpg", "jpeg", "webp"];
+    const imageSources = ["png", "jpg", "jpeg", "webp", "svg"];
     const formats = [
       { value: "html", label: "HTML document", sources: textSources, ready: true },
       { value: "docx", label: "Word document (.docx)", sources: textSources, ready: true },
@@ -1815,7 +1815,7 @@
       { value: "png", label: "Image (PNG)", sources: imageSources, ready: true },
       { value: "jpeg", label: "Image (JPEG)", sources: imageSources, ready: true },
       { value: "webp", label: "Image (WebP)", sources: imageSources, ready: true },
-      { value: "svg", label: "Illustration (SVG)", sources: textSources, ready: false },
+      { value: "svg", label: "Illustration (SVG)", sources: textSources, ready: true },
       { value: "pptx", label: "PowerPoint (.pptx)", sources: textSources, ready: true },
     ];
     const compatible = formats.filter((format) => !extension || format.sources.includes(extension));
@@ -1854,8 +1854,8 @@
   function selectConversionSource(file) {
     if (!file) return;
     const extension = file.name.split(".").pop().toLowerCase();
-    if (!(["docx", "txt", "md", "markdown", "html", "htm", "png", "jpg", "jpeg", "webp"].includes(extension))) {
-      notify("Convert supports DOCX, TXT, Markdown, HTML, PNG, JPEG, and WebP sources. PDF is view-only.");
+    if (!(["docx", "txt", "md", "markdown", "html", "htm", "png", "jpg", "jpeg", "webp", "svg"].includes(extension))) {
+      notify("Convert supports DOCX, TXT, Markdown, HTML, PNG, JPEG, WebP, and SVG sources. PDF is view-only.");
       return;
     }
     conversionSourceFile = file;
@@ -2076,6 +2076,42 @@
     return { bytes: join(chunks), unsupportedCharacters: fallbackState.used };
   }
 
+  function makeSvgDocument(html, documentTitle) {
+    const body = new DOMParser().parseFromString(String(html), "text/html").body;
+    const blocks = Array.from(body.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,td,th"))
+      .map((node) => ({ tag: node.tagName.toLowerCase(), text: (node.textContent || "").replace(/\s+/g, " ").trim() }))
+      .filter((block) => block.text);
+    if (!blocks.length && body.textContent.trim()) blocks.push({ tag: "p", text: body.textContent.trim() });
+    let y = 142;
+    const lines = [];
+    for (const block of blocks) {
+      const heading = /^h[1-3]$/.test(block.tag);
+      const size = block.tag === "h1" ? 28 : block.tag === "h2" ? 23 : block.tag === "h3" ? 19 : 16;
+      const max = Math.max(24, Math.floor(900 / (size * 0.57)));
+      let remaining = (block.tag === "li" ? "• " : "") + block.text;
+      while (remaining) {
+        let split = remaining.length <= max ? remaining.length : remaining.lastIndexOf(" ", max);
+        if (split < max / 2) split = Math.min(max, remaining.length);
+        const line = remaining.slice(0, split).trim();
+        remaining = remaining.slice(split).trim();
+        lines.push('<text x="64" y="' + y + '" font-family="Arial, Helvetica, sans-serif" font-size="' + size + '" fill="#182035"' + (heading ? ' font-weight="700"' : "") + '>' + xmlText(line) + '</text>');
+        y += size + 9;
+        if (lines.length > 2000) throw new Error("SVG output is limited to 2,000 text lines.");
+      }
+      y += heading ? 14 : 10;
+    }
+    const height = Math.max(240, y + 48);
+    const title = xmlText(documentTitle || "Converted document");
+    return {
+      svg: '<?xml version="1.0" encoding="UTF-8"?>' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="' + height + '" viewBox="0 0 1000 ' + height + '" role="img" aria-labelledby="title">' +
+        '<title id="title">' + title + '</title><rect width="1000" height="' + height + '" fill="#ffffff"/>' +
+        '<text x="64" y="76" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#17233a">' + title + '</text>' +
+        '<path d="M64 96H936" stroke="#4f6bed" stroke-width="3"/>' + lines.join("") + '</svg>',
+      omittedImages: Boolean(body.querySelector("img")),
+    };
+  }
+
   async function runConversion() {
     if (!conversionSourceFile) return;
     const file = conversionSourceFile;
@@ -2137,7 +2173,13 @@
       const preview = document.createElement("div");
       preview.innerHTML = html;
       const previewDocument = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:15px/1.6 Arial,sans-serif;color:#182035;padding:24px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{border-collapse:collapse;max-width:100%}td,th{border:1px solid #c6cdd8;padding:6px}</style></head><body>' + html + "</body></html>";
-      if (target === "pdf") {
+      if (target === "svg") {
+        const illustration = makeSvgDocument(html, file.name.replace(/\.[^.]+$/, ""));
+        conversionOutputBlob = new Blob([illustration.svg], { type: "image/svg+xml;charset=utf-8" });
+        conversionOutputName = safeFilename(file.name.replace(/\.[^.]+$/, "")) + ".svg";
+        if (illustration.omittedImages) warnings.push("Images are not embedded in this scalable SVG output.");
+        warnings.push("SVG output is a vector text page; interactive behavior and advanced source styling are not retained.");
+      } else if (target === "pdf") {
         const pdf = makePdfBytes(html, file.name.replace(/\.[^.]+$/, ""));
         conversionOutputBlob = new Blob([pdf.bytes], { type: "application/pdf" });
         conversionOutputName = safeFilename(file.name.replace(/\.[^.]+$/, "")) + ".pdf";
