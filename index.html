@@ -100,9 +100,9 @@
                 <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="conversion-title">Convert File</h2><p>Select a source document and choose a compatible output format. Unsupported formats remain disabled until their converters are ready.</p></header>
                 <div class="conversion-grid">
                   <section class="conversion-card" aria-labelledby="conversion-source-title">
-                    <div class="conversion-step"><span>1</span><div><h3 id="conversion-source-title">Choose a source</h3><p>PDF is view-only and cannot be converted in this build.</p></div></div>
+                    <div class="conversion-step"><span>1</span><div><h3 id="conversion-source-title">Choose a source</h3><p>Choose a document or raster image; output options adapt to the source type.</p></div></div>
                     <button class="button button-outline conversion-select" id="conversion-select-source" type="button">Choose source file</button>
-                    <div class="conversion-source-summary"><strong id="conversion-source-name">No source selected</strong><span id="conversion-source-type">Choose DOCX, TXT, Markdown, or HTML</span></div>
+                    <div class="conversion-source-summary"><strong id="conversion-source-name">No source selected</strong><span id="conversion-source-type">Choose DOCX, TXT, Markdown, HTML, PNG, JPEG, or WebP</span></div>
                     <label class="conversion-target-label" for="conversion-target">Convert to</label>
                     <select class="tool-select conversion-target" id="conversion-target" aria-label="Output file format">
                       <option value="html">HTML document</option><option value="docx">Word document (.docx)</option>
@@ -215,7 +215,7 @@
 
       <input class="sr-only" id="file-picker" type="file" aria-label="Choose a document or PDF file" accept=".docx,.txt,.md,.html,.htm,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html,application/pdf" />
       <input class="sr-only" id="image-picker" type="file" aria-label="Choose an image to insert" accept="image/png,image/jpeg,image/gif" />
-      <input class="sr-only" id="conversion-file-picker" type="file" aria-label="Choose a file to convert" accept=".docx,.txt,.md,.markdown,.html,.htm,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html" />
+      <input class="sr-only" id="conversion-file-picker" type="file" aria-label="Choose a file to convert" accept=".docx,.txt,.md,.markdown,.html,.htm,.png,.jpg,.jpeg,.webp,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html,image/png,image/jpeg,image/webp" />
     </main>
     <dialog class="settings-dialog template-dialog" id="template-dialog" aria-labelledby="template-dialog-title">
       <div class="template-library">

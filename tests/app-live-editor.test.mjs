@@ -186,7 +186,7 @@ try {
     assert.equal(window.document.querySelector("#" + workspaceId).hidden, false, `${view} workspace is visible`);
     assert.equal(window.document.querySelectorAll(".file-tool-workspace:not([hidden])").length, view === "convert" ? 0 : 1, "only the selected file tool is visible");
   }
-  assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["html", "docx", "markdown", "pdf", "png", "svg", "pptx"], "conversion lists the requested output formats");
+  assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["html", "docx", "markdown", "pdf", "png", "jpeg", "webp", "svg", "pptx"], "conversion lists the requested output formats");
   assert.equal(window.document.querySelector("#conversion-target").options[2].disabled, false, "Markdown output is available");
   const conversionInput = window.document.querySelector("#conversion-file-picker");
   const markdownSource = { name: "notes.txt", size: 16, text: async () => "# Heading\nA **bold** line." };
@@ -198,6 +198,20 @@ try {
   assert.match(window.document.querySelector("#conversion-result-name").textContent, /notes\.md$/);
   window.document.querySelector("#conversion-download").click();
   assert.equal(window.__downloads.at(-1), "notes.md", "Markdown conversion enables a downloadable .md result");
+  const imageSource = { name: "photo.png", size: 4, type: "image/png" };
+  Object.defineProperty(conversionInput, "files", { configurable: true, value: [imageSource] });
+  conversionInput.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["png", "jpeg", "webp"], "image sources only show supported image output formats");
+  window.createImageBitmap = async () => ({ width: 1, height: 1, close() {} });
+  window.HTMLCanvasElement.prototype.getContext = () => ({ fillStyle: "", fillRect() {}, drawImage() {} });
+  window.HTMLCanvasElement.prototype.toBlob = function (callback, type) { callback(new window.Blob(["image"], { type })); };
+  window.document.querySelector("#conversion-target").value = "webp";
+  window.document.querySelector("#conversion-run").click();
+  for (let attempt = 0; attempt < 100 && !window.document.querySelector("#conversion-progress").textContent.includes("Image conversion complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.match(window.document.querySelector("#conversion-result-name").textContent, /photo\.webp$/);
+  window.document.querySelector("#conversion-download").click();
+  assert.equal(window.__downloads.at(-1), "photo.webp", "image conversion produces a downloadable WebP file");
+
 
   assert.ok(window.document.querySelector("#translate-target-language").options.length >= 70, "translation language pickers offer a broad language list");
   assert.equal(window.document.querySelector("#translate-run").disabled, true, "translation stays disabled until a provider is configured");

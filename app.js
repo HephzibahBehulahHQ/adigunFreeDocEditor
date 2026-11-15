@@ -1806,12 +1806,15 @@
     const previous = target.value;
     const extension = file?.name.split(".").pop().toLowerCase() || "";
     const textSources = ["docx", "txt", "md", "markdown", "html", "htm"];
+    const imageSources = ["png", "jpg", "jpeg", "webp"];
     const formats = [
       { value: "html", label: "HTML document", sources: textSources, ready: true },
       { value: "docx", label: "Word document (.docx)", sources: textSources, ready: true },
       { value: "markdown", label: "Markdown (.md)", sources: textSources, ready: true },
       { value: "pdf", label: "PDF document", sources: textSources, ready: false },
-      { value: "png", label: "Image (PNG)", sources: textSources, ready: false },
+      { value: "png", label: "Image (PNG)", sources: imageSources, ready: true },
+      { value: "jpeg", label: "Image (JPEG)", sources: imageSources, ready: true },
+      { value: "webp", label: "Image (WebP)", sources: imageSources, ready: true },
       { value: "svg", label: "Illustration (SVG)", sources: textSources, ready: false },
       { value: "pptx", label: "PowerPoint (.pptx)", sources: textSources, ready: false },
     ];
@@ -1824,7 +1827,8 @@
       option.disabled = !format.ready;
       target.append(option);
     }
-    target.value = compatible.some((format) => format.value === previous && format.ready) ? previous : "html";
+    const selected = compatible.find((format) => format.value === previous && format.ready) || compatible.find((format) => format.ready);
+    target.value = selected?.value || compatible[0]?.value || "";
   }
     function renderConversionState() {
     const selected = conversionSourceFile;
@@ -1850,8 +1854,8 @@
   function selectConversionSource(file) {
     if (!file) return;
     const extension = file.name.split(".").pop().toLowerCase();
-    if (!(["docx", "txt", "md", "markdown", "html", "htm"].includes(extension))) {
-      notify("Convert supports DOCX, TXT, Markdown, and HTML sources. PDF is view-only.");
+    if (!(["docx", "txt", "md", "markdown", "html", "htm", "png", "jpg", "jpeg", "webp"].includes(extension))) {
+      notify("Convert supports DOCX, TXT, Markdown, HTML, PNG, JPEG, and WebP sources. PDF is view-only.");
       return;
     }
     conversionSourceFile = file;
@@ -1893,6 +1897,41 @@
     return Array.from(body.children).map(render).filter(Boolean).join("\n\n").trim() + "\n";
   }
 
+  async function convertRasterImage(file, target) {
+    if (file.size > 30 * 1024 * 1024) throw new Error("Images must be 30 MB or smaller.");
+    if (typeof createImageBitmap !== "function") throw new Error("Image conversion is unavailable in this browser.");
+    const bitmap = await createImageBitmap(file);
+    try {
+      const pixels = bitmap.width * bitmap.height;
+      if (!bitmap.width || !bitmap.height || pixels > 40000000) throw new Error("Images are limited to 40 megapixels.");
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("This browser could not create an image conversion canvas.");
+      if (target === "jpeg") {
+        context.fillStyle = "#fff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      context.drawImage(bitmap, 0, 0);
+      const mime = target === "jpeg" ? "image/jpeg" : target === "webp" ? "image/webp" : "image/png";
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, mime, 0.92));
+      if (!blob) throw new Error("The browser could not encode this image format.");
+      return blob;
+    } finally {
+      bitmap.close?.();
+    }
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("The image preview could not be prepared."));
+      reader.readAsDataURL(blob);
+    });
+  }
+
   async function runConversion() {
     if (!conversionSourceFile) return;
     const file = conversionSourceFile;
@@ -1904,6 +1943,20 @@
     $("#conversion-progress").textContent = "Reading source file…";
     try {
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (["png", "jpeg", "webp"].includes(target)) {
+        const imageBlob = await convertRasterImage(file, target);
+        conversionOutputBlob = imageBlob;
+        conversionOutputName = safeFilename(file.name.replace(/\.[^.]+$/, "")) + "." + (target === "jpeg" ? "jpg" : target);
+        const dataUrl = await blobToDataUrl(imageBlob);
+        $("#conversion-preview").srcdoc = '<!doctype html><html lang="en"><meta charset="utf-8"><style>body{margin:0;display:grid;place-items:center;min-height:100vh;background:#f4f6fa}img{max-width:100%;max-height:100vh;object-fit:contain}</style><img alt="Converted image preview" src="' + dataUrl + '"></html>';
+        $("#conversion-preview").hidden = false;
+        $("#conversion-result-name").textContent = conversionOutputName;
+        $("#conversion-download").disabled = false;
+        $("#conversion-warning").textContent = "Image metadata and animation are not retained.";
+        $("#conversion-warning").hidden = true;
+        $("#conversion-progress").textContent = "Image conversion complete. Download the converted image.";
+        return;
+      }
       let html;
       if (extension === "docx") {
         if (file.size > 20 * 1024 * 1024) throw new Error("Word documents must be 20 MB or smaller.");
