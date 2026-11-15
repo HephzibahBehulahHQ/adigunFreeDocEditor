@@ -125,7 +125,7 @@
                 <div class="conversion-grid file-tool-grid">
                   <section class="conversion-card" aria-labelledby="merge-source-title">
                     <div class="conversion-step"><span>1</span><div><h3 id="merge-source-title">Choose documents</h3><p>Word, HTML, Markdown, and text files are supported by the first merge release.</p></div></div>
-                    <label class="tool-file-label" for="merge-files">Add files</label><input class="tool-file-input" id="merge-files" type="file" multiple accept=".docx,.txt,.md,.markdown,.html,.htm" />
+                    <label class="tool-file-label" for="merge-files">Add files</label><input class="tool-file-input" id="merge-files" type="file" multiple accept=".docx,.txt,.md,.markdown,.html,.htm,.pdf,application/pdf" />
                     <ol class="tool-file-list" id="merge-file-order" aria-label="Merge order"><li class="tool-file-empty">Files will appear here in merge order.</li></ol>
                     <p class="conversion-progress" id="merge-status" role="status" aria-live="polite">Choose at least two files. Reordering is available now; merging is being connected.</p>
                     <div class="conversion-actions"><button class="button button-primary" id="merge-run" type="button" disabled>Merge documents</button></div>
@@ -162,8 +162,8 @@
                 <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="translate-title">Translate a document</h2><p>Choose a document, its original language, and the language you want. Translation will run after a provider is connected.</p></header>
                 <div class="conversion-grid file-tool-grid">
                   <section class="conversion-card" aria-labelledby="translate-source-title">
-                    <div class="conversion-step"><span>1</span><div><h3 id="translate-source-title">Choose a document</h3><p>Text documents are supported by the first translation release.</p></div></div>
-                    <label class="tool-file-label" for="translate-file">Upload document</label><input class="tool-file-input" id="translate-file" type="file" accept=".docx,.txt,.md,.markdown,.html,.htm" />
+                    <div class="conversion-step"><span>1</span><div><h3 id="translate-source-title">Choose a document</h3><p>PDFs with selectable text are supported; scanned PDFs require OCR.</p></div></div>
+                    <label class="tool-file-label" for="translate-file">Upload document</label><input class="tool-file-input" id="translate-file" type="file" accept=".docx,.txt,.md,.markdown,.html,.htm,.pdf,application/pdf" />
                     <div class="conversion-source-summary"><strong id="translate-file-name">No document selected</strong><span id="translate-file-type">Choose a local document.</span></div>
                     <label class="conversion-target-label" for="translate-source-language">Original language</label><select class="tool-select conversion-target" id="translate-source-language"><option value="auto">Auto-detect</option></select>
                     <p class="conversion-progress" id="translate-status" role="status" aria-live="polite">Translation is not available until a translation provider is configured.</p>
@@ -215,7 +215,7 @@
 
       <input class="sr-only" id="file-picker" type="file" aria-label="Choose a document or PDF file" accept=".docx,.txt,.md,.html,.htm,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html,application/pdf" />
       <input class="sr-only" id="image-picker" type="file" aria-label="Choose an image to insert" accept="image/png,image/jpeg,image/gif" />
-      <input class="sr-only" id="conversion-file-picker" type="file" aria-label="Choose a file to convert" accept=".docx,.txt,.md,.markdown,.html,.htm,.png,.jpg,.jpeg,.webp,.svg,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html,image/png,image/jpeg,image/webp,image/svg+xml" />
+      <input class="sr-only" id="conversion-file-picker" type="file" aria-label="Choose a file to convert" accept=".docx,.txt,.md,.markdown,.html,.htm,.pdf,.png,.jpg,.jpeg,.webp,.svg,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html,application/pdf,image/png,image/jpeg,image/webp,image/svg+xml" />
     </main>
     <dialog class="settings-dialog template-dialog" id="template-dialog" aria-labelledby="template-dialog-title">
       <div class="template-library">
@@ -351,5 +351,6 @@
     <script src="./app.js" defer></script>
   </body>
 </html>
+
 
 
