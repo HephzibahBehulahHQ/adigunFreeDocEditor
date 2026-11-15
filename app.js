@@ -1952,7 +1952,7 @@
   async function extractPdfText(file) {
     if (file.size > 25 * 1024 * 1024) throw new Error("PDF files must be 25 MB or smaller.");
     const pdfjs = await import("./assets/vendor/pdf.mjs");
-    pdfjs.GlobalWorkerOptions.workerSrc = "./assets/vendor/pdf.worker.mjs";
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL("./assets/vendor/pdf.worker.mjs", document.baseURI).href;
     const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
     if (pdf.numPages > 500) throw new Error("PDFs are limited to 500 pages per operation.");
     const pages = [];
