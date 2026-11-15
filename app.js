@@ -52,6 +52,7 @@
   let conversionSourceFile;
   let conversionOutputBlob;
   let conversionOutputName = "";
+  let translationSourceText = "";
   let tableInsertionRange;
   let imageInsertionRange;
   let activeImage;
@@ -1806,17 +1807,18 @@
     const previous = target.value;
     const extension = file?.name.split(".").pop().toLowerCase() || "";
     const textSources = ["docx", "txt", "md", "markdown", "html", "htm"];
+    const pdfTextSources = [...textSources, "pdf"];
     const imageSources = ["png", "jpg", "jpeg", "webp", "svg"];
     const formats = [
-      { value: "html", label: "HTML document", sources: textSources, ready: true },
-      { value: "docx", label: "Word document (.docx)", sources: textSources, ready: true },
-      { value: "markdown", label: "Markdown (.md)", sources: textSources, ready: true },
+      { value: "html", label: "HTML document", sources: pdfTextSources, ready: true },
+      { value: "docx", label: "Word document (.docx)", sources: pdfTextSources, ready: true },
+      { value: "markdown", label: "Markdown (.md)", sources: pdfTextSources, ready: true },
       { value: "pdf", label: "PDF document", sources: textSources, ready: true },
       { value: "png", label: "Image (PNG)", sources: imageSources, ready: true },
       { value: "jpeg", label: "Image (JPEG)", sources: imageSources, ready: true },
       { value: "webp", label: "Image (WebP)", sources: imageSources, ready: true },
-      { value: "svg", label: "Illustration (SVG)", sources: textSources, ready: true },
-      { value: "pptx", label: "PowerPoint (.pptx)", sources: textSources, ready: true },
+      { value: "svg", label: "Illustration (SVG)", sources: pdfTextSources, ready: true },
+      { value: "pptx", label: "PowerPoint (.pptx)", sources: pdfTextSources, ready: true },
     ];
     const compatible = formats.filter((format) => !extension || format.sources.includes(extension));
     target.replaceChildren();
@@ -1833,7 +1835,7 @@
     function renderConversionState() {
     const selected = conversionSourceFile;
     $("#conversion-source-name").textContent = selected ? selected.name : "No source selected";
-    $("#conversion-source-type").textContent = selected ? selected.name.split(".").pop().toUpperCase() : "Choose DOCX, TXT, Markdown, or HTML";
+    $("#conversion-source-type").textContent = selected ? selected.name.split(".").pop().toUpperCase() : "Choose PDF, DOCX, TXT, Markdown, HTML, or an image";
     renderConversionTargets(selected);
     $("#conversion-run").disabled = !selected;
     $("#conversion-progress").textContent = selected ? "Ready to convert." : "Select a local file to begin.";
@@ -1854,8 +1856,8 @@
   function selectConversionSource(file) {
     if (!file) return;
     const extension = file.name.split(".").pop().toLowerCase();
-    if (!(["docx", "txt", "md", "markdown", "html", "htm", "png", "jpg", "jpeg", "webp", "svg"].includes(extension))) {
-      notify("Convert supports DOCX, TXT, Markdown, HTML, PNG, JPEG, WebP, and SVG sources. PDF is view-only.");
+    if (!(["docx", "txt", "md", "markdown", "html", "htm", "pdf", "png", "jpg", "jpeg", "webp", "svg"].includes(extension))) {
+      notify("Convert supports PDF, DOCX, TXT, Markdown, HTML, PNG, JPEG, WebP, and SVG sources.");
       return;
     }
     conversionSourceFile = file;
@@ -1866,6 +1868,26 @@
     return String(text).replace(/\r\n?/g, "\n").split("\n").map((line) => "<p>" + (escapeHTML(line) || "<br>") + "</p>").join("") || "<p><br></p>";
   }
 
+  async function extractPdfText(file) {
+    if (file.size > 25 * 1024 * 1024) throw new Error("PDF files must be 25 MB or smaller.");
+    const pdfjs = await import("./assets/vendor/pdf.mjs");
+    pdfjs.GlobalWorkerOptions.workerSrc = "./assets/vendor/pdf.worker.mjs";
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
+    if (pdf.numPages > 500) throw new Error("PDFs are limited to 500 pages per operation.");
+    const pages = [];
+    let characterCount = 0;
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const line = content.items.filter((item) => typeof item.str === "string").map((item) => item.str).join(" ");
+      characterCount += line.length;
+      if (characterCount > 2_000_000) throw new Error("PDF text is limited to 2 million characters per operation.");
+      pages.push(line);
+    }
+    const text = pages.join("\n\n").trim();
+    if (!text) throw new Error("No selectable text was found. Scanned or image-only PDFs need OCR, which is not available yet.");
+    return { text, pageCount: pdf.numPages };
+  }
   function htmlToMarkdown(html) {
     const body = new DOMParser().parseFromString(String(html), "text/html").body;
     const inline = (node) => {
@@ -2159,6 +2181,10 @@
         warnings.push("Word page layout and advanced formatting are not retained in this conversion.");
         const revisionWarning = sourceRevisionLossWarning(revisionCounts, true, revisionMapping.preserved);
         if (revisionWarning) warnings.push(revisionWarning);
+      } else if (extension === "pdf") {
+        const extracted = await extractPdfText(file);
+        html = conversionHTMLFromText(extracted.text);
+        warnings.push("Extracted selectable text from " + extracted.pageCount + " PDF page" + (extracted.pageCount === 1 ? "" : "s") + ". Scanned page images are not retained.");
       } else {
         if (file.size > 12 * 1024 * 1024) throw new Error("Text and HTML sources must be 12 MB or smaller.");
         const text = await file.text();
@@ -5323,10 +5349,23 @@
       button.disabled = extractedFiles.length === 0;
     }
   });
-  $("#translate-file").addEventListener("change", (event) => {
+  $("#translate-file").addEventListener("change", async (event) => {
     const file = event.currentTarget.files?.[0];
     $("#translate-file-name").textContent = file?.name || "No document selected";
     $("#translate-file-type").textContent = file ? file.name.split(".").pop().toUpperCase() + " · Stored on this device" : "Choose a local document.";
+    translationSourceText = "";
+    if (file?.name.split(".").pop().toLowerCase() === "pdf") {
+      $("#translate-status").textContent = "Extracting PDF text on this device…";
+      try {
+        const extracted = await extractPdfText(file);
+        translationSourceText = extracted.text;
+        $("#translate-status").textContent = "Selectable text extracted from " + extracted.pageCount + " PDF page" + (extracted.pageCount === 1 ? "" : "s") + " on this device. Connect a translation provider to translate it.";
+      } catch (error) {
+        $("#translate-status").textContent = error.message || "Could not read text from this PDF.";
+      }
+    } else {
+      $("#translate-status").textContent = "Translation is not available until a translation provider is configured.";
+    }
   });
   $("#close-templates").addEventListener("click", () => $("#template-dialog").close());
   $("#template-dialog").addEventListener("click", (event) => {
@@ -5545,5 +5584,6 @@
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
   openDatabase().then(() => { setStorageAvailability(true); setSaveStatus("Saved"); return restoreOpenDocumentTabs(); }).catch(() => { setStorageAvailability(false); setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
 })();
+
 
 
