@@ -250,10 +250,21 @@ try {
   const imageSource = { name: "photo.png", size: 4, type: "image/png" };
   Object.defineProperty(conversionInput, "files", { configurable: true, value: [imageSource] });
   conversionInput.dispatchEvent(new window.Event("change", { bubbles: true }));
-  assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["png", "jpeg", "webp"], "image sources only show supported image output formats");
+  assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["pdf", "png", "jpeg", "webp"], "image sources expose PDF and supported image output formats");
   window.createImageBitmap = async () => ({ width: 1, height: 1, close() {} });
   window.HTMLCanvasElement.prototype.getContext = () => ({ fillStyle: "", fillRect() {}, drawImage() {} });
-  window.HTMLCanvasElement.prototype.toBlob = function (callback, type) { callback(new window.Blob(["image"], { type })); };
+  window.HTMLCanvasElement.prototype.toBlob = function (callback, type) {
+    const blob = new window.Blob(["image"], { type });
+    blob.arrayBuffer = async () => Uint8Array.from([105, 109, 97, 103, 101]).buffer;
+    callback(blob);
+  };
+  window.document.querySelector("#conversion-target").value = "pdf";
+  window.document.querySelector("#conversion-run").click();
+  for (let attempt = 0; attempt < 100 && !window.document.querySelector("#conversion-progress").textContent.includes("Image-to-PDF conversion complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.match(window.document.querySelector("#conversion-progress").textContent, /Image-to-PDF conversion complete\./, "image-to-PDF conversion should finish: " + window.document.querySelector("#conversion-progress").textContent);
+  assert.match(window.document.querySelector("#conversion-result-name").textContent, /photo\.pdf$/);
+  window.document.querySelector("#conversion-download").click();
+  assert.equal(window.__downloads.at(-1), "photo.pdf", "image conversion produces a downloadable PDF file");
   window.document.querySelector("#conversion-target").value = "webp";
   window.document.querySelector("#conversion-run").click();
   for (let attempt = 0; attempt < 100 && !window.document.querySelector("#conversion-progress").textContent.includes("Image conversion complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
@@ -263,7 +274,36 @@ try {
 
 
   assert.ok(window.document.querySelector("#translate-target-language").options.length >= 70, "translation language pickers offer a broad language list");
+  assert.ok([...window.document.querySelectorAll("#translate-output-format option")].some((option) => option.value === "pdf"), "translation offers PDF output by default");
+  assert.ok(window.document.querySelector("#translate-file").accept.includes("application/pdf"), "translation accepts PDF input");
   assert.equal(window.document.querySelector("#translate-run").disabled, true, "translation stays disabled until a provider is configured");
+  window.fetch = async (url) => url.endsWith("/languages")
+    ? { ok: true, json: async () => [{ code: "en", name: "English", targets: ["fr"] }, { code: "fr", name: "French", targets: ["en"] }] }
+    : { ok: true, json: async () => ({ translatedText: "Bonjour" }) };
+  window.document.querySelector("#translate-provider-url").value = "https://translation.example";
+  window.document.querySelector("#translate-connect").click();
+  for (let attempt = 0; attempt < 100 && !window.document.querySelector("#translate-provider-status").textContent.includes("Connected"); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  const translationInput = window.document.querySelector("#translate-file");
+  Object.defineProperty(translationInput, "files", { configurable: true, value: [{ name: "letter.txt", size: 5, text: async () => "Hello" }] });
+  translationInput.dispatchEvent(new window.Event("change", { bubbles: true }));
+  window.document.querySelector("#translate-source-language").value = "en";
+  window.document.querySelector("#translate-source-language").dispatchEvent(new window.Event("change", { bubbles: true }));
+  window.document.querySelector("#translate-target-language").value = "fr";
+  window.document.querySelector("#translate-target-language").dispatchEvent(new window.Event("change", { bubbles: true }));
+  window.document.querySelector("#translate-run").click();
+  for (let attempt = 0; attempt < 100 && !window.document.querySelector("#translate-status").textContent.includes("Translation ready as PDF"); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.match(window.document.querySelector("#translate-status").textContent, /Translation ready as PDF/);
+  assert.equal(window.document.querySelector("#translate-download").disabled, false);
+  window.document.querySelector("#translate-download").click();
+  assert.equal(window.__downloads.at(-1), "letter.translated.pdf", "translation downloads a PDF output");
+  const translationPdf = await new Promise((resolve, reject) => {
+    const reader = new window.FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(window.__lastDownloadedBlob);
+  });
+  assert.equal(String.fromCharCode(...translationPdf.slice(0, 8)), "%PDF-1.4", "translated PDF download contains a PDF document");
+
   const mergeInput = window.document.querySelector("#merge-files");
   const files = [
     { name: "one.txt", size: 10, text: async () => "First document." },
@@ -330,3 +370,4 @@ try {
 }
 
 process.stdout.write("Application live editor tests passed: create mounts one editable root and leaving document mode restores the list surface.\n");
+

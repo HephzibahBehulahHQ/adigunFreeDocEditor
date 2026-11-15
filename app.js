@@ -1889,11 +1889,12 @@
     const textSources = ["docx", "txt", "md", "markdown", "html", "htm"];
     const pdfTextSources = [...textSources, "pdf"];
     const imageSources = ["png", "jpg", "jpeg", "webp", "svg"];
+    const pdfSources = [...pdfTextSources, ...imageSources];
     const formats = [
       { value: "html", label: "HTML document", sources: pdfTextSources, ready: true },
       { value: "docx", label: "Word document (.docx)", sources: pdfTextSources, ready: true },
       { value: "markdown", label: "Markdown (.md)", sources: pdfTextSources, ready: true },
-      { value: "pdf", label: "PDF document", sources: textSources, ready: true },
+      { value: "pdf", label: "PDF document", sources: pdfSources, ready: true },
       { value: "png", label: "Image (PNG)", sources: imageSources, ready: true },
       { value: "jpeg", label: "Image (JPEG)", sources: imageSources, ready: true },
       { value: "webp", label: "Image (WebP)", sources: imageSources, ready: true },
@@ -2050,29 +2051,30 @@
         translated.push(result.translatedText);
       }
       const outputText = translated.join("\n");
-      const extension = file.name.split(".").pop().toLowerCase();
-      const baseName = safeFilename(file.name.replace(/\.[^.]+$/, "")) || "translated-document";
-      if (extension === "pdf") {
-        const translatedHtml = "<!doctype html><html lang=\"" + escapeHTML(target) + "\"><meta charset=\"utf-8\"><title>" + escapeHTML(baseName) + "</title><body>" + conversionHTMLFromText(outputText) + "</body></html>";
+      const format = $("#translate-output-format").value || "pdf";
+      const baseName = safeFilename(file.name.split(".").slice(0, -1).join(".")) || "translated-document";
+      const warnings = [];
+      if (format === "pdf") {
+        const pdf = makePdfBytes(conversionHTMLFromText(outputText), baseName + " translated");
+        translationOutputBlob = new Blob([pdf.bytes], { type: "application/pdf" });
+        translationOutputName = baseName + ".translated.pdf";
+        warnings.push("PDF output uses a simple text layout; source formatting is not retained.");
+        if (pdf.unsupportedCharacters) warnings.push("Some characters are outside the built-in PDF font encoding and may be replaced. Choose Word or HTML for broader script coverage.");
+      } else if (format === "html") {
+        const translatedHtml = '<!doctype html><html lang="' + escapeHTML(target) + '"><meta charset="utf-8"><title>' + escapeHTML(baseName) + '</title><body>' + conversionHTMLFromText(outputText) + '</body></html>';
         translationOutputBlob = new Blob([translatedHtml], { type: "text/html;charset=utf-8" });
         translationOutputName = baseName + ".translated.html";
-      } else if (["html", "htm"].includes(extension)) {
-        const translatedHtml = "<!doctype html><html lang=\"" + escapeHTML(target) + "\"><meta charset=\"utf-8\"><title>" + escapeHTML(baseName) + "</title><body>" + conversionHTMLFromText(outputText) + "</body></html>";
-        translationOutputBlob = new Blob([translatedHtml], { type: "text/html;charset=utf-8" });
-        translationOutputName = baseName + ".translated.html";
-      } else if (["md", "markdown"].includes(extension)) {
+      } else if (format === "markdown") {
         translationOutputBlob = new Blob([outputText], { type: "text/markdown;charset=utf-8" });
         translationOutputName = baseName + ".translated.md";
-      } else if (extension === "docx") {
+      } else if (format === "docx") {
         translationOutputBlob = new Blob([await makeTranslationDocx(outputText)], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
         translationOutputName = baseName + ".translated.docx";
       } else {
         translationOutputBlob = new Blob([outputText], { type: "text/plain;charset=utf-8" });
         translationOutputName = baseName + ".translated.txt";
       }
-      status.textContent = extension === "pdf"
-        ? "Translation ready as HTML to preserve multilingual text. The original PDF layout is not retained."
-        : "Translation ready. Formatting was simplified; download the translated document below.";
+      status.textContent = "Translation ready as " + format.toUpperCase() + ". " + warnings.join(" ") + (warnings.length ? " " : "") + "Formatting was simplified; download the translated document below.";
       downloadButton.disabled = false;
     } catch (error) {
       status.textContent = error.message || "Translation failed. Check the provider connection and try again.";
@@ -2291,6 +2293,56 @@
     return { bytes: join(chunks), unsupportedCharacters: fallbackState.used };
   }
 
+  function makeImagePdfBytes(jpegBytes, imageWidth, imageHeight) {
+    const encode = (value) => Uint8Array.from(String(value), (character) => character.charCodeAt(0) & 255);
+    const join = (parts) => {
+      const output = new Uint8Array(parts.reduce((length, part) => length + part.length, 0));
+      let offset = 0;
+      for (const part of parts) { output.set(part, offset); offset += part.length; }
+      return output;
+    };
+    const pageWidth = 595.28;
+    const pageHeight = 841.89;
+    const scale = Math.min(pageWidth / imageWidth, pageHeight / imageHeight);
+    const drawWidth = imageWidth * scale;
+    const drawHeight = imageHeight * scale;
+    const left = (pageWidth - drawWidth) / 2;
+    const bottom = (pageHeight - drawHeight) / 2;
+    const content = encode("q\n" + drawWidth + " 0 0 " + drawHeight + " " + left + " " + bottom + " cm\n/Im0 Do\nQ");
+    const objects = [
+      encode("<< /Type /Catalog /Pages 2 0 R >>"),
+      encode("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+      encode("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + pageWidth + " " + pageHeight + "] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>"),
+      join([encode("<< /Type /XObject /Subtype /Image /Width " + imageWidth + " /Height " + imageHeight + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + jpegBytes.length + " >>\nstream\n"), jpegBytes, encode("\nendstream")]),
+      join([encode("<< /Length " + content.length + " >>\nstream\n"), content, encode("\nendstream")]),
+    ];
+    const chunks = [Uint8Array.from([37,80,68,70,45,49,46,52,10,37,226,227,207,211,10])];
+    const offsets = [0];
+    let position = chunks[0].length;
+    for (let index = 0; index < objects.length; index++) {
+      offsets.push(position);
+      const object = join([encode((index + 1) + " 0 obj\n"), objects[index], encode("\nendobj\n")]);
+      chunks.push(object);
+      position += object.length;
+    }
+    const xrefOffset = position;
+    const xref = ["xref\n0 " + (objects.length + 1) + "\n0000000000 65535 f \n"];
+    for (const offset of offsets.slice(1)) xref.push(String(offset).padStart(10, "0") + " 00000 n \n");
+    chunks.push(encode(xref.join("") + "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xrefOffset + "\n%%EOF"));
+    return join(chunks);
+  }
+
+  async function convertImageToPdf(file) {
+    const jpeg = await convertRasterImage(file, "jpeg");
+    const bitmap = await createImageBitmap(jpeg);
+    try {
+      const bytes = makeImagePdfBytes(new Uint8Array(await jpeg.arrayBuffer()), bitmap.width, bitmap.height);
+      return { blob: new Blob([bytes], { type: "application/pdf" }), preview: await blobToDataUrl(jpeg) };
+    } finally {
+      bitmap.close?.();
+    }
+  }
+
   function makeSvgDocument(html, documentTitle) {
     const body = new DOMParser().parseFromString(String(html), "text/html").body;
     const blocks = Array.from(body.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,td,th"))
@@ -2338,6 +2390,19 @@
     $("#conversion-progress").textContent = "Reading source file…";
     try {
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (target === "pdf" && ["png", "jpg", "jpeg", "webp", "svg"].includes(extension)) {
+        const result = await convertImageToPdf(file);
+        conversionOutputBlob = result.blob;
+        conversionOutputName = safeFilename(file.name.replace(/\.[^.]+$/, "")) + ".pdf";
+        $("#conversion-preview").srcdoc = '<!doctype html><html lang="en"><meta charset="utf-8"><style>body{margin:0;display:grid;place-items:center;min-height:100vh;background:#f4f6fa}img{max-width:100%;max-height:100vh;object-fit:contain}</style><img alt="Image placed on the generated PDF page" src="' + result.preview + '"></html>';
+        $("#conversion-preview").hidden = false;
+        $("#conversion-result-name").textContent = conversionOutputName;
+        $("#conversion-download").disabled = false;
+        $("#conversion-warning").textContent = "The image is placed on a single page. Transparency, metadata, and animation are not retained.";
+        $("#conversion-warning").hidden = false;
+        $("#conversion-progress").textContent = "Image-to-PDF conversion complete. Download the PDF.";
+        return;
+      }
       if (["png", "jpeg", "webp"].includes(target)) {
         const imageBlob = await convertRasterImage(file, target);
         conversionOutputBlob = imageBlob;
@@ -5573,6 +5638,7 @@
   $("#translate-connect").addEventListener("click", connectTranslationProvider);
   $("#translate-source-language").addEventListener("change", () => { syncTranslationTargets(); updateTranslationControls(); });
   $("#translate-target-language").addEventListener("change", updateTranslationControls);
+  $("#translate-output-format").addEventListener("change", () => { translationOutputBlob = undefined; translationOutputName = ""; $("#translate-status").textContent = "Output format changed. Translate again to prepare the selected format."; updateTranslationControls(); });
   $("#translate-run").addEventListener("click", runTranslation);
   $("#translate-download").addEventListener("click", () => {
     if (translationOutputBlob && translationOutputName) downloadToolFile(translationOutputBlob, translationOutputName, translationOutputBlob.type);
