@@ -398,3 +398,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
 @media(max-width:700px){.help-button{display:none}}
 
 @media(max-width:700px){.ribbon-tabs{justify-content:flex-start;overflow-x:auto;scrollbar-width:thin}.ribbon-tab{flex:none}}
+
+/* Keep horizontally scrollable ribbon controls clear of a visible scrollbar. */
+.ribbon-tabs,.ribbon-tools{scrollbar-width:none}
+.ribbon-tabs::-webkit-scrollbar,.ribbon-tools::-webkit-scrollbar{display:none}
