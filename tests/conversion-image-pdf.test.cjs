@@ -2,11 +2,13 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 
 const app = fs.readFileSync(require.resolve("../app.js"), "utf8");
-assert.ok(app.includes('pdfjs.GlobalWorkerOptions.workerSrc = new URL("./assets/vendor/pdf.worker.mjs", document.baseURI).href;'));
-const siteRootWorker = new URL("./assets/vendor/pdf.worker.mjs", "https://adigunfreedoceditor.hephzibahbehulah.com/").href;
-assert.equal(siteRootWorker, "https://adigunfreedoceditor.hephzibahbehulah.com/assets/vendor/pdf.worker.mjs");
-const nestedWorkspaceWorker = new URL("./assets/vendor/pdf.worker.mjs", "https://example.test/editor/").href;
-assert.equal(nestedWorkspaceWorker, "https://example.test/editor/assets/vendor/pdf.worker.mjs");
+const html = fs.readFileSync(require.resolve("../index.html"), "utf8");
+assert.match(html, /<script src="\.\/assets\/vendor\/pdf\.min\.js" defer><\/script>[\s\S]*?<script src="\.\/app\.js" defer><\/script>/, "classic PDF.js loads before the app module");
+assert.match(app, /const pdfjs = window\.pdfjsLib;/, "PDF extraction uses the browser-compatible classic PDF.js bundle");
+assert.match(app, /pdf\.worker\.min\.js/, "PDF extraction configures the matching classic worker");
+for (const asset of ["pdf.min.js", "pdf.worker.min.js"]) {
+  assert.ok(fs.statSync(require.resolve("../assets/vendor/" + asset)).size > 100_000, asset + " is included as a full PDF.js distribution asset");
+}
 
 const targetsStart = app.indexOf("  function renderConversionTargets(file)");
 const targetsEnd = app.indexOf("  function renderConversionState()", targetsStart);
@@ -44,4 +46,5 @@ const makeImagePdfBytes = new Function(app.slice(helperStart, helperEnd) + "\nre
   process.stderr.write((error.stack || String(error)) + "\n");
   process.exitCode = 1;
 });
+
 

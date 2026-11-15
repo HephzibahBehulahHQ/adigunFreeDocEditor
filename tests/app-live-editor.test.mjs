@@ -27,15 +27,15 @@ Object.defineProperty(window.HTMLElement.prototype, "innerText", {
 });
 window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
 window.HTMLDialogElement.prototype.close = function () { this.open = false; };
+const savedDocuments = [];
+window.__savedDocuments = savedDocuments;
 window.indexedDB = {
   open() {
     const request = { result: null };
-    const savedDocuments = [];
     const objectStore = {
       getAll() { const result = { result: [] }; queueMicrotask(() => result.onsuccess?.()); return result; },
       put(documentRecord) { savedDocuments.push(documentRecord); },
     };
-    window.__savedDocuments = savedDocuments;
     request.result = {
       createObjectStore() {},
       transaction() {
@@ -370,4 +370,5 @@ try {
 }
 
 process.stdout.write("Application live editor tests passed: create mounts one editable root and leaving document mode restores the list surface.\n");
+
 
