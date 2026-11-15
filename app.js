@@ -53,6 +53,9 @@
   let conversionOutputBlob;
   let conversionOutputName = "";
   let translationSourceText = "";
+  let translationProvider = { endpoint: "", apiKey: "", languages: [] };
+  let translationOutputBlob;
+  let translationOutputName = "";
   let tableInsertionRange;
   let imageInsertionRange;
   let activeImage;
@@ -1784,6 +1787,83 @@
       }
     }
     source.dataset.ready = "true";
+    try {
+      const savedEndpoint = localStorage.getItem("adigun-translate-endpoint");
+      if (savedEndpoint) $("#translate-provider-url").value = savedEndpoint;
+    } catch { /* Translation can still work when browser storage is unavailable. */ }
+  }
+  function syncTranslationTargets() {
+    if (!translationProvider.languages.length) return;
+    const sourceCode = $("#translate-source-language").value;
+    const target = $("#translate-target-language");
+    const previous = target.value;
+    const sourceLanguage = translationProvider.languages.find((language) => language.code === sourceCode);
+    const compatible = sourceCode === "auto" || !sourceLanguage?.targets.length
+      ? translationProvider.languages
+      : translationProvider.languages.filter((language) => sourceLanguage.targets.includes(language.code));
+    target.replaceChildren(new Option("Choose a language", ""));
+    for (const language of compatible) target.append(new Option(language.name || language.code.toUpperCase(), language.code));
+    target.value = compatible.some((language) => language.code === previous) ? previous : "";
+  }
+  function renderProviderLanguages(languages) {
+    const source = $("#translate-source-language");
+    const target = $("#translate-target-language");
+    const previousSource = source.value;
+    const previousTarget = target.value;
+    const displayNames = typeof Intl.DisplayNames === "function" ? new Intl.DisplayNames([navigator.language || "en"], { type: "language" }) : null;
+    source.replaceChildren(new Option("Auto-detect", "auto"));
+    target.replaceChildren(new Option("Choose a language", ""));
+    for (const language of languages) {
+      const label = language.name || displayNames?.of(language.code) || language.code.toUpperCase();
+      source.append(new Option(label, language.code));
+      target.append(new Option(label, language.code));
+    }
+    source.value = languages.some((language) => language.code === previousSource) ? previousSource : "auto";
+    target.value = languages.some((language) => language.code === previousTarget) ? previousTarget : "";
+    source.dataset.ready = "true";
+    syncTranslationTargets();
+  }
+  function updateTranslationControls() {
+    const file = $("#translate-file").files?.[0];
+    const isPdf = file?.name.split(".").pop().toLowerCase() === "pdf";
+    $("#translate-run").disabled = !file || !translationProvider.endpoint || !translationProvider.languages.length || !$("#translate-target-language").value || (isPdf && !translationSourceText);
+    $("#translate-download").disabled = !translationOutputBlob;
+  }
+  async function connectTranslationProvider() {
+    const endpointInput = $("#translate-provider-url");
+    const button = $("#translate-connect");
+    const status = $("#translate-provider-status");
+    button.disabled = true;
+    translationProvider = { endpoint: "", apiKey: "", languages: [] };
+    updateTranslationControls();
+    try {
+      const url = new URL(endpointInput.value.trim());
+      if (!(["https:"].includes(url.protocol) || (["http:"].includes(url.protocol) && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))) {
+        throw new Error("Use an HTTPS service URL, or HTTP on localhost for a self-hosted service.");
+      }
+      if (url.username || url.password || url.search || url.hash) throw new Error("Enter only the service URL. Put any API key in the separate API key field.");
+      const endpoint = url.href.replace(/\/$/, "");
+      status.textContent = "Checking supported languages…";
+      const response = await fetch(endpoint + "/languages", { headers: { Accept: "application/json" }, credentials: "omit" });
+      if (!response.ok) throw new Error("The service returned HTTP " + response.status + ". Check the URL, API access, and CORS settings.");
+      const languages = await response.json();
+      if (!Array.isArray(languages) || !languages.some((language) => language?.code)) throw new Error("The service did not return a compatible language list.");
+      translationProvider = {
+        endpoint,
+        apiKey: $("#translate-api-key").value.trim(),
+        languages: languages.filter((language) => language?.code).map((language) => ({ code: language.code, name: language.name, targets: Array.isArray(language.targets) ? language.targets : [] })),
+      };
+      try { localStorage.setItem("adigun-translate-endpoint", endpoint); } catch { /* Keep the endpoint for this page session. */ }
+      renderProviderLanguages(translationProvider.languages);
+      status.textContent = "Connected · " + translationProvider.languages.length + " languages available. Text is sent only when you select Translate.";
+      $("#word-count").textContent = translationProvider.languages.length + " translation languages";
+    } catch (error) {
+      translationProvider.apiKey = "";
+      status.textContent = error.message || "Could not connect. Check the service URL and browser CORS access.";
+    } finally {
+      button.disabled = false;
+      updateTranslationControls();
+    }
   }
   function showFileToolWorkspace(view) {
     const mode = view === "convert" ? "conversion" : view;
@@ -1888,6 +1968,119 @@
     if (!text) throw new Error("No selectable text was found. Scanned or image-only PDFs need OCR, which is not available yet.");
     return { text, pageCount: pdf.numPages };
   }
+
+  async function readTranslationText(file) {
+    const extension = file.name.split(".").pop().toLowerCase();
+    let text;
+    if (extension === "pdf") {
+      text = translationSourceText || (await extractPdfText(file)).text;
+    } else if (extension === "docx") {
+      if (file.size > 20 * 1024 * 1024) throw new Error("Word documents must be 20 MB or smaller.");
+      if (!window.mammoth?.convertToHtml) throw new Error("The local Word import module did not load. Reload the page and try again.");
+      const converted = await window.mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() });
+      const sanitized = sanitizeDocxHtml(converted.value);
+      text = new DOMParser().parseFromString("<main>" + sanitized.html + "</main>", "text/html").querySelector("main")?.innerText || "";
+    } else {
+      if (file.size > 12 * 1024 * 1024) throw new Error("Text and HTML sources must be 12 MB or smaller.");
+      const content = await file.text();
+      text = ["html", "htm"].includes(extension) ? new DOMParser().parseFromString(content, "text/html").body.innerText : content;
+    }
+    text = String(text || "").trim();
+    if (!text) throw new Error("No translatable text was found in this document.");
+    if (text.length > 150_000) throw new Error("Translation is limited to 150,000 characters per document.");
+    return text;
+  }
+
+  function chunkTranslationText(text, maxLength = 4000) {
+    const chunks = [];
+    let start = 0;
+    while (start < text.length) {
+      let end = Math.min(start + maxLength, text.length);
+      if (end < text.length) {
+        const boundary = Math.max(text.lastIndexOf("\n", end), text.lastIndexOf(" ", end));
+        if (boundary > start + Math.floor(maxLength / 2)) end = boundary + 1;
+      }
+      chunks.push(text.slice(start, end));
+      start = end;
+    }
+    return chunks;
+  }
+
+  async function makeTranslationDocx(text) {
+    const paragraphs = String(text).split(/\r?\n/).map((line) => "<w:p><w:r><w:t xml:space=\"preserve\">" + xmlText(line || " ") + "</w:t></w:r></w:p>").join("");
+    const documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + paragraphs + '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>';
+    const parts = {
+      "[Content_Types].xml": window.fflate.strToU8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'),
+      "_rels/.rels": window.fflate.strToU8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'),
+      "word/document.xml": window.fflate.strToU8(documentXml),
+    };
+    return zipWithLevel(parts, 6);
+  }
+
+  async function runTranslation() {
+    const file = $("#translate-file").files?.[0];
+    const source = $("#translate-source-language").value || "auto";
+    const target = $("#translate-target-language").value;
+    if (!file || !target || !translationProvider.endpoint) return;
+    const runButton = $("#translate-run");
+    const downloadButton = $("#translate-download");
+    const status = $("#translate-status");
+    runButton.disabled = true;
+    translationOutputBlob = undefined;
+    translationOutputName = "";
+    updateTranslationControls();
+    try {
+      status.textContent = "Reading document on this device…";
+      const text = await readTranslationText(file);
+      const chunks = chunkTranslationText(text);
+      const translated = [];
+      for (let index = 0; index < chunks.length; index++) {
+        status.textContent = "Translating part " + (index + 1) + " of " + chunks.length + "…";
+        const payload = { q: chunks[index], source, target, format: "text" };
+        if (translationProvider.apiKey) payload.api_key = translationProvider.apiKey;
+        const response = await fetch(translationProvider.endpoint + "/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          credentials: "omit",
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Translation service returned HTTP " + response.status + ".");
+        if (typeof result.translatedText !== "string") throw new Error("The service returned an unsupported translation response.");
+        translated.push(result.translatedText);
+      }
+      const outputText = translated.join("\n");
+      const extension = file.name.split(".").pop().toLowerCase();
+      const baseName = safeFilename(file.name.replace(/\.[^.]+$/, "")) || "translated-document";
+      if (extension === "pdf") {
+        const translatedHtml = "<!doctype html><html lang=\"" + escapeHTML(target) + "\"><meta charset=\"utf-8\"><title>" + escapeHTML(baseName) + "</title><body>" + conversionHTMLFromText(outputText) + "</body></html>";
+        translationOutputBlob = new Blob([translatedHtml], { type: "text/html;charset=utf-8" });
+        translationOutputName = baseName + ".translated.html";
+      } else if (["html", "htm"].includes(extension)) {
+        const translatedHtml = "<!doctype html><html lang=\"" + escapeHTML(target) + "\"><meta charset=\"utf-8\"><title>" + escapeHTML(baseName) + "</title><body>" + conversionHTMLFromText(outputText) + "</body></html>";
+        translationOutputBlob = new Blob([translatedHtml], { type: "text/html;charset=utf-8" });
+        translationOutputName = baseName + ".translated.html";
+      } else if (["md", "markdown"].includes(extension)) {
+        translationOutputBlob = new Blob([outputText], { type: "text/markdown;charset=utf-8" });
+        translationOutputName = baseName + ".translated.md";
+      } else if (extension === "docx") {
+        translationOutputBlob = new Blob([await makeTranslationDocx(outputText)], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+        translationOutputName = baseName + ".translated.docx";
+      } else {
+        translationOutputBlob = new Blob([outputText], { type: "text/plain;charset=utf-8" });
+        translationOutputName = baseName + ".translated.txt";
+      }
+      status.textContent = extension === "pdf"
+        ? "Translation ready as HTML to preserve multilingual text. The original PDF layout is not retained."
+        : "Translation ready. Formatting was simplified; download the translated document below.";
+      downloadButton.disabled = false;
+    } catch (error) {
+      status.textContent = error.message || "Translation failed. Check the provider connection and try again.";
+    } finally {
+      updateTranslationControls();
+    }
+  }
+
   function htmlToMarkdown(html) {
     const body = new DOMParser().parseFromString(String(html), "text/html").body;
     const inline = (node) => {
@@ -5354,18 +5547,28 @@
     $("#translate-file-name").textContent = file?.name || "No document selected";
     $("#translate-file-type").textContent = file ? file.name.split(".").pop().toUpperCase() + " · Stored on this device" : "Choose a local document.";
     translationSourceText = "";
+    translationOutputBlob = undefined;
+    translationOutputName = "";
     if (file?.name.split(".").pop().toLowerCase() === "pdf") {
       $("#translate-status").textContent = "Extracting PDF text on this device…";
       try {
         const extracted = await extractPdfText(file);
         translationSourceText = extracted.text;
-        $("#translate-status").textContent = "Selectable text extracted from " + extracted.pageCount + " PDF page" + (extracted.pageCount === 1 ? "" : "s") + " on this device. Connect a translation provider to translate it.";
+        $("#translate-status").textContent = "Selectable text extracted from " + extracted.pageCount + " PDF page" + (extracted.pageCount === 1 ? "" : "s") + " on this device. Choose a target language and Translate when ready.";
       } catch (error) {
         $("#translate-status").textContent = error.message || "Could not read text from this PDF.";
       }
     } else {
-      $("#translate-status").textContent = "Translation is not available until a translation provider is configured.";
+      $("#translate-status").textContent = translationProvider.endpoint ? "Document selected. Its text stays on this device until you choose Translate." : "Connect a LibreTranslate-compatible service to enable translation.";
     }
+    updateTranslationControls();
+  });
+  $("#translate-connect").addEventListener("click", connectTranslationProvider);
+  $("#translate-source-language").addEventListener("change", () => { syncTranslationTargets(); updateTranslationControls(); });
+  $("#translate-target-language").addEventListener("change", updateTranslationControls);
+  $("#translate-run").addEventListener("click", runTranslation);
+  $("#translate-download").addEventListener("click", () => {
+    if (translationOutputBlob && translationOutputName) downloadToolFile(translationOutputBlob, translationOutputName, translationOutputBlob.type);
   });
   $("#close-templates").addEventListener("click", () => $("#template-dialog").close());
   $("#template-dialog").addEventListener("click", (event) => {
