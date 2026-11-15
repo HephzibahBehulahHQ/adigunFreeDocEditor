@@ -1827,7 +1827,7 @@
       option.disabled = !format.ready;
       target.append(option);
     }
-    target.value = compatible.some((format) => format.value === previous && format.ready) ? previous : "html";
+    const selected = compatible.find((format) => format.value === previous && format.ready) || compatible.find((format) => format.ready);\n    target.value = selected?.value || compatible[0]?.value || "";
   }
     function renderConversionState() {
     const selected = conversionSourceFile;
