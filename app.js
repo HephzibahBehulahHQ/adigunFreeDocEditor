@@ -1936,7 +1936,7 @@
       }
       $("#conversion-progress").textContent = "Building a preview and downloadable output…";
       await new Promise((resolve) => requestAnimationFrame(resolve));
-      const preview = document.createElement("div");
+      const markdownOutput = target === "markdown" ? htmlToMarkdown(html) : "";\n      const preview = document.createElement("div");
       preview.innerHTML = html;
       const previewDocument = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:15px/1.6 Arial,sans-serif;color:#182035;padding:24px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{border-collapse:collapse;max-width:100%}td,th{border:1px solid #c6cdd8;padding:6px}</style></head><body>' + html + "</body></html>";
       if (target === "markdown") {\n        conversionOutputBlob = new Blob([markdownOutput], { type: "text/markdown;charset=utf-8" });\n        conversionOutputName = safeFilename(file.name.replace(/\\.[^.]+$/, "")) + ".md";\n      } else if (target === "docx") {
