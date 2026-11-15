@@ -188,7 +188,8 @@ try {
   }
   assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["html", "docx", "markdown", "pdf", "png", "jpeg", "webp", "svg", "pptx"], "conversion lists the requested output formats");
   assert.equal(window.document.querySelector("#conversion-target").options[2].disabled, false, "Markdown output is available");
-  assert.equal(window.document.querySelector("#conversion-target").options[3].disabled, false, "PDF output is available");\n  assert.equal(window.document.querySelector("#conversion-target").options[7].disabled, false, "SVG document output is available");
+  assert.equal(window.document.querySelector("#conversion-target").options[3].disabled, false, "PDF output is available");
+  assert.equal(window.document.querySelector("#conversion-target").options[7].disabled, false, "SVG document output is available");
   const conversionInput = window.document.querySelector("#conversion-file-picker");
   const pptxInputFile = { name: "presentation.txt", size: 30, text: async () => "Title line\nFirst point\nSecond point\nThird point\nFourth point\nFifth point\nSixth point" };
   Object.defineProperty(conversionInput, "files", { configurable: true, value: [pptxInputFile] });
