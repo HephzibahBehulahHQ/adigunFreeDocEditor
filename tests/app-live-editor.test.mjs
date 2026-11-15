@@ -274,6 +274,35 @@ try {
 
 
   assert.ok(window.document.querySelector("#translate-target-language").options.length >= 70, "translation language pickers offer a broad language list");
+  assert.ok([...window.document.querySelectorAll("#translate-output-format option")].some((option) => option.value === "pdf"), "translation offers PDF output by default");
+  assert.match(window.document.querySelector("#translate-file").accept, /application\\/pdf/, "translation accepts PDF input");
+  assert.equal(window.document.querySelector("#translate-run").disabled, true, "translation stays disabled until a provider is configured");
+  window.fetch = async (url) => url.endsWith("/languages")
+    ? { ok: true, json: async () => [{ code: "en", name: "English", targets: ["fr"] }, { code: "fr", name: "French", targets: ["en"] }] }
+    : { ok: true, json: async () => ({ translatedText: "Bonjour" }) };
+  window.document.querySelector("#translate-provider-url").value = "https://translation.example";
+  window.document.querySelector("#translate-connect").click();
+  for (let attempt = 0; attempt < 100 && !window.document.querySelector("#translate-provider-status").textContent.includes("Connected"); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  const translationInput = window.document.querySelector("#translate-file");
+  Object.defineProperty(translationInput, "files", { configurable: true, value: [{ name: "letter.txt", size: 5, text: async () => "Hello" }] });
+  translationInput.dispatchEvent(new window.Event("change", { bubbles: true }));
+  window.document.querySelector("#translate-source-language").value = "en";
+  window.document.querySelector("#translate-source-language").dispatchEvent(new window.Event("change", { bubbles: true }));
+  window.document.querySelector("#translate-target-language").value = "fr";
+  window.document.querySelector("#translate-target-language").dispatchEvent(new window.Event("change", { bubbles: true }));
+  window.document.querySelector("#translate-run").click();
+  for (let attempt = 0; attempt < 100 && !window.document.querySelector("#translate-status").textContent.includes("Translation ready as PDF"); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.match(window.document.querySelector("#translate-status").textContent, /Translation ready as PDF/);
+  assert.equal(window.document.querySelector("#translate-download").disabled, false);
+  window.document.querySelector("#translate-download").click();
+  assert.equal(window.__downloads.at(-1), "letter.translated.pdf", "translation downloads a PDF output");
+  const translationPdf = await new Promise((resolve, reject) => {
+    const reader = new window.FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(window.__lastDownloadedBlob);
+  });
+  assert.equal(String.fromCharCode(...translationPdf.slice(0, 8)), "%PDF-1.4", "translated PDF download contains a PDF document");
   assert.equal(window.document.querySelector("#translate-run").disabled, true, "translation stays disabled until a provider is configured");
   const mergeInput = window.document.querySelector("#merge-files");
   const files = [

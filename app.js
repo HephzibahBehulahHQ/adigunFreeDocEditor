@@ -2051,29 +2051,30 @@
         translated.push(result.translatedText);
       }
       const outputText = translated.join("\n");
-      const extension = file.name.split(".").pop().toLowerCase();
-      const baseName = safeFilename(file.name.replace(/\.[^.]+$/, "")) || "translated-document";
-      if (extension === "pdf") {
-        const translatedHtml = "<!doctype html><html lang=\"" + escapeHTML(target) + "\"><meta charset=\"utf-8\"><title>" + escapeHTML(baseName) + "</title><body>" + conversionHTMLFromText(outputText) + "</body></html>";
+      const format = $("#translate-output-format").value || "pdf";
+      const baseName = safeFilename(file.name.replace(/\\.[^.]+$/, "")) || "translated-document";
+      const warnings = [];
+      if (format === "pdf") {
+        const pdf = makePdfBytes(conversionHTMLFromText(outputText), baseName + " translated");
+        translationOutputBlob = new Blob([pdf.bytes], { type: "application/pdf" });
+        translationOutputName = baseName + ".translated.pdf";
+        warnings.push("PDF output uses a simple text layout; source formatting is not retained.");
+        if (pdf.unsupportedCharacters) warnings.push("Some characters are outside the built-in PDF font encoding and may be replaced. Choose Word or HTML for broader script coverage.");
+      } else if (format === "html") {
+        const translatedHtml = "<!doctype html><html lang=\\"" + escapeHTML(target) + "\\"><meta charset=\\"utf-8\\"><title>" + escapeHTML(baseName) + "</title><body>" + conversionHTMLFromText(outputText) + "</body></html>";
         translationOutputBlob = new Blob([translatedHtml], { type: "text/html;charset=utf-8" });
         translationOutputName = baseName + ".translated.html";
-      } else if (["html", "htm"].includes(extension)) {
-        const translatedHtml = "<!doctype html><html lang=\"" + escapeHTML(target) + "\"><meta charset=\"utf-8\"><title>" + escapeHTML(baseName) + "</title><body>" + conversionHTMLFromText(outputText) + "</body></html>";
-        translationOutputBlob = new Blob([translatedHtml], { type: "text/html;charset=utf-8" });
-        translationOutputName = baseName + ".translated.html";
-      } else if (["md", "markdown"].includes(extension)) {
+      } else if (format === "markdown") {
         translationOutputBlob = new Blob([outputText], { type: "text/markdown;charset=utf-8" });
         translationOutputName = baseName + ".translated.md";
-      } else if (extension === "docx") {
+      } else if (format === "docx") {
         translationOutputBlob = new Blob([await makeTranslationDocx(outputText)], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
         translationOutputName = baseName + ".translated.docx";
       } else {
         translationOutputBlob = new Blob([outputText], { type: "text/plain;charset=utf-8" });
         translationOutputName = baseName + ".translated.txt";
       }
-      status.textContent = extension === "pdf"
-        ? "Translation ready as HTML to preserve multilingual text. The original PDF layout is not retained."
-        : "Translation ready. Formatting was simplified; download the translated document below.";
+      status.textContent = "Translation ready as " + format.toUpperCase() + ". " + warnings.join(" ") + (warnings.length ? " " : "") + "Formatting was simplified; download the translated document below.";
       downloadButton.disabled = false;
     } catch (error) {
       status.textContent = error.message || "Translation failed. Check the provider connection and try again.";
@@ -5637,6 +5638,7 @@
   $("#translate-connect").addEventListener("click", connectTranslationProvider);
   $("#translate-source-language").addEventListener("change", () => { syncTranslationTargets(); updateTranslationControls(); });
   $("#translate-target-language").addEventListener("change", updateTranslationControls);
+  $("#translate-output-format").addEventListener("change", () => { translationOutputBlob = undefined; translationOutputName = ""; $("#translate-status").textContent = "Output format changed. Translate again to prepare the selected format."; updateTranslationControls(); });
   $("#translate-run").addEventListener("click", runTranslation);
   $("#translate-download").addEventListener("click", () => {
     if (translationOutputBlob && translationOutputName) downloadToolFile(translationOutputBlob, translationOutputName, translationOutputBlob.type);
