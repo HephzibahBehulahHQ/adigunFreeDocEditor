@@ -2293,8 +2293,7 @@
   }
 
   function makeImagePdfBytes(jpegBytes, imageWidth, imageHeight) {
-    const encoder = new TextEncoder();
-    const encode = (value) => encoder.encode(value);
+    const encode = (value) => Uint8Array.from(String(value), (character) => character.charCodeAt(0) & 255);
     const join = (parts) => {
       const output = new Uint8Array(parts.reduce((length, part) => length + part.length, 0));
       let offset = 0;
