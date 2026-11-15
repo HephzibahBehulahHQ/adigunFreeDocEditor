@@ -167,6 +167,31 @@ try {
   const savedTables = findStoredTable(savedWithTable?.content?.content || []);
   const countRows = (nodes) => nodes.reduce((count, node) => count + (node.tag === "tr" ? 1 : 0) + countRows(node.children || []), 0);
   assert.equal(countRows(savedTables.at(-1)?.children || []), 3, "inserted table rows autosave to the browser document model");
+  const toolViews = [
+    ["convert", "conversion-workspace", "Convert File"],
+    ["merge", "merge-workspace", "Merge documents"],
+    ["compress", "compress-workspace", "Compress a file"],
+    ["unzip", "unzip-workspace", "Unzip Files"],
+    ["translate", "translate-workspace", "Translate a document"],
+  ];
+  for (const [view, workspaceId, title] of toolViews) {
+    window.document.querySelector(`[data-view="${view}"]`).click();
+    assert.equal(window.document.querySelector("#stage-title").textContent, title, `${view} opens its own titled tool workspace`);
+    assert.equal(window.document.querySelector("#" + workspaceId).hidden, false, `${view} workspace is visible`);
+    assert.equal(window.document.querySelectorAll(".file-tool-workspace:not([hidden])").length, view === "convert" ? 0 : 1, "only the selected file tool is visible");
+  }
+  assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["html", "docx", "markdown", "pdf", "png", "svg", "pptx"], "conversion lists the requested output formats");
+  assert.equal(window.document.querySelector("#conversion-target").options[2].disabled, true, "formats without converters are clearly unavailable");
+  assert.ok(window.document.querySelector("#translate-target-language").options.length >= 70, "translation language pickers offer a broad language list");
+  assert.equal(window.document.querySelector("#translate-run").disabled, true, "translation stays disabled until a provider is configured");
+  const mergeInput = window.document.querySelector("#merge-files");
+  const files = [new window.File(["one"], "one.docx"), new window.File(["two"], "two.docx"), new window.File(["three"], "three.docx")];
+  Object.defineProperty(mergeInput, "files", { configurable: true, value: files });
+  mergeInput.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert.equal(window.document.querySelectorAll("#merge-file-order .tool-file-row").length, 3, "merge files appear in an ordered queue");
+  const moveDown = window.document.querySelector('#merge-file-order [data-merge-action="down"]');
+  moveDown.click();
+  assert.equal(window.document.querySelector("#merge-file-order .tool-file-row span").textContent, "two.docx", "merge queue supports ordering files");
   window.document.querySelector('[data-view="recent"]').click();
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(host.querySelector(".ProseMirror"), null, "leaving the document view destroys the live editor");
