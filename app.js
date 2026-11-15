@@ -1765,7 +1765,7 @@
     merge: { title: "Merge documents", detail: "File merge", summary: "Choose and order multiple documents." },
     compress: { title: "Compress a file", detail: "File compression", summary: "Choose a file and compression level." },
     unzip: { title: "Unzip Files", detail: "ZIP extraction", summary: "Choose an archive to extract." },
-    translate: { title: "Translate", detail: "Document translation", summary: "Select a document and language pair." },
+    translate: { title: "Translate a document", detail: "Document translation", summary: "Select a document and language pair." },
   };
   const translationLanguageCodes = "af sq am ar hy az eu be bn bs bg ca zh zh-Hans zh-Hant hr cs da nl en et fi fr gl ka de el gu he hi hu is id ga it ja jv kn kk km ko lo lv lt mk ms ml mt mr mn ne no fa pl pt pa ro ru sr si sk sl so es sw sv tl ta te th tr uk ur uz vi cy yo zu".split(" ");
   function populateTranslationLanguages() {
