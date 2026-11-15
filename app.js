@@ -1529,10 +1529,13 @@
   function setWorkspaceMode(mode) {
     const isDocument = mode === "document";
     const isConversion = mode === "conversion";
+    const fileToolModes = ["conversion", "merge", "compress", "unzip", "translate"];
+    const isFileTool = fileToolModes.includes(mode);
     if (!isDocument) destroyLiveEditor();
-    $("#workspace").classList.toggle("mode-no-document-title", ["landing", "list", "conversion"].includes(mode));
+    $("#workspace").classList.toggle("mode-no-document-title", ["landing", "list", "conversion", "merge", "compress", "unzip", "translate"].includes(mode));
     $("#conversion-workspace").hidden = !isConversion;
-    if (!isConversion) { editor.hidden = false; $(".page-footer").hidden = false; }
+    for (const tool of ["merge", "compress", "unzip", "translate"]) $("#" + tool + "-workspace").hidden = mode !== tool;
+    if (!isFileTool) { editor.hidden = false; $(".page-footer").hidden = false; }
     $("#document-ruler").hidden = !isDocument;
     if (!isDocument) $("#editor-card").classList.remove("paper-layout");
     if (liveEditor) liveEditor.setEditable(isDocument);
@@ -1549,10 +1552,10 @@
     $("#undo").hidden = !isDocument;
     $("#redo").hidden = !isDocument;
     $("#save-document").hidden = !isDocument;
-    $("#export-html").hidden = ["list", "landing", "conversion"].includes(mode);
+    $("#export-html").hidden = ["list", "landing", "conversion", "merge", "compress", "unzip", "translate"].includes(mode);
     $("#export-docx").hidden = !isDocument;
     $("#export-html").lastElementChild.textContent = mode === "pdf" ? "Download PDF" : "Export HTML";
-    if (isConversion) { editor.hidden = true; $(".page-footer").hidden = true; }
+    if (isFileTool) { editor.hidden = true; $(".page-footer").hidden = true; }
     activeWorkspaceMode = mode;
     renderOpenDocumentTabs();
     updateParagraphRuler();
@@ -1757,20 +1760,77 @@
     }
   }
 
-  function showConversionWorkspace() {
-    setWorkspaceMode("conversion");
+  const fileToolTitles = {
+    conversion: { title: "Convert File", detail: "Local document conversion", summary: "Choose a source file and output format." },
+    merge: { title: "Merge documents", detail: "File merge", summary: "Choose and order multiple documents." },
+    compress: { title: "Compress a file", detail: "File compression", summary: "Choose a file and compression level." },
+    unzip: { title: "Unzip Files", detail: "ZIP extraction", summary: "Choose an archive to extract." },
+    translate: { title: "Translate a document", detail: "Document translation", summary: "Select a document and language pair." },
+  };
+  const translationLanguageCodes = "af sq am ar hy az eu be bn bs bg ca zh zh-Hans zh-Hant hr cs da nl en et fi fr gl ka de el gu he hi hu is id ga it ja jv kn kk km ko lo lv lt mk ms ml mt mr mn ne no fa pl pt pa ro ru sr si sk sl so es sw sv tl ta te th tr uk ur uz vi cy yo zu".split(" ");
+  function populateTranslationLanguages() {
+    const source = $("#translate-source-language");
+    const target = $("#translate-target-language");
+    if (!source || source.dataset.ready === "true") return;
+    const names = typeof Intl.DisplayNames === "function" ? new Intl.DisplayNames([navigator.language || "en"], { type: "language" }) : null;
+    for (const code of translationLanguageCodes) {
+      const label = names?.of(code) || code.toUpperCase();
+      for (const select of [source, target]) {
+        const option = document.createElement("option");
+        option.value = code;
+        option.textContent = label;
+        select.append(option);
+      }
+    }
+    source.dataset.ready = "true";
+  }
+  function showFileToolWorkspace(view) {
+    const mode = view === "convert" ? "conversion" : view;
+    const tool = fileToolTitles[mode];
+    if (!tool) return;
+    setWorkspaceMode(mode);
     $("#editor-card").classList.remove("landing", "pdf-preview");
-    $("#stage-title").textContent = "Convert files";
-    $("#file-kind").textContent = "Runs locally in this browser";
-    $("#page-count").textContent = "DOCX, TXT, Markdown, HTML → HTML or Word";
-    $("#word-count").textContent = "Choose a source file";
-    renderConversionState();
+    $("#stage-title").textContent = tool.title;
+    $("#file-kind").textContent = tool.detail;
+    $("#page-count").textContent = tool.summary;
+    $("#word-count").textContent = mode === "translate" ? "Provider not connected" : "File tools";
+    if (mode === "conversion") renderConversionState();
+    if (mode === "translate") populateTranslationLanguages();
+  }
+  function showConversionWorkspace() {
+    showFileToolWorkspace("conversion");
   }
 
-  function renderConversionState() {
+  function renderConversionTargets(file) {
+    const target = $("#conversion-target");
+    const previous = target.value;
+    const extension = file?.name.split(".").pop().toLowerCase() || "";
+    const textSources = ["docx", "txt", "md", "markdown", "html", "htm"];
+    const formats = [
+      { value: "html", label: "HTML document", sources: textSources, ready: true },
+      { value: "docx", label: "Word document (.docx)", sources: textSources, ready: true },
+      { value: "markdown", label: "Markdown (.md)", sources: textSources, ready: false },
+      { value: "pdf", label: "PDF document", sources: textSources, ready: false },
+      { value: "png", label: "Image (PNG)", sources: textSources, ready: false },
+      { value: "svg", label: "Illustration (SVG)", sources: textSources, ready: false },
+      { value: "pptx", label: "PowerPoint (.pptx)", sources: textSources, ready: false },
+    ];
+    const compatible = formats.filter((format) => !extension || format.sources.includes(extension));
+    target.replaceChildren();
+    for (const format of compatible) {
+      const option = document.createElement("option");
+      option.value = format.value;
+      option.textContent = format.label + (format.ready ? "" : " — in progress");
+      option.disabled = !format.ready;
+      target.append(option);
+    }
+    target.value = compatible.some((format) => format.value === previous && format.ready) ? previous : "html";
+  }
+    function renderConversionState() {
     const selected = conversionSourceFile;
     $("#conversion-source-name").textContent = selected ? selected.name : "No source selected";
     $("#conversion-source-type").textContent = selected ? selected.name.split(".").pop().toUpperCase() : "Choose DOCX, TXT, Markdown, or HTML";
+    renderConversionTargets(selected);
     $("#conversion-run").disabled = !selected;
     $("#conversion-progress").textContent = selected ? "Ready to convert." : "Select a local file to begin.";
     clearConversionResult();
@@ -4593,7 +4653,7 @@
       $("#template-dialog").showModal();
     }
     else if (button.dataset.view === "settings") openSettings(button);
-    else if (button.dataset.view === "convert") showConversionWorkspace();
+    else if (["convert", "merge", "compress", "unzip", "translate"].includes(button.dataset.view)) showFileToolWorkspace(button.dataset.view);
     else showDocumentList(button.dataset.view);
   });
   editor.addEventListener("click", (event) => {
@@ -4608,6 +4668,64 @@
     if (event.target.closest("#landing-all")) document.querySelector('[data-view="recent"]')?.click();
     const trashButton = event.target.closest("[data-trash-id]"); if (trashButton) markDeleted(trashButton.dataset.trashId, true);
     const restoreButton = event.target.closest("[data-restore-id]"); if (restoreButton) markDeleted(restoreButton.dataset.restoreId, false);
+  });
+  let mergeQueue = [];
+  function renderMergeQueue() {
+    const list = $("#merge-file-order");
+    list.replaceChildren();
+    if (!mergeQueue.length) {
+      const empty = document.createElement("li");
+      empty.className = "tool-file-empty";
+      empty.textContent = "Files will appear here in merge order.";
+      list.append(empty);
+    }
+    mergeQueue.forEach((file, index) => {
+      const row = document.createElement("li");
+      row.className = "tool-file-row";
+      const name = document.createElement("span");
+      name.textContent = file.name;
+      const actions = document.createElement("span");
+      actions.className = "tool-file-order-actions";
+      for (const [action, label, disabled] of [["up", "Move up", index === 0], ["down", "Move down", index === mergeQueue.length - 1], ["remove", "Remove", false]]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = action === "up" ? "↑" : action === "down" ? "↓" : "×";
+        button.setAttribute("aria-label", label + " " + file.name);
+        button.dataset.mergeAction = action;
+        button.dataset.mergeIndex = String(index);
+        button.disabled = disabled;
+        actions.append(button);
+      }
+      row.append(name, actions);
+      list.append(row);
+    });
+    $("#merge-run").disabled = mergeQueue.length < 2;
+    $("#merge-status").textContent = mergeQueue.length < 2 ? "Choose at least two files. Reordering is available now; merging is being connected." : mergeQueue.length + " files are ready in this order. Merge/download will be enabled in the next step.";
+  }
+    $("#merge-files").addEventListener("change", (event) => { mergeQueue = Array.from(event.currentTarget.files || []); renderMergeQueue(); });
+  $("#merge-file-order").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-merge-action]");
+    if (!button) return;
+    const index = Number(button.dataset.mergeIndex);
+    const next = button.dataset.mergeAction === "up" ? index - 1 : button.dataset.mergeAction === "down" ? index + 1 : -1;
+    if (button.dataset.mergeAction === "remove") mergeQueue.splice(index, 1);
+    else if (next >= 0 && next < mergeQueue.length) [mergeQueue[index], mergeQueue[next]] = [mergeQueue[next], mergeQueue[index]];
+    renderMergeQueue();
+  });
+  $("#compress-file").addEventListener("change", (event) => {
+    const file = event.currentTarget.files?.[0];
+    $("#compress-file-name").textContent = file?.name || "No file selected";
+    $("#compress-file-size").textContent = file ? (file.size / 1024).toFixed(1) + " KB · Original preserved" : "Choose a file to begin.";
+  });
+  $("#unzip-file").addEventListener("change", (event) => {
+    const file = event.currentTarget.files?.[0];
+    $("#unzip-file-name").textContent = file?.name || "No archive selected";
+    $("#unzip-status").textContent = file ? "Archive selected. Extraction will be enabled in the next step." : "Choose a ZIP file to view its contents.";
+  });
+  $("#translate-file").addEventListener("change", (event) => {
+    const file = event.currentTarget.files?.[0];
+    $("#translate-file-name").textContent = file?.name || "No document selected";
+    $("#translate-file-type").textContent = file ? file.name.split(".").pop().toUpperCase() + " · Stored on this device" : "Choose a local document.";
   });
   $("#close-templates").addEventListener("click", () => $("#template-dialog").close());
   $("#template-dialog").addEventListener("click", (event) => {

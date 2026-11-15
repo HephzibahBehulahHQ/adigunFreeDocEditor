@@ -17,7 +17,12 @@
         <p class="sidebar-caption">DOCUMENT WORKSPACE</p>
         <button class="nav-item primary-nav" id="new-document" type="button"><span class="nav-icon" aria-hidden="true">＋</span>New document</button>
         <button class="nav-item" id="open-document" type="button"><span class="nav-icon" aria-hidden="true">↥</span>Open a file</button>
-        <button class="nav-item" data-view="convert" type="button"><span class="nav-icon" aria-hidden="true">⇄</span>Convert files</button>
+        <p class="sidebar-caption">FILE TOOLS</p>
+        <button class="nav-item" data-view="convert" type="button"><span class="nav-icon" aria-hidden="true">⇄</span>Convert File</button>
+        <button class="nav-item" data-view="merge" type="button"><span class="nav-icon" aria-hidden="true">⊕</span>Merge</button>
+        <button class="nav-item" data-view="compress" type="button"><span class="nav-icon" aria-hidden="true">⌁</span>Compress</button>
+        <button class="nav-item" data-view="unzip" type="button"><span class="nav-icon" aria-hidden="true">↥</span>Unzip Files</button>
+        <button class="nav-item" data-view="translate" type="button"><span class="nav-icon" aria-hidden="true">文</span>Translate</button>
         <button class="nav-item active" data-view="recent" aria-current="page" type="button"><span class="nav-icon" aria-hidden="true">◷</span>Recent</button>
         <button class="nav-item" data-view="documents" type="button"><span class="nav-icon" aria-hidden="true">▤</span>My documents</button>
         <button class="nav-item" data-view="templates" type="button"><span class="nav-icon" aria-hidden="true">▧</span>Templates</button>
@@ -92,20 +97,83 @@
               <article class="document-page" id="document" contenteditable="true" role="textbox" aria-label="Document content" aria-multiline="true" spellcheck="true"><p><br /></p></article>
               <footer class="page-footer"><span class="document-stats" aria-label="Document statistics"><span id="word-count">0 words</span><span id="character-count">0 characters</span></span><span class="page-footer-right"><button class="language-indicator" id="spellcheck-language-indicator" type="button" title="Spellcheck language: English" aria-label="Spellcheck language: English. Open settings.">English</button><span class="footer-divider"></span><button class="zoom-button zoom-fit" id="zoom-fit" type="button" aria-label="Fit document to width" title="Fit document to width">Fit</button><button class="zoom-button" id="zoom-out" type="button" aria-label="Zoom out">−</button><output id="zoom-value" aria-live="polite" aria-atomic="true">100%</output><button class="zoom-button" id="zoom-in" type="button" aria-label="Zoom in">＋</button></span></footer>
               <section class="conversion-workspace" id="conversion-workspace" aria-labelledby="conversion-title" hidden>
-                <header class="conversion-heading"><span class="eyebrow">LOCAL FILE TOOLS</span><h2 id="conversion-title">Convert a document</h2><p>Choose a DOCX, TXT, Markdown, or HTML file, review the result, and download an HTML or Word file. Processing stays in this browser.</p></header>
+                <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="conversion-title">Convert File</h2><p>Select a source document and choose a compatible output format. Unsupported formats remain disabled until their converters are ready.</p></header>
                 <div class="conversion-grid">
                   <section class="conversion-card" aria-labelledby="conversion-source-title">
                     <div class="conversion-step"><span>1</span><div><h3 id="conversion-source-title">Choose a source</h3><p>PDF is view-only and cannot be converted in this build.</p></div></div>
                     <button class="button button-outline conversion-select" id="conversion-select-source" type="button">Choose source file</button>
                     <div class="conversion-source-summary"><strong id="conversion-source-name">No source selected</strong><span id="conversion-source-type">Choose DOCX, TXT, Markdown, or HTML</span></div>
                     <label class="conversion-target-label" for="conversion-target">Convert to</label>
-                    <select class="tool-select conversion-target" id="conversion-target"><option value="html">HTML document</option><option value="docx">Word document (.docx)</option></select>
+                    <select class="tool-select conversion-target" id="conversion-target" aria-label="Output file format">
+                      <option value="html">HTML document</option><option value="docx">Word document (.docx)</option>
+                      <option value="markdown" disabled>Markdown (.md) — in progress</option>
+                      <option value="pdf" disabled>PDF document — in progress</option>
+                      <option value="png" disabled>Image (PNG) — in progress</option>
+                      <option value="svg" disabled>Illustration (SVG) — in progress</option>
+                      <option value="pptx" disabled>PowerPoint (.pptx) — in progress</option>
+                    </select>
                     <div class="conversion-warning" id="conversion-warning" role="note" hidden></div>
                     <div class="conversion-progress" id="conversion-progress" role="status" aria-live="polite">Select a local file to begin.</div>
                     <div class="conversion-actions"><button class="button button-primary" id="conversion-run" type="button" disabled>Convert</button><button class="button button-outline" id="conversion-download" type="button" disabled>Download result</button></div>
                     <p class="conversion-result-name" id="conversion-result-name"></p>
                   </section>
                   <section class="conversion-preview-card" aria-labelledby="conversion-preview-title"><div><span class="eyebrow">RESULT PREVIEW</span><h3 id="conversion-preview-title">Preview</h3></div><p class="conversion-preview-empty">Your converted file will appear here for review.</p><iframe class="conversion-preview" id="conversion-preview" title="Converted document preview" sandbox="" hidden></iframe></section>
+                </div>
+              </section>
+              <section class="conversion-workspace file-tool-workspace" id="merge-workspace" aria-labelledby="merge-title" hidden>
+                <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="merge-title">Merge documents</h2><p>Choose multiple files, arrange their order, then download one combined document. The source files stay unchanged.</p></header>
+                <div class="conversion-grid file-tool-grid">
+                  <section class="conversion-card" aria-labelledby="merge-source-title">
+                    <div class="conversion-step"><span>1</span><div><h3 id="merge-source-title">Choose documents</h3><p>Word, HTML, Markdown, and text files are supported by the first merge release.</p></div></div>
+                    <label class="tool-file-label" for="merge-files">Add files</label><input class="tool-file-input" id="merge-files" type="file" multiple accept=".docx,.txt,.md,.markdown,.html,.htm" />
+                    <ol class="tool-file-list" id="merge-file-order" aria-label="Merge order"><li class="tool-file-empty">Files will appear here in merge order.</li></ol>
+                    <p class="conversion-progress" id="merge-status" role="status" aria-live="polite">Choose at least two files. Reordering is available now; merging is being connected.</p>
+                    <div class="conversion-actions"><button class="button button-primary" id="merge-run" type="button" disabled>Merge documents</button></div>
+                  </section>
+                  <section class="conversion-preview-card file-tool-info"><div><span class="eyebrow">OUTPUT</span><h3>One combined document</h3></div><p class="conversion-preview-empty">The merged file will be prepared in your browser and offered as a download.</p></section>
+                </div>
+              </section>
+              <section class="conversion-workspace file-tool-workspace" id="compress-workspace" aria-labelledby="compress-title" hidden>
+                <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="compress-title">Compress a file</h2><p>Choose a file and a compression level. Your original file will remain unchanged.</p></header>
+                <div class="conversion-grid file-tool-grid">
+                  <section class="conversion-card" aria-labelledby="compress-source-title">
+                    <div class="conversion-step"><span>1</span><div><h3 id="compress-source-title">Choose a file</h3><p>Select a local file to prepare a smaller download.</p></div></div>
+                    <label class="tool-file-label" for="compress-file">Upload a file</label><input class="tool-file-input" id="compress-file" type="file" />
+                    <div class="conversion-source-summary"><strong id="compress-file-name">No file selected</strong><span id="compress-file-size">Choose a file to begin.</span></div>
+                    <label class="conversion-target-label" for="compress-level">Compression level</label><select class="tool-select conversion-target" id="compress-level"><option value="fast">Fast</option><option value="balanced" selected>Balanced</option><option value="maximum">Maximum</option></select>
+                    <p class="conversion-progress" id="compress-status" role="status" aria-live="polite">Compression is being connected.</p>
+                    <div class="conversion-actions"><button class="button button-primary" id="compress-run" type="button" disabled>Compress and download</button></div>
+                  </section>
+                  <section class="conversion-preview-card file-tool-info"><div><span class="eyebrow">COMPRESSION</span><h3>Choose a level</h3></div><p class="conversion-preview-empty">Fast prioritizes speed. Maximum prioritizes a smaller result and may take longer.</p></section>
+                </div>
+              </section>
+              <section class="conversion-workspace file-tool-workspace" id="unzip-workspace" aria-labelledby="unzip-title" hidden>
+                <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="unzip-title">Unzip files</h2><p>Extract a ZIP archive, review its contents, and download files individually or together.</p></header>
+                <div class="conversion-grid file-tool-grid">
+                  <section class="conversion-card" aria-labelledby="unzip-source-title">
+                    <div class="conversion-step"><span>1</span><div><h3 id="unzip-source-title">Choose a ZIP file</h3><p>Extraction will happen in this browser.</p></div></div>
+                    <label class="tool-file-label" for="unzip-file">Upload ZIP archive</label><input class="tool-file-input" id="unzip-file" type="file" accept=".zip,application/zip" />
+                    <div class="conversion-source-summary"><strong id="unzip-file-name">No archive selected</strong><span id="unzip-status">Choose a ZIP file to view its contents.</span></div>
+                  </section>
+                  <section class="conversion-preview-card file-tool-info"><div><span class="eyebrow">EXTRACTED FILES</span><h3>Archive contents</h3></div><ul class="tool-file-list" id="unzip-file-list"><li class="tool-file-empty">Extracted files will appear here.</li></ul><div class="conversion-actions"><button class="button button-primary" id="unzip-download-all" type="button" disabled>Download all as ZIP</button></div></section>
+                </div>
+              </section>
+              <section class="conversion-workspace file-tool-workspace" id="translate-workspace" aria-labelledby="translate-title" hidden>
+                <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="translate-title">Translate a document</h2><p>Choose a document, its original language, and the language you want. Translation will run after a provider is connected.</p></header>
+                <div class="conversion-grid file-tool-grid">
+                  <section class="conversion-card" aria-labelledby="translate-source-title">
+                    <div class="conversion-step"><span>1</span><div><h3 id="translate-source-title">Choose a document</h3><p>Text documents are supported by the first translation release.</p></div></div>
+                    <label class="tool-file-label" for="translate-file">Upload document</label><input class="tool-file-input" id="translate-file" type="file" accept=".docx,.txt,.md,.markdown,.html,.htm" />
+                    <div class="conversion-source-summary"><strong id="translate-file-name">No document selected</strong><span id="translate-file-type">Choose a local document.</span></div>
+                    <label class="conversion-target-label" for="translate-source-language">Original language</label><select class="tool-select conversion-target" id="translate-source-language"><option value="auto">Auto-detect</option></select>
+                    <p class="conversion-progress" id="translate-status" role="status" aria-live="polite">Translation is not available until a translation provider is configured.</p>
+                  </section>
+                  <section class="conversion-card" aria-labelledby="translate-target-title">
+                    <div class="conversion-step"><span>2</span><div><h3 id="translate-target-title">Translation language</h3><p>Choose a target language, then download the translated document when it is ready.</p></div></div>
+                    <label class="conversion-target-label" for="translate-target-language">Translate to</label><select class="tool-select conversion-target" id="translate-target-language"><option value="">Choose a language</option></select>
+                    <div class="conversion-actions"><button class="button button-primary" id="translate-run" type="button" disabled>Translate</button><button class="button button-outline" id="translate-download" type="button" disabled>Download translation</button></div>
+                    <p class="file-tool-note">The translation service is not connected. Your document is not uploaded to a provider.</p>
+                  </section>
                 </div>
               </section>
             </div>

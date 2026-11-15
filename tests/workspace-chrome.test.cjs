@@ -10,7 +10,7 @@ const modes = app.match(/classList\.toggle\("mode-no-document-title", \[([^\]]+)
 assert.ok(modes, "workspace modes control document-only title and save chrome");
 assert.deepEqual(
   [...modes[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]),
-  ["landing", "list", "conversion"],
+  ["landing", "list", "conversion", "merge", "compress", "unzip", "translate"],
   "only views without an open document hide the document title and save state",
 );
 assert.match(
