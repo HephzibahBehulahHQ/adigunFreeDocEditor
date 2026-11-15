@@ -348,7 +348,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
   .landing-primary{grid-column:1/-1}
   .landing-primary,.landing-secondary{min-width:0;white-space:normal}
 }
-@media(max-width:360px){
+@media(max-width:420px){
   .landing-actions{grid-template-columns:1fr}
   .landing-primary{grid-column:1}
 }
