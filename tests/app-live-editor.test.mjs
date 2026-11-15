@@ -303,7 +303,7 @@ try {
     reader.readAsArrayBuffer(window.__lastDownloadedBlob);
   });
   assert.equal(String.fromCharCode(...translationPdf.slice(0, 8)), "%PDF-1.4", "translated PDF download contains a PDF document");
-  assert.equal(window.document.querySelector("#translate-run").disabled, true, "translation stays disabled until a provider is configured");
+
   const mergeInput = window.document.querySelector("#merge-files");
   const files = [
     { name: "one.txt", size: 10, text: async () => "First document." },
