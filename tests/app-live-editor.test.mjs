@@ -11,6 +11,8 @@ const dom = new JSDOM(fs.readFileSync(path.join(root, "index.html"), "utf8"), {
   url: "https://example.test/",
 });
 const { window } = dom;
+window.TextDecoder = globalThis.TextDecoder;
+window.TextEncoder = globalThis.TextEncoder;
 window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
 window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
 window.Element.prototype.scrollIntoView = () => {};
