@@ -201,6 +201,12 @@ try {
   assert.ok(window.__pptxParts["ppt/slides/slide1.xml"] && window.__pptxParts["ppt/slides/slide2.xml"], "long text is split across valid PowerPoint slide parts");
   assert.match(window.fflate.strFromU8(window.__pptxParts["ppt/slides/slide1.xml"]), /presentation/);
   assert.match(window.fflate.strFromU8(window.__pptxParts["[Content_Types].xml"]), /presentationml.presentation.main\+xml/);
+  for (const [name, bytes] of Object.entries(window.__pptxParts)) {
+    if (!name.endsWith(".xml") && !name.endsWith(".rels")) continue;
+    const documentXml = new window.DOMParser().parseFromString(window.fflate.strFromU8(bytes), "application/xml");
+    assert.equal(documentXml.querySelector("parsererror"), null, name + " is well-formed XML");
+  }
+  window.document.querySelector("#conversion-download").click();
   assert.equal(window.__downloads.at(-1), "presentation.pptx", "PowerPoint conversion offers a downloadable .pptx");
   window.fflate.zip = realZip;
 
