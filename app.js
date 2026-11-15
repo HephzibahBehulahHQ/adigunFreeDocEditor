@@ -4969,6 +4969,85 @@
   }
 
   let mergeQueue = [];
+  function mergeQueueError() {
+    if (mergeQueue.length < 2) return "Choose at least two documents.";
+    if (mergeQueue.length > 20) return "Merge up to 20 documents at a time.";
+    const allowed = /\.(docx|txt|md|markdown|html|htm)$/i;
+    if (mergeQueue.some((file) => !allowed.test(file.name))) return "Merge supports DOCX, TXT, Markdown, and HTML files.";
+    if (mergeQueue.some((file) => file.size > 20 * 1024 * 1024)) return "Each document must be 20 MB or smaller.";
+    if (mergeQueue.reduce((total, file) => total + file.size, 0) > 80 * 1024 * 1024) return "Selected documents must total 80 MB or less.";
+    return "";
+  }
+
+  async function mergeDocuments() {
+    const validationError = mergeQueueError();
+    if (validationError) { $("#merge-status").textContent = validationError; return; }
+    const button = $("#merge-run");
+    button.disabled = true;
+    $("#merge-status").textContent = "Reading documents in the selected order…";
+    const merged = document.createElement("div");
+    const warnings = new Set();
+    let totalExpandedBytes = 0;
+    try {
+      for (const file of mergeQueue) {
+        const extension = file.name.split(".").pop().toLowerCase();
+        if (file.size > 20 * 1024 * 1024) throw new Error(file.name + " exceeds the 20 MB per-document limit.");
+        let html;
+        if (extension === "docx") {
+          const buffer = await file.arrayBuffer();
+          const archive = inspectDocxArchive(buffer);
+          totalExpandedBytes += Object.values(archive.partEntries).reduce((sum, part) => sum + part.expanded, 0);
+          if (totalExpandedBytes > 250 * 1024 * 1024) throw new Error("The selected Word documents expand beyond the 250 MB safety limit.");
+          if (!window.mammoth?.convertToHtml) throw new Error("The local Word import module did not load. Reload and try again.");
+          const converted = await window.mammoth.convertToHtml({ arrayBuffer: buffer });
+          const sanitized = sanitizeDocxHtml(converted.value);
+          html = sanitized.html;
+          if (sanitized.removed) warnings.add("Some unsupported or unsafe Word content was omitted.");
+          if (converted.messages.some((message) => message.type === "warning")) warnings.add("Some Word compatibility details were simplified.");
+          warnings.add("Word comments, tracked changes, page layout, and unsupported formatting may not be preserved.");
+        } else {
+          if (file.size > 12 * 1024 * 1024) throw new Error(file.name + " exceeds the 12 MB text and HTML limit.");
+          const source = await file.text();
+          if (extension === "html" || extension === "htm") {
+            const sanitized = sanitizeDocxHtml(source);
+            html = sanitized.html;
+            if (sanitized.removed) warnings.add("Some unsupported or unsafe HTML content was omitted.");
+          } else {
+            html = conversionHTMLFromText(source);
+            if (extension === "md" || extension === "markdown") warnings.add("Markdown is imported as plain text; its formatting is not rendered.");
+          }
+        }
+        const section = document.createElement("section");
+        const heading = document.createElement("h1");
+        heading.textContent = file.name;
+        section.append(heading);
+        const parsed = new DOMParser().parseFromString("<main>" + html + "</main>", "text/html");
+        const content = parsed.querySelector("main");
+        if (content) section.append(...Array.from(content.childNodes).map((node) => document.importNode(node, true)));
+        merged.append(section);
+      }
+      $("#merge-status").textContent = "Building the combined Word document…";
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const wordPackage = makeWordPackage(merged, {
+        paper: defaultPageLayout.paper,
+        orientation: defaultPageLayout.orientation,
+        margins: defaultPageLayout.margins,
+        pageNumbers: false,
+        header: "",
+        footer: "",
+      });
+      if (wordPackage.unsupported.length) warnings.add("The combined Word document omits unsupported content: " + wordPackage.unsupported.join(", ") + ".");
+      const output = makeStoredZip(wordPackage.files);
+      downloadToolFile(output, "merged-documents.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      const warningText = warnings.size ? " " + Array.from(warnings).join(" ") : "";
+      $("#merge-status").textContent = "Merge complete. Download started for " + mergeQueue.length + " documents." + warningText;
+    } catch (error) {
+      $("#merge-status").textContent = "Merge failed: " + (error.message || "The documents could not be merged.");
+    } finally {
+      button.disabled = Boolean(mergeQueueError());
+    }
+  }
+
   function renderMergeQueue() {
     const list = $("#merge-file-order");
     list.replaceChildren();
@@ -4998,10 +5077,12 @@
       row.append(name, actions);
       list.append(row);
     });
-    $("#merge-run").disabled = mergeQueue.length < 2;
-    $("#merge-status").textContent = mergeQueue.length < 2 ? "Choose at least two files. Reordering is available now; merging is being connected." : mergeQueue.length + " files are ready in this order. Merge/download will be enabled in the next step.";
+    const validationError = mergeQueueError();
+    $("#merge-run").disabled = Boolean(validationError);
+    $("#merge-status").textContent = validationError || (mergeQueue.length + " documents are ready in this order.");
   }
     $("#merge-files").addEventListener("change", (event) => { mergeQueue = Array.from(event.currentTarget.files || []); renderMergeQueue(); });
+  $("#merge-run").addEventListener("click", mergeDocuments);
   $("#merge-file-order").addEventListener("click", (event) => {
     const button = event.target.closest("[data-merge-action]");
     if (!button) return;

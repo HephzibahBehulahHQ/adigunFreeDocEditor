@@ -53,7 +53,7 @@ for (const file of ["document-model.js", "editor-runtime.js", "assets/vendor/ffl
   window.eval(fs.readFileSync(path.join(root, file), "utf8"));
 }
 window.__downloads = [];
-window.URL.createObjectURL = () => "blob:https://example.test/generated";
+window.URL.createObjectURL = (blob) => { window.__lastDownloadedBlob = blob; return "blob:https://example.test/generated"; };
 window.URL.revokeObjectURL = () => {};
 window.HTMLAnchorElement.prototype.click = function () { window.__downloads.push(this.download); };
 const createLiveEditor = window.AdigunEditorRuntime.createLiveEditor;
@@ -216,13 +216,30 @@ try {
   assert.ok(window.document.querySelector("#translate-target-language").options.length >= 70, "translation language pickers offer a broad language list");
   assert.equal(window.document.querySelector("#translate-run").disabled, true, "translation stays disabled until a provider is configured");
   const mergeInput = window.document.querySelector("#merge-files");
-  const files = [new window.File(["one"], "one.docx"), new window.File(["two"], "two.docx"), new window.File(["three"], "three.docx")];
+  const files = [
+    { name: "one.txt", size: 10, text: async () => "First document." },
+    { name: "two.txt", size: 11, text: async () => "Second document." },
+    { name: "three.txt", size: 12, text: async () => "Third document." },
+  ];
   Object.defineProperty(mergeInput, "files", { configurable: true, value: files });
   mergeInput.dispatchEvent(new window.Event("change", { bubbles: true }));
   assert.equal(window.document.querySelectorAll("#merge-file-order .tool-file-row").length, 3, "merge files appear in an ordered queue");
   const moveDown = window.document.querySelector('#merge-file-order [data-merge-action="down"]');
   moveDown.click();
-  assert.equal(window.document.querySelector("#merge-file-order .tool-file-row span").textContent, "two.docx", "merge queue supports ordering files");
+  assert.equal(window.document.querySelector("#merge-file-order .tool-file-row span").textContent, "two.txt", "merge queue supports ordering files");
+  window.document.querySelector("#merge-run").click();
+  for (let attempt = 0; attempt < 200 && !window.document.querySelector("#merge-status").textContent.includes("Merge complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(window.__downloads.at(-1), "merged-documents.docx", "merge creates a downloadable Word document");
+  const mergedBuffer = await new Promise((resolve, reject) => {
+    const reader = new window.FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(window.__lastDownloadedBlob);
+  });
+  const mergedArchive = window.fflate.unzipSync(new Uint8Array(mergedBuffer));
+  const mergedXml = window.fflate.strFromU8(mergedArchive["word/document.xml"]);
+  assert.ok(mergedXml.indexOf("two.txt") < mergedXml.indexOf("one.txt") && mergedXml.indexOf("one.txt") < mergedXml.indexOf("three.txt"), "the output follows the selected merge order");
+  assert.match(window.document.querySelector("#merge-status").textContent, /Merge complete/);
   const archiveBytes = window.fflate.zipSync({ "docs/readme.md": window.fflate.strToU8("hello") }, { level: 0 });
   window.fflate.unzip = (data, options, callback) => { setTimeout(() => callback(null, { "docs/readme.md": window.fflate.strToU8("hello") }), 0); return () => {}; };
   const archive = { name: "bundle.zip", size: archiveBytes.length, arrayBuffer: async () => archiveBytes.buffer.slice(archiveBytes.byteOffset, archiveBytes.byteOffset + archiveBytes.byteLength) };
