@@ -4669,6 +4669,217 @@
     const trashButton = event.target.closest("[data-trash-id]"); if (trashButton) markDeleted(trashButton.dataset.trashId, true);
     const restoreButton = event.target.closest("[data-restore-id]"); if (restoreButton) markDeleted(restoreButton.dataset.restoreId, false);
   });
+  const ZIP_MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
+  const ZIP_MAX_ENTRY_BYTES = 50 * 1024 * 1024;
+  const ZIP_MAX_TOTAL_BYTES = 250 * 1024 * 1024;
+  const ZIP_MAX_ENTRIES = 500;
+  let extractedFiles = [];
+  let unzipRunToken = 0;
+
+  function formatToolBytes(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function safeArchiveFileName(value) {
+    const name = String(value || "").replace(/\\/g, "/");
+    if (!name || name.startsWith("/") || /^[A-Za-z]:/.test(name)) return "";
+    const parts = name.split("/");
+    if (parts.some((part) => part === ".." || /[\u0000-\u001f\u007f]/.test(part))) return "";
+    return parts.filter((part) => part && part !== ".").join("/");
+  }
+
+  function inspectZipArchive(bytes) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const minOffset = Math.max(0, bytes.length - 22 - 65535);
+    let endRecord = -1;
+    for (let offset = bytes.length - 22; offset >= minOffset; offset--) {
+      if (view.getUint32(offset, true) === 0x06054b50 && offset + 22 + view.getUint16(offset + 20, true) === bytes.length) {
+        endRecord = offset;
+        break;
+      }
+    }
+    if (endRecord < 0) throw new Error("This ZIP archive is incomplete or invalid.");
+    if (view.getUint16(endRecord + 4, true) || view.getUint16(endRecord + 6, true)) throw new Error("Multi-disk ZIP archives are not supported.");
+    const entriesOnDisk = view.getUint16(endRecord + 8, true);
+    const entryCount = view.getUint16(endRecord + 10, true);
+    const directorySize = view.getUint32(endRecord + 12, true);
+    let cursor = view.getUint32(endRecord + 16, true);
+    if (entriesOnDisk !== entryCount || entryCount === 0xffff || directorySize === 0xffffffff || cursor === 0xffffffff) throw new Error("ZIP64 and multi-disk archives are not supported in this release.");
+    if (entryCount > ZIP_MAX_ENTRIES) throw new Error("This archive contains more than 500 entries.");
+    const directoryEnd = cursor + directorySize;
+    if (directoryEnd > endRecord || directoryEnd < cursor) throw new Error("The ZIP directory is outside the archive.");
+    const entries = [];
+    const names = new Set();
+    let totalBytes = 0;
+    const decoder = new TextDecoder();
+    for (let index = 0; index < entryCount; index++) {
+      if (cursor + 46 > directoryEnd || view.getUint32(cursor, true) !== 0x02014b50) throw new Error("The ZIP directory contains an invalid entry.");
+      const flags = view.getUint16(cursor + 8, true);
+      const method = view.getUint16(cursor + 10, true);
+      const compressedSize = view.getUint32(cursor + 20, true);
+      const originalSize = view.getUint32(cursor + 24, true);
+      const nameLength = view.getUint16(cursor + 28, true);
+      const extraLength = view.getUint16(cursor + 30, true);
+      const commentLength = view.getUint16(cursor + 32, true);
+      const localOffset = view.getUint32(cursor + 42, true);
+      const next = cursor + 46 + nameLength + extraLength + commentLength;
+      if (next > directoryEnd) throw new Error("A ZIP entry has invalid directory lengths.");
+      const nameBytes = bytes.subarray(cursor + 46, cursor + 46 + nameLength);
+      const name = decoder.decode(nameBytes);
+      const isDirectory = /[\\/]$/.test(name);
+      const safeName = safeArchiveFileName(name);
+      if (!safeName) throw new Error("The archive contains an unsafe file path.");
+      if (flags & 1) throw new Error("Password-protected ZIP files are not supported.");
+      if (method !== 0 && method !== 8) throw new Error("The archive uses a compression method this tool does not support.");
+      if (compressedSize === 0xffffffff || originalSize === 0xffffffff || localOffset === 0xffffffff) throw new Error("ZIP64 entries are not supported in this release.");
+      if (!isDirectory) {
+        if (names.has(safeName)) throw new Error("The archive contains duplicate file names.");
+        names.add(safeName);
+        if (originalSize > ZIP_MAX_ENTRY_BYTES) throw new Error("A file expands beyond the 50 MB per-file limit.");
+        totalBytes += originalSize;
+        if (totalBytes > ZIP_MAX_TOTAL_BYTES) throw new Error("The archive expands beyond the 250 MB total limit.");
+        if (localOffset + 30 > cursor || view.getUint32(localOffset, true) !== 0x04034b50) throw new Error("A ZIP file entry has an invalid local header.");
+        const localNameLength = view.getUint16(localOffset + 26, true);
+        const localExtraLength = view.getUint16(localOffset + 28, true);
+        const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+        if (dataStart + compressedSize > cursor) throw new Error("A ZIP file entry extends outside the data section.");
+        entries.push({ name: safeName, compressedSize, originalSize, method });
+      }
+      cursor = next;
+    }
+    if (cursor !== directoryEnd) throw new Error("The ZIP directory length does not match its entries.");
+    return entries;
+  }
+
+  function downloadToolFile(data, name, type = "application/octet-stream") {
+    const blob = new Blob([data], { type });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = name;
+    anchor.hidden = true;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function zipWithLevel(files, level) {
+    return new Promise((resolve, reject) => {
+      if (typeof window.fflate?.zip !== "function") return reject(new Error("The local ZIP tool could not be loaded."));
+      window.fflate.zip(files, { level }, (error, data) => error ? reject(error) : resolve(data));
+    });
+  }
+
+  function renderExtractedFiles() {
+    const list = $("#unzip-file-list");
+    list.replaceChildren();
+    if (!extractedFiles.length) {
+      const empty = document.createElement("li");
+      empty.className = "tool-file-empty";
+      empty.textContent = "Extracted files will appear here.";
+      list.append(empty);
+      $("#unzip-download-all").disabled = true;
+      return;
+    }
+    extractedFiles.forEach((file, index) => {
+      const row = document.createElement("li");
+      row.className = "tool-file-row";
+      const name = document.createElement("span");
+      name.textContent = file.name;
+      const details = document.createElement("span");
+      details.className = "tool-file-order-actions";
+      const size = document.createElement("small");
+      size.textContent = formatToolBytes(file.bytes.length);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "↓";
+      button.setAttribute("aria-label", "Download " + file.name);
+      button.dataset.extractedIndex = String(index);
+      details.append(size, button);
+      row.append(name, details);
+      list.append(row);
+    });
+    $("#unzip-download-all").disabled = false;
+  }
+
+  function extractZipFile(file) {
+    const runToken = ++unzipRunToken;
+    extractedFiles = [];
+    renderExtractedFiles();
+    if (!file) {
+      $("#unzip-file-name").textContent = "No archive selected";
+      $("#unzip-status").textContent = "Choose a ZIP file to view its contents.";
+      return;
+    }
+    $("#unzip-file-name").textContent = file.name;
+    if (!/\.zip$/i.test(file.name)) {
+      $("#unzip-status").textContent = "Choose a file with a .zip extension.";
+      return;
+    }
+    if (file.size > ZIP_MAX_ARCHIVE_BYTES) {
+      $("#unzip-status").textContent = "ZIP files are limited to 100 MB.";
+      return;
+    }
+    $("#unzip-status").textContent = "Checking ZIP contents…";
+    file.arrayBuffer().then((buffer) => {
+      if (runToken !== unzipRunToken) return;
+      const bytes = new Uint8Array(buffer);
+      const entries = inspectZipArchive(bytes);
+      const names = new Set(entries.map((entry) => entry.name));
+      $("#unzip-status").textContent = "Extracting " + entries.length + " files…";
+      return new Promise((resolve, reject) => {
+        if (typeof window.fflate?.unzip !== "function") return reject(new Error("The local ZIP tool could not be loaded."));
+        window.fflate.unzip(bytes, { filter: (entry) => names.has(safeArchiveFileName(entry.name)) }, (error, output) => error ? reject(error) : resolve(output));
+      }).then((output) => {
+        if (runToken !== unzipRunToken) return;
+        let totalBytes = 0;
+        extractedFiles = entries.map((entry) => {
+          const content = output[entry.name];
+          if (!(content instanceof Uint8Array) || content.length !== entry.originalSize) throw new Error("An extracted file did not match its ZIP directory size.");
+          totalBytes += content.length;
+          if (content.length > ZIP_MAX_ENTRY_BYTES || totalBytes > ZIP_MAX_TOTAL_BYTES) throw new Error("Extracted contents exceed this tool's size limits.");
+          return { name: entry.name, bytes: content };
+        });
+        renderExtractedFiles();
+        $("#unzip-status").textContent = extractedFiles.length + " files extracted · " + formatToolBytes(totalBytes) + " total";
+      });
+    }).catch((error) => {
+      if (runToken !== unzipRunToken) return;
+      extractedFiles = [];
+      renderExtractedFiles();
+      $("#unzip-status").textContent = error.message || "This ZIP file could not be extracted.";
+    });
+  }
+
+  async function compressSelectedFile() {
+    const file = $("#compress-file").files?.[0];
+    if (!file) return;
+    if (file.size > ZIP_MAX_ARCHIVE_BYTES) {
+      $("#compress-status").textContent = "Files are limited to 100 MB.";
+      return;
+    }
+    const button = $("#compress-run");
+    button.disabled = true;
+    $("#compress-status").textContent = "Compressing locally…";
+    try {
+      const level = { fast: 1, balanced: 6, maximum: 9 }[$("#compress-level").value] || 6;
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const output = await zipWithLevel({ [safeArchiveFileName(file.name) || "file"]: bytes }, level);
+      const filename = file.name.replace(/[\\/]/g, "_") + ".zip";
+      const reduction = file.size ? Math.round((1 - output.length / file.size) * 100) : 0;
+      const result = reduction > 0 ? "ZIP is " + reduction + "% smaller." : "This file is already compressed; the ZIP may be larger.";
+      $("#compress-status").textContent = result + " Download started · " + formatToolBytes(output.length);
+      downloadToolFile(output, filename, "application/zip");
+    } catch (error) {
+      $("#compress-status").textContent = error.message || "This file could not be compressed.";
+    } finally {
+      button.disabled = !$("#compress-file").files?.[0];
+    }
+  }
+
   let mergeQueue = [];
   function renderMergeQueue() {
     const list = $("#merge-file-order");
@@ -4715,12 +4926,37 @@
   $("#compress-file").addEventListener("change", (event) => {
     const file = event.currentTarget.files?.[0];
     $("#compress-file-name").textContent = file?.name || "No file selected";
-    $("#compress-file-size").textContent = file ? (file.size / 1024).toFixed(1) + " KB · Original preserved" : "Choose a file to begin.";
+    $("#compress-file-size").textContent = file ? formatToolBytes(file.size) + " · Original preserved" : "Choose a file to begin.";
+    $("#compress-run").disabled = !file || file.size > ZIP_MAX_ARCHIVE_BYTES;
+    $("#compress-status").textContent = file ? "Ready to compress with the selected level." : "Choose a file to begin. Files up to 100 MB are supported.";
   });
-  $("#unzip-file").addEventListener("change", (event) => {
-    const file = event.currentTarget.files?.[0];
-    $("#unzip-file-name").textContent = file?.name || "No archive selected";
-    $("#unzip-status").textContent = file ? "Archive selected. Extraction will be enabled in the next step." : "Choose a ZIP file to view its contents.";
+  $("#compress-level").addEventListener("change", () => {
+    if ($("#compress-file").files?.[0]) $("#compress-status").textContent = "Compression level set to " + $("#compress-level").selectedOptions[0].textContent + ".";
+  });
+  $("#compress-run").addEventListener("click", compressSelectedFile);
+  $("#unzip-file").addEventListener("change", (event) => extractZipFile(event.currentTarget.files?.[0]));
+  $("#unzip-file-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-extracted-index]");
+    if (!button) return;
+    const file = extractedFiles[Number(button.dataset.extractedIndex)];
+    if (file) downloadToolFile(file.bytes, file.name);
+  });
+  $("#unzip-download-all").addEventListener("click", async () => {
+    if (!extractedFiles.length) return;
+    const button = $("#unzip-download-all");
+    button.disabled = true;
+    $("#unzip-status").textContent = "Preparing all extracted files…";
+    try {
+      const files = Object.fromEntries(extractedFiles.map((file) => [file.name, file.bytes]));
+      const output = await zipWithLevel(files, 1);
+      const sourceName = $("#unzip-file-name").textContent.replace(/.zip$/i, "");
+      downloadToolFile(output, (sourceName || "extracted-files") + "-extracted.zip", "application/zip");
+      $("#unzip-status").textContent = "Download started · " + formatToolBytes(output.length);
+    } catch (error) {
+      $("#unzip-status").textContent = error.message || "The extracted files could not be bundled.";
+    } finally {
+      button.disabled = extractedFiles.length === 0;
+    }
   });
   $("#translate-file").addEventListener("change", (event) => {
     const file = event.currentTarget.files?.[0];

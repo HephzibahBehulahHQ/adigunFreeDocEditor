@@ -47,9 +47,13 @@ window.indexedDB = {
   },
 };
 
-for (const file of ["document-model.js", "editor-runtime.js"]) {
+for (const file of ["document-model.js", "editor-runtime.js", "assets/vendor/fflate.min.js"]) {
   window.eval(fs.readFileSync(path.join(root, file), "utf8"));
 }
+window.__downloads = [];
+window.URL.createObjectURL = () => "blob:https://example.test/generated";
+window.URL.revokeObjectURL = () => {};
+window.HTMLAnchorElement.prototype.click = function () { window.__downloads.push(this.download); };
 const createLiveEditor = window.AdigunEditorRuntime.createLiveEditor;
 window.AdigunEditorRuntime.createLiveEditor = (options) => {
   window.__testEditor = createLiveEditor(options);
@@ -192,6 +196,38 @@ try {
   const moveDown = window.document.querySelector('#merge-file-order [data-merge-action="down"]');
   moveDown.click();
   assert.equal(window.document.querySelector("#merge-file-order .tool-file-row span").textContent, "two.docx", "merge queue supports ordering files");
+  const archiveBytes = window.fflate.zipSync({ "docs/readme.md": window.fflate.strToU8("hello") }, { level: 0 });
+  window.fflate.unzip = (data, options, callback) => { setTimeout(() => callback(null, { "docs/readme.md": window.fflate.strToU8("hello") }), 0); return () => {}; };
+  const archive = { name: "bundle.zip", size: archiveBytes.length, arrayBuffer: async () => archiveBytes.buffer.slice(archiveBytes.byteOffset, archiveBytes.byteOffset + archiveBytes.byteLength) };
+  const unzipInput = window.document.querySelector("#unzip-file");
+  Object.defineProperty(unzipInput, "files", { configurable: true, value: [archive] });
+  window.document.querySelector('[data-view="unzip"]').click();
+  unzipInput.dispatchEvent(new window.Event("change", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(window.document.querySelectorAll("#unzip-file-list [data-extracted-index]").length, 1, "ZIP contents appear as individual downloads");
+  assert.match(window.document.querySelector("#unzip-status").textContent, /1 files extracted/);
+  assert.equal(window.document.querySelector("#unzip-download-all").disabled, false, "Download all enables after extraction");
+  window.document.querySelector('#unzip-file-list [data-extracted-index="0"]').click();
+  assert.equal(window.__downloads.at(-1), "docs/readme.md", "individual extracted files download with safe names");
+  window.fflate.zip = (contents, options, callback) => { window.__zipRequests = [...(window.__zipRequests || []), { contents, options }]; setTimeout(() => callback(null, new Uint8Array([1, 2, 3])), 0); return () => {}; };
+  window.document.querySelector("#unzip-download-all").click();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(window.__zipRequests.at(-1).contents["docs/readme.md"].length, 5, "download all repacks the extracted files together");
+  assert.equal(window.__downloads.at(-1), "bundle-extracted.zip", "all extracted files download in one ZIP");
+  const compressedInput = window.document.querySelector("#compress-file");
+  const smallFileBytes = window.fflate.strToU8("sample text");
+  const localFile = { name: "notes.txt", size: smallFileBytes.length, arrayBuffer: async () => smallFileBytes.buffer.slice(smallFileBytes.byteOffset, smallFileBytes.byteOffset + smallFileBytes.byteLength) };
+  Object.defineProperty(compressedInput, "files", { configurable: true, value: [localFile] });
+  window.document.querySelector('[data-view="compress"]').click();
+  compressedInput.dispatchEvent(new window.Event("change", { bubbles: true }));
+  window.document.querySelector("#compress-level").value = "maximum";
+  window.document.querySelector("#compress-level").dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert.equal(window.document.querySelector("#compress-run").disabled, false, "Compress enables once a file is selected");
+  window.document.querySelector("#compress-run").click();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(window.__zipRequests.at(-1).options.level, 9, "Maximum compression uses ZIP compression level 9");
+  assert.equal(window.__zipRequests.at(-1).contents["notes.txt"].length, 11, "the selected file is placed in the ZIP output");
+  assert.equal(window.__downloads.at(-1), "notes.txt.zip", "the compressed ZIP is downloaded");
   window.document.querySelector('[data-view="recent"]').click();
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(host.querySelector(".ProseMirror"), null, "leaving the document view destroys the live editor");

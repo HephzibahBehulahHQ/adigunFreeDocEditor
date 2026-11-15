@@ -134,14 +134,14 @@
                 </div>
               </section>
               <section class="conversion-workspace file-tool-workspace" id="compress-workspace" aria-labelledby="compress-title" hidden>
-                <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="compress-title">Compress a file</h2><p>Choose a file and a compression level. Your original file will remain unchanged.</p></header>
+                <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="compress-title">Compress a file</h2><p>Choose a file and compression level to create a ZIP download. Already-compressed files may not get smaller; your original stays unchanged.</p></header>
                 <div class="conversion-grid file-tool-grid">
                   <section class="conversion-card" aria-labelledby="compress-source-title">
                     <div class="conversion-step"><span>1</span><div><h3 id="compress-source-title">Choose a file</h3><p>Select a local file to prepare a smaller download.</p></div></div>
                     <label class="tool-file-label" for="compress-file">Upload a file</label><input class="tool-file-input" id="compress-file" type="file" />
                     <div class="conversion-source-summary"><strong id="compress-file-name">No file selected</strong><span id="compress-file-size">Choose a file to begin.</span></div>
                     <label class="conversion-target-label" for="compress-level">Compression level</label><select class="tool-select conversion-target" id="compress-level"><option value="fast">Fast</option><option value="balanced" selected>Balanced</option><option value="maximum">Maximum</option></select>
-                    <p class="conversion-progress" id="compress-status" role="status" aria-live="polite">Compression is being connected.</p>
+                    <p class="conversion-progress" id="compress-status" role="status" aria-live="polite">Choose a file to begin. Files up to 100 MB are supported.</p>
                     <div class="conversion-actions"><button class="button button-primary" id="compress-run" type="button" disabled>Compress and download</button></div>
                   </section>
                   <section class="conversion-preview-card file-tool-info"><div><span class="eyebrow">COMPRESSION</span><h3>Choose a level</h3></div><p class="conversion-preview-empty">Fast prioritizes speed. Maximum prioritizes a smaller result and may take longer.</p></section>
@@ -151,7 +151,7 @@
                 <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="unzip-title">Unzip files</h2><p>Extract a ZIP archive, review its contents, and download files individually or together.</p></header>
                 <div class="conversion-grid file-tool-grid">
                   <section class="conversion-card" aria-labelledby="unzip-source-title">
-                    <div class="conversion-step"><span>1</span><div><h3 id="unzip-source-title">Choose a ZIP file</h3><p>Extraction will happen in this browser.</p></div></div>
+                    <div class="conversion-step"><span>1</span><div><h3 id="unzip-source-title">Choose a ZIP file</h3><p>Extraction stays in this browser. Expanded output is limited to 250 MB and 500 files.</p></div></div>
                     <label class="tool-file-label" for="unzip-file">Upload ZIP archive</label><input class="tool-file-input" id="unzip-file" type="file" accept=".zip,application/zip" />
                     <div class="conversion-source-summary"><strong id="unzip-file-name">No archive selected</strong><span id="unzip-status">Choose a ZIP file to view its contents.</span></div>
                   </section>
@@ -346,6 +346,7 @@
     </dialog>
     <script src="./assets/vendor/mammoth.browser.min.js" defer></script>
     <script src="./document-model.js" defer></script>
+    <script src="./assets/vendor/fflate.min.js" defer></script>
     <script src="./editor-runtime.js" defer></script>
     <script src="./app.js" defer></script>
   </body>
