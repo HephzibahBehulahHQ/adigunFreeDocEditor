@@ -1940,7 +1940,10 @@
       const preview = document.createElement("div");
       preview.innerHTML = html;
       const previewDocument = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:15px/1.6 Arial,sans-serif;color:#182035;padding:24px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{border-collapse:collapse;max-width:100%}td,th{border:1px solid #c6cdd8;padding:6px}</style></head><body>' + html + "</body></html>";
-      if (target === "markdown") {\n        conversionOutputBlob = new Blob([markdownOutput], { type: "text/markdown;charset=utf-8" });\n        conversionOutputName = safeFilename(file.name.replace(/\\.[^.]+$/, "")) + ".md";\n      } else if (target === "docx") {
+      if (target === "markdown") {
+        conversionOutputBlob = new Blob([markdownOutput], { type: "text/markdown;charset=utf-8" });
+        conversionOutputName = safeFilename(file.name.replace(/\.[^.]+$/, "")) + ".md";
+      } else if (target === "docx") {
         const wordPackage = makeWordPackage(preview, { paper: defaultPageLayout.paper, orientation: defaultPageLayout.orientation, margins: defaultPageLayout.margins, pageNumbers: false, header: "", footer: "" });
         if (wordPackage.unsupported.length) {
           warnings.push("Word output omits unsupported content: " + wordPackage.unsupported.join(", ") + ".");
