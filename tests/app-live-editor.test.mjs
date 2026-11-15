@@ -216,7 +216,7 @@ try {
   window.document.querySelector("#conversion-target").value = "pdf";
   window.document.querySelector("#conversion-run").click();
   for (let attempt = 0; attempt < 100 && !window.document.querySelector("#conversion-progress").textContent.includes("Conversion complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.match(window.document.querySelector("#conversion-result-name").textContent, /report\\.pdf$/);
+  assert.equal(window.document.querySelector("#conversion-result-name").textContent, "report.pdf");
   window.document.querySelector("#conversion-download").click();
   const pdfBuffer = await new Promise((resolve, reject) => { const reader = new window.FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error); reader.readAsArrayBuffer(window.__lastDownloadedBlob); });
   const pdfText = window.TextDecoder ? new window.TextDecoder().decode(new Uint8Array(pdfBuffer)) : String.fromCharCode(...new Uint8Array(pdfBuffer));
