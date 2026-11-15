@@ -197,7 +197,8 @@ try {
   for (let attempt = 0; attempt < 100 && !window.document.querySelector("#conversion-progress").textContent.includes("Conversion complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
   assert.match(window.document.querySelector("#conversion-result-name").textContent, /notes\.md$/);
   window.document.querySelector("#conversion-download").click();
-  assert.equal(window.__downloads.at(-1), "notes.md", "Markdown conversion enables a downloadable .md result");\n  const imageSource = { name: "photo.png", size: 4, type: "image/png" };
+  assert.equal(window.__downloads.at(-1), "notes.md", "Markdown conversion enables a downloadable .md result");
+  const imageSource = { name: "photo.png", size: 4, type: "image/png" };
   Object.defineProperty(conversionInput, "files", { configurable: true, value: [imageSource] });
   conversionInput.dispatchEvent(new window.Event("change", { bubbles: true }));
   assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["png", "jpeg", "webp"], "image sources only show supported image output formats");

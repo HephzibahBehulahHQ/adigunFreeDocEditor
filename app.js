@@ -1827,7 +1827,8 @@
       option.disabled = !format.ready;
       target.append(option);
     }
-    const selected = compatible.find((format) => format.value === previous && format.ready) || compatible.find((format) => format.ready);\n    target.value = selected?.value || compatible[0]?.value || "";
+    const selected = compatible.find((format) => format.value === previous && format.ready) || compatible.find((format) => format.ready);
+    target.value = selected?.value || compatible[0]?.value || "";
   }
     function renderConversionState() {
     const selected = conversionSourceFile;
