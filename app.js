@@ -1532,7 +1532,7 @@
     const fileToolModes = ["conversion", "merge", "compress", "unzip", "translate"];
     const isFileTool = fileToolModes.includes(mode);
     if (!isDocument) destroyLiveEditor();
-    $("#workspace").classList.toggle("mode-no-document-title", ["landing", "list", ...fileToolModes].includes(mode));
+    $("#workspace").classList.toggle("mode-no-document-title", ["landing", "list", "conversion", "merge", "compress", "unzip", "translate"].includes(mode));
     $("#conversion-workspace").hidden = !isConversion;
     for (const tool of ["merge", "compress", "unzip", "translate"]) $("#" + tool + "-workspace").hidden = mode !== tool;
     if (!isFileTool) { editor.hidden = false; $(".page-footer").hidden = false; }
@@ -1552,7 +1552,7 @@
     $("#undo").hidden = !isDocument;
     $("#redo").hidden = !isDocument;
     $("#save-document").hidden = !isDocument;
-    $("#export-html").hidden = ["list", "landing", ...fileToolModes].includes(mode);
+    $("#export-html").hidden = ["list", "landing", "conversion", "merge", "compress", "unzip", "translate"].includes(mode);
     $("#export-docx").hidden = !isDocument;
     $("#export-html").lastElementChild.textContent = mode === "pdf" ? "Download PDF" : "Export HTML";
     if (isFileTool) { editor.hidden = true; $(".page-footer").hidden = true; }
