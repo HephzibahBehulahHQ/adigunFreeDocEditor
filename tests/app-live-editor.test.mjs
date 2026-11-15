@@ -203,8 +203,8 @@ try {
   Object.defineProperty(unzipInput, "files", { configurable: true, value: [archive] });
   window.document.querySelector('[data-view="unzip"]').click();
   unzipInput.dispatchEvent(new window.Event("change", { bubbles: true }));
-  await new Promise((resolve) => setTimeout(resolve, 30));
-  assert.equal(window.document.querySelectorAll("#unzip-file-list [data-extracted-index]").length, 1, "ZIP contents appear as individual downloads");
+  for (let attempt = 0; attempt < 200 && !/ files extracted · /.test(window.document.querySelector("#unzip-status").textContent); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(window.document.querySelectorAll("#unzip-file-list [data-extracted-index]").length, 1, "ZIP contents appear as individual downloads; status: " + window.document.querySelector("#unzip-status").textContent);
   assert.match(window.document.querySelector("#unzip-status").textContent, /1 files extracted/);
   assert.equal(window.document.querySelector("#unzip-download-all").disabled, false, "Download all enables after extraction");
   window.document.querySelector('#unzip-file-list [data-extracted-index="0"]').click();
