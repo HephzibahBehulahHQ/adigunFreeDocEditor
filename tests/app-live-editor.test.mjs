@@ -188,6 +188,7 @@ try {
   }
   assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["html", "docx", "markdown", "pdf", "png", "jpeg", "webp", "svg", "pptx"], "conversion lists the requested output formats");
   assert.equal(window.document.querySelector("#conversion-target").options[2].disabled, false, "Markdown output is available");
+  assert.equal(window.document.querySelector("#conversion-target").options[3].disabled, false, "PDF output is available");
   const conversionInput = window.document.querySelector("#conversion-file-picker");
   const pptxInputFile = { name: "presentation.txt", size: 30, text: async () => "Title line\nFirst point\nSecond point\nThird point\nFourth point\nFifth point\nSixth point" };
   Object.defineProperty(conversionInput, "files", { configurable: true, value: [pptxInputFile] });
@@ -209,6 +210,18 @@ try {
   window.document.querySelector("#conversion-download").click();
   assert.equal(window.__downloads.at(-1), "presentation.pptx", "PowerPoint conversion offers a downloadable .pptx");
   window.fflate.zip = realZip;
+  const pdfInputFile = { name: "report.txt", size: 24, text: async () => "First paragraph.\\nSecond paragraph with euro €." };
+  Object.defineProperty(conversionInput, "files", { configurable: true, value: [pdfInputFile] });
+  conversionInput.dispatchEvent(new window.Event("change", { bubbles: true }));
+  window.document.querySelector("#conversion-target").value = "pdf";
+  window.document.querySelector("#conversion-run").click();
+  for (let attempt = 0; attempt < 100 && !window.document.querySelector("#conversion-progress").textContent.includes("Conversion complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(window.document.querySelector("#conversion-result-name").textContent, "report.pdf");
+  window.document.querySelector("#conversion-download").click();
+  const pdfBuffer = await new Promise((resolve, reject) => { const reader = new window.FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error); reader.readAsArrayBuffer(window.__lastDownloadedBlob); });
+  const pdfText = window.TextDecoder ? new window.TextDecoder().decode(new Uint8Array(pdfBuffer)) : String.fromCharCode(...new Uint8Array(pdfBuffer));
+  assert.ok(pdfText.startsWith("%PDF-1.4") && pdfText.includes("/Type /Page") && pdfText.includes("%%EOF"), "PDF download contains a complete page structure");
+  assert.equal(window.__downloads.at(-1), "report.pdf", "PDF conversion produces a downloadable .pdf");
 
   const markdownSource = { name: "notes.txt", size: 16, text: async () => "# Heading\nA **bold** line." };
   Object.defineProperty(conversionInput, "files", { configurable: true, value: [markdownSource] });

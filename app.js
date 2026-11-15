@@ -1811,7 +1811,7 @@
       { value: "html", label: "HTML document", sources: textSources, ready: true },
       { value: "docx", label: "Word document (.docx)", sources: textSources, ready: true },
       { value: "markdown", label: "Markdown (.md)", sources: textSources, ready: true },
-      { value: "pdf", label: "PDF document", sources: textSources, ready: false },
+      { value: "pdf", label: "PDF document", sources: textSources, ready: true },
       { value: "png", label: "Image (PNG)", sources: imageSources, ready: true },
       { value: "jpeg", label: "Image (JPEG)", sources: imageSources, ready: true },
       { value: "webp", label: "Image (WebP)", sources: imageSources, ready: true },
@@ -1998,6 +1998,84 @@
     });
   }
 
+  function pdfTextBytes(value, fallbackState) {
+    const winAnsi = { 8364: 128, 8218: 130, 402: 131, 8222: 132, 8230: 133, 8224: 134, 8225: 135, 710: 136, 8240: 137, 352: 138, 8249: 139, 338: 140, 381: 142, 8216: 145, 8217: 146, 8220: 147, 8221: 148, 8226: 149, 8211: 150, 8212: 151, 732: 152, 8482: 153, 353: 154, 8250: 155, 339: 156, 382: 158, 376: 159 };
+    const bytes = [];
+    for (const character of String(value || "")) {
+      const code = character.codePointAt(0);
+      let byte = winAnsi[code];
+      if (byte === undefined && (code >= 32 && code <= 126 || code >= 160 && code <= 255)) byte = code;
+      if (byte === undefined) { byte = 63; fallbackState.used = true; }
+      if (byte === 40 || byte === 41 || byte === 92) bytes.push(92);
+      bytes.push(byte);
+    }
+    return Uint8Array.from(bytes);
+  }
+
+  function makePdfBytes(html, documentTitle) {
+    const body = new DOMParser().parseFromString(String(html), "text/html").body;
+    const blocks = Array.from(body.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,td,th"))
+      .map((node) => (node.textContent || "").replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    if (!blocks.length && body.textContent.trim()) blocks.push(body.textContent.trim());
+    const lines = [];
+    for (const block of blocks) {
+      let remaining = block;
+      while (remaining.length > 84) {
+        let split = remaining.lastIndexOf(" ", 84);
+        if (split < 30) split = 84;
+        lines.push(remaining.slice(0, split));
+        remaining = remaining.slice(split).trim();
+      }
+      if (remaining) lines.push(remaining);
+    }
+    const pages = [];
+    for (let offset = 0; offset < Math.max(1, lines.length); offset += 46) pages.push(lines.slice(offset, offset + 46));
+    if (pages.length > 100) throw new Error("PDF output is limited to 100 pages.");
+    const fallbackState = { used: false };
+    const ascii = (text) => Uint8Array.from(Array.from(text, (character) => character.charCodeAt(0) & 255));
+    const join = (parts) => {
+      const output = new Uint8Array(parts.reduce((length, part) => length + part.length, 0));
+      let offset = 0;
+      for (const part of parts) { output.set(part, offset); offset += part.length; }
+      return output;
+    };
+    const objects = [
+      ascii("<< /Type /Catalog /Pages 2 0 R >>"),
+      ascii("<< /Type /Pages /Kids [" + pages.map((_, index) => (4 + index * 2) + " 0 R").join(" ") + "] /Count " + pages.length + " >>"),
+      ascii("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"),
+    ];
+    for (let index = 0; index < pages.length; index++) {
+      const pageId = 4 + index * 2;
+      const contentId = pageId + 1;
+      objects.push(ascii("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents " + contentId + " 0 R >>"));
+      const pageTitle = String(documentTitle || "Converted document") + (pages.length > 1 ? " — " + (index + 1) : "");
+      const content = [
+        ascii("BT\n/F1 15 Tf\n54 744 Td\n14 TL\n"),
+        ascii("("), pdfTextBytes(pageTitle, fallbackState), ascii(") Tj\n/F1 11 Tf\n"),
+        ...pages[index].flatMap((line) => [ascii("T*\n("), pdfTextBytes(line, fallbackState), ascii(") Tj\n")]),
+        ascii("ET"),
+      ];
+      const stream = join(content);
+      objects.push(join([ascii("<< /Length " + stream.length + " >>\nstream\n"), stream, ascii("\nendstream")]));
+    }
+    const chunks = [Uint8Array.from([37,80,68,70,45,49,46,52,10,37,226,227,207,211,10])];
+    const offsets = [0];
+    let position = chunks[0].length;
+    for (let index = 0; index < objects.length; index++) {
+      offsets.push(position);
+      const object = join([ascii((index + 1) + " 0 obj\n"), objects[index], ascii("\nendobj\n")]);
+      chunks.push(object);
+      position += object.length;
+    }
+    const xrefOffset = position;
+    const xref = ["xref\n0 " + (objects.length + 1) + "\n0000000000 65535 f \n"];
+    for (const offset of offsets.slice(1)) xref.push(String(offset).padStart(10, "0") + " 00000 n \n");
+    const trailer = "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xrefOffset + "\n%%EOF";
+    chunks.push(ascii(xref.join("") + trailer));
+    return { bytes: join(chunks), unsupportedCharacters: fallbackState.used };
+  }
+
   async function runConversion() {
     if (!conversionSourceFile) return;
     const file = conversionSourceFile;
@@ -2059,7 +2137,13 @@
       const preview = document.createElement("div");
       preview.innerHTML = html;
       const previewDocument = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:15px/1.6 Arial,sans-serif;color:#182035;padding:24px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{border-collapse:collapse;max-width:100%}td,th{border:1px solid #c6cdd8;padding:6px}</style></head><body>' + html + "</body></html>";
-      if (target === "pptx") {
+      if (target === "pdf") {
+        const pdf = makePdfBytes(html, file.name.replace(/\.[^.]+$/, ""));
+        conversionOutputBlob = new Blob([pdf.bytes], { type: "application/pdf" });
+        conversionOutputName = safeFilename(file.name.replace(/\.[^.]+$/, "")) + ".pdf";
+        warnings.push("PDF output uses a simple text layout; images, links, and advanced formatting are not included.");
+        if (pdf.unsupportedCharacters) warnings.push("Some characters outside the built-in PDF font encoding were replaced.");
+      } else if (target === "pptx") {
         conversionOutputBlob = await createPowerPointBlob(html, file.name.replace(/\.[^.]+$/, ""));
         conversionOutputName = safeFilename(file.name.replace(/\.[^.]+$/, "")) + ".pptx";
         warnings.push("PowerPoint output contains text-only slides; images, comments, tracked changes, and advanced formatting are not included.");
