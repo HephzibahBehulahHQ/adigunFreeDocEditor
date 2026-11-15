@@ -187,7 +187,18 @@ try {
     assert.equal(window.document.querySelectorAll(".file-tool-workspace:not([hidden])").length, view === "convert" ? 0 : 1, "only the selected file tool is visible");
   }
   assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["html", "docx", "markdown", "pdf", "png", "svg", "pptx"], "conversion lists the requested output formats");
-  assert.equal(window.document.querySelector("#conversion-target").options[2].disabled, true, "formats without converters are clearly unavailable");
+  assert.equal(window.document.querySelector("#conversion-target").options[2].disabled, false, "Markdown output is available");
+  const conversionInput = window.document.querySelector("#conversion-file-picker");
+  const markdownSource = { name: "notes.txt", size: 16, text: async () => "# Heading\nA **bold** line." };
+  Object.defineProperty(conversionInput, "files", { configurable: true, value: [markdownSource] });
+  conversionInput.dispatchEvent(new window.Event("change", { bubbles: true }));
+  window.document.querySelector("#conversion-target").value = "markdown";
+  window.document.querySelector("#conversion-run").click();
+  for (let attempt = 0; attempt < 100 && !window.document.querySelector("#conversion-progress").textContent.includes("Conversion complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.match(window.document.querySelector("#conversion-result-name").textContent, /notes\.md$/);
+  window.document.querySelector("#conversion-download").click();
+  assert.equal(window.__downloads.at(-1), "notes.md", "Markdown conversion enables a downloadable .md result");
+
   assert.ok(window.document.querySelector("#translate-target-language").options.length >= 70, "translation language pickers offer a broad language list");
   assert.equal(window.document.querySelector("#translate-run").disabled, true, "translation stays disabled until a provider is configured");
   const mergeInput = window.document.querySelector("#merge-files");
