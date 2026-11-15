@@ -43,6 +43,11 @@ assert.match(mobileRules, /\.ribbon-tools\{height:62px\}/, "mobile ribbon has ro
 assert.match(mobileRules, /\.tool-button\{min-width:44px\}/, "mobile ribbon buttons meet the touch target width");
 assert.match(mobileRules, /\.tool-button,\.tool-select\{height:44px\}/, "mobile ribbon controls meet the touch target height");
 
+
+assert.match(mobileRules, /\.topbar-title\{flex:1 1 auto\}/, "the mobile title yields space to action controls");
+assert.match(mobileRules, /\.topbar-actions\{flex:0 0 auto\}/, "mobile action controls keep their full width");
+assert.match(mobileRules, /\.document-title\{min-width:0;flex:1 1 auto;text-overflow:ellipsis\}/, "the mobile document name can truncate instead of clipping actions");
+
 const braceDelta = [...css].reduce((count, character) => count + (character === "{" ? 1 : character === "}" ? -1 : 0), 0);
 assert.equal(braceDelta, 0, "stylesheet braces remain balanced");
 process.stdout.write("Mobile header tests passed: product identity and editor actions fit the compact header rules.\n");
