@@ -257,6 +257,7 @@ try {
   window.document.querySelector("#conversion-target").value = "pdf";
   window.document.querySelector("#conversion-run").click();
   for (let attempt = 0; attempt < 100 && !window.document.querySelector("#conversion-progress").textContent.includes("Image-to-PDF conversion complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.match(window.document.querySelector("#conversion-progress").textContent, /Image-to-PDF conversion complete\./, "image-to-PDF conversion should finish: " + window.document.querySelector("#conversion-progress").textContent);
   assert.match(window.document.querySelector("#conversion-result-name").textContent, /photo\.pdf$/);
   window.document.querySelector("#conversion-download").click();
   assert.equal(window.__downloads.at(-1), "photo.pdf", "image conversion produces a downloadable PDF file");
