@@ -1809,7 +1809,7 @@
     const formats = [
       { value: "html", label: "HTML document", sources: textSources, ready: true },
       { value: "docx", label: "Word document (.docx)", sources: textSources, ready: true },
-      { value: "markdown", label: "Markdown (.md)", sources: textSources, ready: false },
+      { value: "markdown", label: "Markdown (.md)", sources: textSources, ready: true },
       { value: "pdf", label: "PDF document", sources: textSources, ready: false },
       { value: "png", label: "Image (PNG)", sources: textSources, ready: false },
       { value: "svg", label: "Illustration (SVG)", sources: textSources, ready: false },
@@ -1862,6 +1862,37 @@
     return String(text).replace(/\r\n?/g, "\n").split("\n").map((line) => "<p>" + (escapeHTML(line) || "<br>") + "</p>").join("") || "<p><br></p>";
   }
 
+  function htmlToMarkdown(html) {
+    const body = new DOMParser().parseFromString(String(html), "text/html").body;
+    const inline = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || "";
+      if (node.nodeType !== Node.ELEMENT_NODE) return "";
+      const content = Array.from(node.childNodes, inline).join("");
+      const tag = node.tagName.toLowerCase();
+      if (tag === "br") return "\n";
+      if (tag === "strong" || tag === "b") return "**" + content + "**";
+      if (tag === "em" || tag === "i") return "*" + content + "*";
+      if (tag === "del" || tag === "s" || tag === "strike") return "~~" + content + "~~";
+      if (tag === "a") {
+        const href = node.getAttribute("href") || "";
+        return /^(https?:|mailto:|\/|#)/i.test(href) ? "[" + content + "](" + href.replace(/[\s)]/g, (part) => encodeURIComponent(part)) + ")" : content;
+      }
+      if (tag === "img") return node.getAttribute("alt") || "";
+      return content;
+    };
+    const render = (node) => {
+      const tag = node.tagName.toLowerCase();
+      if (/^h[1-6]$/.test(tag)) return "#".repeat(Number(tag[1])) + " " + Array.from(node.childNodes, inline).join("").trim();
+      if (tag === "pre") return (node.textContent || "").trim().split("\n").map((line) => "    " + line).join("\n");
+      if (tag === "blockquote") return Array.from(node.children).map(render).join("\n\n").split("\n").map((line) => "> " + line).join("\n");
+      if (tag === "ul" || tag === "ol") return Array.from(node.children).filter((item) => item.tagName.toLowerCase() === "li").map((item, index) => (tag === "ol" ? (index + 1) + ". " : "- ") + Array.from(item.childNodes, inline).join("").trim()).join("\n");
+      if (tag === "hr") return "---";
+      if (tag === "table") return Array.from(node.querySelectorAll("tr")).map((row) => "| " + Array.from(row.children).map((cell) => (cell.textContent || "").trim().replace(/\|/g, "\\|")).join(" | ") + " |").join("\n");
+      return Array.from(node.childNodes, inline).join("").trim();
+    };
+    return Array.from(body.children).map(render).filter(Boolean).join("\n\n").trim() + "\n";
+  }
+
   async function runConversion() {
     if (!conversionSourceFile) return;
     const file = conversionSourceFile;
@@ -1908,7 +1939,7 @@
       const preview = document.createElement("div");
       preview.innerHTML = html;
       const previewDocument = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:15px/1.6 Arial,sans-serif;color:#182035;padding:24px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{border-collapse:collapse;max-width:100%}td,th{border:1px solid #c6cdd8;padding:6px}</style></head><body>' + html + "</body></html>";
-      if (target === "docx") {
+      if (target === "markdown") {\n        conversionOutputBlob = new Blob([markdownOutput], { type: "text/markdown;charset=utf-8" });\n        conversionOutputName = safeFilename(file.name.replace(/\\.[^.]+$/, "")) + ".md";\n      } else if (target === "docx") {
         const wordPackage = makeWordPackage(preview, { paper: defaultPageLayout.paper, orientation: defaultPageLayout.orientation, margins: defaultPageLayout.margins, pageNumbers: false, header: "", footer: "" });
         if (wordPackage.unsupported.length) {
           warnings.push("Word output omits unsupported content: " + wordPackage.unsupported.join(", ") + ".");
