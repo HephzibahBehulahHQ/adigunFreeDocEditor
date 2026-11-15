@@ -250,10 +250,16 @@ try {
   const imageSource = { name: "photo.png", size: 4, type: "image/png" };
   Object.defineProperty(conversionInput, "files", { configurable: true, value: [imageSource] });
   conversionInput.dispatchEvent(new window.Event("change", { bubbles: true }));
-  assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["png", "jpeg", "webp"], "image sources only show supported image output formats");
+  assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["pdf", "png", "jpeg", "webp"], "image sources expose PDF and supported image output formats");
   window.createImageBitmap = async () => ({ width: 1, height: 1, close() {} });
   window.HTMLCanvasElement.prototype.getContext = () => ({ fillStyle: "", fillRect() {}, drawImage() {} });
   window.HTMLCanvasElement.prototype.toBlob = function (callback, type) { callback(new window.Blob(["image"], { type })); };
+  window.document.querySelector("#conversion-target").value = "pdf";
+  window.document.querySelector("#conversion-run").click();
+  for (let attempt = 0; attempt < 100 && !window.document.querySelector("#conversion-progress").textContent.includes("Image-to-PDF conversion complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.match(window.document.querySelector("#conversion-result-name").textContent, /photo\.pdf$/);
+  window.document.querySelector("#conversion-download").click();
+  assert.equal(window.__downloads.at(-1), "photo.pdf", "image conversion produces a downloadable PDF file");
   window.document.querySelector("#conversion-target").value = "webp";
   window.document.querySelector("#conversion-run").click();
   for (let attempt = 0; attempt < 100 && !window.document.querySelector("#conversion-progress").textContent.includes("Image conversion complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
@@ -330,3 +336,4 @@ try {
 }
 
 process.stdout.write("Application live editor tests passed: create mounts one editable root and leaving document mode restores the list surface.\n");
+
