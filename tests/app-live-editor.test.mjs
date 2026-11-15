@@ -189,6 +189,7 @@ try {
   assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["html", "docx", "markdown", "pdf", "png", "jpeg", "webp", "svg", "pptx"], "conversion lists the requested output formats");
   assert.equal(window.document.querySelector("#conversion-target").options[2].disabled, false, "Markdown output is available");
   assert.equal(window.document.querySelector("#conversion-target").options[3].disabled, false, "PDF output is available");
+  assert.equal(window.document.querySelector("#conversion-target").options[7].disabled, false, "SVG document output is available");
   const conversionInput = window.document.querySelector("#conversion-file-picker");
   const pptxInputFile = { name: "presentation.txt", size: 30, text: async () => "Title line\nFirst point\nSecond point\nThird point\nFourth point\nFifth point\nSixth point" };
   Object.defineProperty(conversionInput, "files", { configurable: true, value: [pptxInputFile] });
@@ -223,6 +224,20 @@ try {
   assert.ok(pdfText.startsWith("%PDF-1.4") && pdfText.includes("/Type /Page") && pdfText.includes("%%EOF"), "PDF download contains a complete page structure");
   assert.equal(window.__downloads.at(-1), "report.pdf", "PDF conversion produces a downloadable .pdf");
 
+  const svgSource = { name: "poster.txt", size: 34, text: async () => "An SVG heading\\nA scalable paragraph." };
+  Object.defineProperty(conversionInput, "files", { configurable: true, value: [svgSource] });
+  conversionInput.dispatchEvent(new window.Event("change", { bubbles: true }));
+  window.document.querySelector("#conversion-target").value = "svg";
+  window.document.querySelector("#conversion-run").click();
+  for (let attempt = 0; attempt < 100 && !window.document.querySelector("#conversion-progress").textContent.includes("Conversion complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(window.document.querySelector("#conversion-result-name").textContent, "poster.svg");
+  window.document.querySelector("#conversion-download").click();
+  const svgText = await new Promise((resolve, reject) => { const reader = new window.FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error); reader.readAsText(window.__lastDownloadedBlob); });
+  const svgXml = new window.DOMParser().parseFromString(svgText, "application/xml");
+  assert.equal(svgXml.querySelector("parsererror"), null, "SVG output is well-formed XML");
+  assert.match(svgText, /<svg[^>]+viewBox=/);
+  assert.match(svgText, /An SVG heading/);
+  assert.equal(window.__downloads.at(-1), "poster.svg", "SVG illustration produces a downloadable .svg file");
   const markdownSource = { name: "notes.txt", size: 16, text: async () => "# Heading\nA **bold** line." };
   Object.defineProperty(conversionInput, "files", { configurable: true, value: [markdownSource] });
   conversionInput.dispatchEvent(new window.Event("change", { bubbles: true }));
