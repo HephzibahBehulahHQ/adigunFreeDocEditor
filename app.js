@@ -53,7 +53,7 @@
   let conversionOutputBlob;
   let conversionOutputName = "";
   let translationSourceText = "";
-  let translationProvider = { endpoint: "", apiKey: "", languages: [] };
+  let translationProvider = { endpoint: "", apiKey: "", languages: [], keyRequired: false };
   let translationOutputBlob;
   let translationOutputName = "";
   let tableInsertionRange;
@@ -1826,7 +1826,7 @@
   function updateTranslationControls() {
     const file = $("#translate-file").files?.[0];
     const isPdf = file?.name.split(".").pop().toLowerCase() === "pdf";
-    $("#translate-run").disabled = !file || !translationProvider.endpoint || !translationProvider.languages.length || !$("#translate-target-language").value || (isPdf && !translationSourceText);
+    $("#translate-run").disabled = !file || !translationProvider.endpoint || !translationProvider.languages.length || (translationProvider.keyRequired && !translationProvider.apiKey) || !$("#translate-target-language").value || (isPdf && !translationSourceText);
     $("#translate-download").disabled = !translationOutputBlob;
   }
   async function connectTranslationProvider() {
@@ -1834,7 +1834,7 @@
     const button = $("#translate-connect");
     const status = $("#translate-provider-status");
     button.disabled = true;
-    translationProvider = { endpoint: "", apiKey: "", languages: [] };
+    translationProvider = { endpoint: "", apiKey: "", languages: [], keyRequired: false };
     updateTranslationControls();
     try {
       const url = new URL(endpointInput.value.trim());
@@ -1848,14 +1848,22 @@
       if (!response.ok) throw new Error("The service returned HTTP " + response.status + ". Check the URL, API access, and CORS settings.");
       const languages = await response.json();
       if (!Array.isArray(languages) || !languages.some((language) => language?.code)) throw new Error("The service did not return a compatible language list.");
+      let keyRequired = false;
+      try {
+        const settingsResponse = await fetch(endpoint + "/frontend/settings", { headers: { Accept: "application/json" }, credentials: "omit" });
+        if (settingsResponse.ok) keyRequired = Boolean((await settingsResponse.json()).keyRequired);
+      } catch { /* Some compatible services do not expose frontend settings. */ }
       translationProvider = {
         endpoint,
         apiKey: $("#translate-api-key").value.trim(),
+        keyRequired,
         languages: languages.filter((language) => language?.code).map((language) => ({ code: language.code, name: language.name, targets: Array.isArray(language.targets) ? language.targets : [] })),
       };
       try { localStorage.setItem("adigun-translate-endpoint", endpoint); } catch { /* Keep the endpoint for this page session. */ }
       renderProviderLanguages(translationProvider.languages);
-      status.textContent = "Connected · " + translationProvider.languages.length + " languages available. Text is sent only when you select Translate.";
+      status.textContent = keyRequired && !translationProvider.apiKey
+        ? "Connected · " + translationProvider.languages.length + " languages available. This service requires an API key to translate."
+        : "Connected · " + translationProvider.languages.length + " languages available. Text is sent only when you select Translate.";
       $("#word-count").textContent = translationProvider.languages.length + " translation languages";
     } catch (error) {
       translationProvider.apiKey = "";
@@ -5637,6 +5645,16 @@
     updateTranslationControls();
   });
   $("#translate-connect").addEventListener("click", connectTranslationProvider);
+  $("#translate-api-key").addEventListener("input", () => {
+    translationProvider.apiKey = $("#translate-api-key").value.trim();
+    const status = $("#translate-provider-status");
+    if (translationProvider.endpoint && translationProvider.keyRequired) {
+      status.textContent = translationProvider.apiKey
+        ? "API key entered for this tab. Text is sent only when you select Translate."
+        : "This service requires an API key to translate.";
+    }
+    updateTranslationControls();
+  });
   $("#translate-source-language").addEventListener("change", () => { syncTranslationTargets(); updateTranslationControls(); });
   $("#translate-target-language").addEventListener("change", updateTranslationControls);
   $("#translate-output-format").addEventListener("change", () => { translationOutputBlob = undefined; translationOutputName = ""; $("#translate-status").textContent = "Output format changed. Translate again to prepare the selected format."; updateTranslationControls(); });

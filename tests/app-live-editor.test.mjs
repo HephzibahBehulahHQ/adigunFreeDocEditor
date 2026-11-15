@@ -279,7 +279,9 @@ try {
   assert.equal(window.document.querySelector("#translate-run").disabled, true, "translation stays disabled until a provider is configured");
   window.fetch = async (url) => url.endsWith("/languages")
     ? { ok: true, json: async () => [{ code: "en", name: "English", targets: ["fr"] }, { code: "fr", name: "French", targets: ["en"] }] }
-    : { ok: true, json: async () => ({ translatedText: "Bonjour" }) };
+    : url.endsWith("/frontend/settings")
+      ? { ok: true, json: async () => ({ keyRequired: true }) }
+      : { ok: true, json: async () => ({ translatedText: "Bonjour" }) };
   window.document.querySelector("#translate-provider-url").value = "https://translation.example";
   window.document.querySelector("#translate-connect").click();
   for (let attempt = 0; attempt < 100 && !window.document.querySelector("#translate-provider-status").textContent.includes("Connected"); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
@@ -290,6 +292,11 @@ try {
   window.document.querySelector("#translate-source-language").dispatchEvent(new window.Event("change", { bubbles: true }));
   window.document.querySelector("#translate-target-language").value = "fr";
   window.document.querySelector("#translate-target-language").dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert.match(window.document.querySelector("#translate-provider-status").textContent, /requires an API key/);
+  assert.equal(window.document.querySelector("#translate-run").disabled, true, "required provider keys disable Translate until supplied");
+  window.document.querySelector("#translate-api-key").value = "synthetic-test-key";
+  window.document.querySelector("#translate-api-key").dispatchEvent(new window.Event("input", { bubbles: true }));
+  assert.equal(window.document.querySelector("#translate-run").disabled, false, "entering a provider key enables translation without reconnecting");
   window.document.querySelector("#translate-run").click();
   for (let attempt = 0; attempt < 100 && !window.document.querySelector("#translate-status").textContent.includes("Translation ready as PDF"); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
   assert.match(window.document.querySelector("#translate-status").textContent, /Translation ready as PDF/);
