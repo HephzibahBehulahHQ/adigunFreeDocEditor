@@ -159,20 +159,23 @@
                 </div>
               </section>
               <section class="conversion-workspace file-tool-workspace" id="translate-workspace" aria-labelledby="translate-title" hidden>
-                <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="translate-title">Translate a document</h2><p>Choose a document, its original language, and the language you want. Translation will run after a provider is connected.</p></header>
+                <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="translate-title">Translate a document</h2><p>Choose your document and languages, connect a LibreTranslate-compatible service, then download the translation.</p></header>
                 <div class="conversion-grid file-tool-grid">
                   <section class="conversion-card" aria-labelledby="translate-source-title">
                     <div class="conversion-step"><span>1</span><div><h3 id="translate-source-title">Choose a document</h3><p>PDFs with selectable text are supported; scanned PDFs require OCR.</p></div></div>
                     <label class="tool-file-label" for="translate-file">Upload document</label><input class="tool-file-input" id="translate-file" type="file" accept=".docx,.txt,.md,.markdown,.html,.htm,.pdf,application/pdf" />
                     <div class="conversion-source-summary"><strong id="translate-file-name">No document selected</strong><span id="translate-file-type">Choose a local document.</span></div>
                     <label class="conversion-target-label" for="translate-source-language">Original language</label><select class="tool-select conversion-target" id="translate-source-language"><option value="auto">Auto-detect</option></select>
-                    <p class="conversion-progress" id="translate-status" role="status" aria-live="polite">Translation is not available until a translation provider is configured.</p>
+                    <p class="conversion-progress" id="translate-status" role="status" aria-live="polite">Connect a translation service to enable translation.</p>
                   </section>
                   <section class="conversion-card" aria-labelledby="translate-target-title">
                     <div class="conversion-step"><span>2</span><div><h3 id="translate-target-title">Translation language</h3><p>Choose a target language, then download the translated document when it is ready.</p></div></div>
                     <label class="conversion-target-label" for="translate-target-language">Translate to</label><select class="tool-select conversion-target" id="translate-target-language"><option value="">Choose a language</option></select>
+                    <label class="conversion-target-label" for="translate-provider-url">LibreTranslate-compatible service URL</label><input class="translation-provider-input" id="translate-provider-url" type="url" inputmode="url" value="https://libretranslate.com" placeholder="https://your-translation-service" autocomplete="url" />
+                    <label class="conversion-target-label" for="translate-api-key">API key (if required)</label><input class="translation-provider-input" id="translate-api-key" type="password" autocomplete="off" />
+                    <div class="conversion-actions"><button class="button button-outline" id="translate-connect" type="button">Connect</button><span class="file-tool-note" id="translate-provider-status" role="status" aria-live="polite">API key stays in this tab and is sent only to your selected service.</span></div>
                     <div class="conversion-actions"><button class="button button-primary" id="translate-run" type="button" disabled>Translate</button><button class="button button-outline" id="translate-download" type="button" disabled>Download translation</button></div>
-                    <p class="file-tool-note">The translation service is not connected. Your document is not uploaded to a provider.</p>
+                    <p class="file-tool-note">Document text is sent to the service URL you choose only after you press Translate. Formatting is simplified in the downloaded translation.</p>
                   </section>
                 </div>
               </section>
