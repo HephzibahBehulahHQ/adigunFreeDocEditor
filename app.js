@@ -2061,7 +2061,7 @@
         warnings.push("PDF output uses a simple text layout; source formatting is not retained.");
         if (pdf.unsupportedCharacters) warnings.push("Some characters are outside the built-in PDF font encoding and may be replaced. Choose Word or HTML for broader script coverage.");
       } else if (format === "html") {
-        const translatedHtml = "<!doctype html><html lang=\\"" + escapeHTML(target) + "\\"><meta charset=\\"utf-8\\"><title>" + escapeHTML(baseName) + "</title><body>" + conversionHTMLFromText(outputText) + "</body></html>";
+        const translatedHtml = '<!doctype html><html lang="' + escapeHTML(target) + '"><meta charset="utf-8"><title>' + escapeHTML(baseName) + '</title><body>' + conversionHTMLFromText(outputText) + '</body></html>';
         translationOutputBlob = new Blob([translatedHtml], { type: "text/html;charset=utf-8" });
         translationOutputName = baseName + ".translated.html";
       } else if (format === "markdown") {
