@@ -353,7 +353,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
   .landing-primary{grid-column:1}
 }
 @media(max-width:700px){
-  .workspace.mode-no-document-title{width:100vw;max-width:100vw;overflow-x:hidden}
+  .workspace.mode-no-document-title{width:100%;max-width:100%;overflow-x:hidden}
   .workspace.mode-no-document-title .editor-card.landing{max-width:calc(100vw - 22px)}
   .landing-page{max-width:calc(100vw - 24px)}
   .landing-actions{width:100%;max-width:calc(100vw - 70px)}
