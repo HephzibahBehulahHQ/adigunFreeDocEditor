@@ -5373,8 +5373,11 @@
       const output = await zipWithLevel({ [safeArchiveFileName(file.name) || "file"]: bytes }, level);
       const filename = file.name.replace(/[\\/]/g, "_") + ".zip";
       const reduction = file.size ? Math.round((1 - output.length / file.size) * 100) : 0;
-      const result = reduction > 0 ? "ZIP is " + reduction + "% smaller." : "This file is already compressed; the ZIP may be larger.";
-      $("#compress-status").textContent = result + " Download started · " + formatToolBytes(output.length);
+      if (output.length >= file.size) {
+        $("#compress-status").textContent = "This file is already compressed or did not shrink at this level. No larger ZIP was downloaded.";
+        return;
+      }
+      $("#compress-status").textContent = "ZIP is " + reduction + "% smaller. Download started · " + formatToolBytes(output.length);
       downloadToolFile(output, filename, "application/zip");
     } catch (error) {
       $("#compress-status").textContent = error.message || "This file could not be compressed.";
@@ -5387,8 +5390,8 @@
   function mergeQueueError() {
     if (mergeQueue.length < 2) return "Choose at least two documents.";
     if (mergeQueue.length > 20) return "Merge up to 20 documents at a time.";
-    const allowed = /\.(docx|txt|md|markdown|html|htm)$/i;
-    if (mergeQueue.some((file) => !allowed.test(file.name))) return "Merge supports DOCX, TXT, Markdown, and HTML files.";
+    const allowed = /\.(docx|txt|md|markdown|html|htm|pdf)$/i;
+    if (mergeQueue.some((file) => !allowed.test(file.name))) return "Merge supports DOCX, TXT, Markdown, HTML, and PDF files.";
     if (mergeQueue.some((file) => file.size > 20 * 1024 * 1024)) return "Each document must be 20 MB or smaller.";
     if (mergeQueue.reduce((total, file) => total + file.size, 0) > 80 * 1024 * 1024) return "Selected documents must total 80 MB or less.";
     return "";
@@ -5420,6 +5423,10 @@
           if (sanitized.removed) warnings.add("Some unsupported or unsafe Word content was omitted.");
           if (converted.messages.some((message) => message.type === "warning")) warnings.add("Some Word compatibility details were simplified.");
           warnings.add("Word comments, tracked changes, page layout, and unsupported formatting may not be preserved.");
+        } else if (extension === "pdf") {
+          const extracted = await extractPdfText(file);
+          html = conversionHTMLFromText(extracted.text);
+          warnings.add("PDF selectable text was included; scanned page images and PDF layout are not retained.");
         } else {
           if (file.size > 12 * 1024 * 1024) throw new Error(file.name + " exceeds the 12 MB text and HTML limit.");
           const source = await file.text();
