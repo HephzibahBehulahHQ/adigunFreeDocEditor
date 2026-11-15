@@ -253,7 +253,11 @@ try {
   assert.deepEqual([...window.document.querySelectorAll("#conversion-target option")].map((option) => option.value), ["pdf", "png", "jpeg", "webp"], "image sources expose PDF and supported image output formats");
   window.createImageBitmap = async () => ({ width: 1, height: 1, close() {} });
   window.HTMLCanvasElement.prototype.getContext = () => ({ fillStyle: "", fillRect() {}, drawImage() {} });
-  window.HTMLCanvasElement.prototype.toBlob = function (callback, type) { callback(new window.Blob(["image"], { type })); };
+  window.HTMLCanvasElement.prototype.toBlob = function (callback, type) {
+    const blob = new window.Blob(["image"], { type });
+    blob.arrayBuffer = async () => Uint8Array.from([105, 109, 97, 103, 101]).buffer;
+    callback(blob);
+  };
   window.document.querySelector("#conversion-target").value = "pdf";
   window.document.querySelector("#conversion-run").click();
   for (let attempt = 0; attempt < 100 && !window.document.querySelector("#conversion-progress").textContent.includes("Image-to-PDF conversion complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
