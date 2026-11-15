@@ -82,6 +82,7 @@ jobs:
           mkdir -p _site/assets/vendor
           cp index.html styles.css app.js document-model.js editor-runtime.js CNAME _site/
           cp assets/hb-official.jpg _site/assets/
+          python scripts/assemble_pdfjs.py
           cp assets/vendor/mammoth.browser.min.js assets/vendor/MAMMOTH-LICENSE assets/vendor/fflate.min.js assets/vendor/FFLATE-LICENSE assets/vendor/pdf.min.js assets/vendor/pdf.worker.min.js assets/vendor/PDFJS-LICENSE _site/assets/vendor/
           cp node_modules/@tiptap/core/LICENSE.md _site/assets/vendor/TIPTAP-LICENSE.md
           cp node_modules/@tiptap/pm/LICENSE node_modules/@tiptap/pm/THIRD_PARTY_LICENSES.md _site/assets/vendor/
@@ -107,6 +108,7 @@ jobs:
         uses: actions/deploy-pages@v5
         with:
           artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+
 
 
 

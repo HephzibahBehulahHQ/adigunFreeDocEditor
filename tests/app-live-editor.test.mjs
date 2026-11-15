@@ -371,3 +371,4 @@ try {
 
 process.stdout.write("Application live editor tests passed: create mounts one editable root and leaving document mode restores the list surface.\n");
 
+
