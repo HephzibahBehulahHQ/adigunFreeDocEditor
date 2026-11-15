@@ -124,10 +124,10 @@
                 <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="merge-title">Merge documents</h2><p>Choose multiple files, arrange their order, then download one combined document. The source files stay unchanged.</p></header>
                 <div class="conversion-grid file-tool-grid">
                   <section class="conversion-card" aria-labelledby="merge-source-title">
-                    <div class="conversion-step"><span>1</span><div><h3 id="merge-source-title">Choose documents</h3><p>Word, HTML, Markdown, and text files are supported by the first merge release.</p></div></div>
+                    <div class="conversion-step"><span>1</span><div><h3 id="merge-source-title">Choose documents</h3><p>Merge Word, selectable-text PDF, HTML, Markdown, and text files in your chosen order.</p></div></div>
                     <label class="tool-file-label" for="merge-files">Add files</label><input class="tool-file-input" id="merge-files" type="file" multiple accept=".docx,.txt,.md,.markdown,.html,.htm,.pdf,application/pdf" />
                     <ol class="tool-file-list" id="merge-file-order" aria-label="Merge order"><li class="tool-file-empty">Files will appear here in merge order.</li></ol>
-                    <p class="conversion-progress" id="merge-status" role="status" aria-live="polite">Choose at least two files. Reordering is available now; merging is being connected.</p>
+                    <p class="conversion-progress" id="merge-status" role="status" aria-live="polite">Choose and order at least two documents. Scanned PDFs need OCR.</p>
                     <div class="conversion-actions"><button class="button button-primary" id="merge-run" type="button" disabled>Merge documents</button></div>
                   </section>
                   <section class="conversion-preview-card file-tool-info"><div><span class="eyebrow">OUTPUT</span><h3>One combined document</h3></div><p class="conversion-preview-empty">The merged file will be prepared in your browser and offered as a download.</p></section>
@@ -137,7 +137,7 @@
                 <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="compress-title">Compress a file</h2><p>Choose a file and compression level to create a ZIP download. Already-compressed files may not get smaller; your original stays unchanged.</p></header>
                 <div class="conversion-grid file-tool-grid">
                   <section class="conversion-card" aria-labelledby="compress-source-title">
-                    <div class="conversion-step"><span>1</span><div><h3 id="compress-source-title">Choose a file</h3><p>Select a local file to prepare a smaller download.</p></div></div>
+                    <div class="conversion-step"><span>1</span><div><h3 id="compress-source-title">Choose a file</h3><p>Select a local file; a ZIP download is offered only when it is smaller.</p></div></div>
                     <label class="tool-file-label" for="compress-file">Upload a file</label><input class="tool-file-input" id="compress-file" type="file" />
                     <div class="conversion-source-summary"><strong id="compress-file-name">No file selected</strong><span id="compress-file-size">Choose a file to begin.</span></div>
                     <label class="conversion-target-label" for="compress-level">Compression level</label><select class="tool-select conversion-target" id="compress-level"><option value="fast">Fast</option><option value="balanced" selected>Balanced</option><option value="maximum">Maximum</option></select>
