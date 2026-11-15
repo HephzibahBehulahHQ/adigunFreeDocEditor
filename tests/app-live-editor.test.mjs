@@ -275,7 +275,7 @@ try {
 
   assert.ok(window.document.querySelector("#translate-target-language").options.length >= 70, "translation language pickers offer a broad language list");
   assert.ok([...window.document.querySelectorAll("#translate-output-format option")].some((option) => option.value === "pdf"), "translation offers PDF output by default");
-  assert.match(window.document.querySelector("#translate-file").accept, /application\\/pdf/, "translation accepts PDF input");
+  assert.ok(window.document.querySelector("#translate-file").accept.includes("application/pdf"), "translation accepts PDF input");
   assert.equal(window.document.querySelector("#translate-run").disabled, true, "translation stays disabled until a provider is configured");
   window.fetch = async (url) => url.endsWith("/languages")
     ? { ok: true, json: async () => [{ code: "en", name: "English", targets: ["fr"] }, { code: "fr", name: "French", targets: ["en"] }] }
