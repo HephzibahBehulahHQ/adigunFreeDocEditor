@@ -4838,7 +4838,7 @@
         let totalBytes = 0;
         extractedFiles = entries.map((entry) => {
           const content = output[entry.name];
-          if (!(content instanceof Uint8Array) || content.length !== entry.originalSize) throw new Error("An extracted file did not match its ZIP directory size (" + entry.name + ": expected " + entry.originalSize + ", got " + (content?.length ?? "missing") + "; keys: " + Object.keys(output).join(", ") + ").");
+          if (Object.prototype.toString.call(content) !== "[object Uint8Array]" || content.length !== entry.originalSize) throw new Error("An extracted file did not match its ZIP directory size.");
           totalBytes += content.length;
           if (content.length > ZIP_MAX_ENTRY_BYTES || totalBytes > ZIP_MAX_TOTAL_BYTES) throw new Error("Extracted contents exceed this tool's size limits.");
           return { name: entry.name, bytes: content };
