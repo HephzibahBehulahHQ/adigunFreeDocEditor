@@ -1889,11 +1889,12 @@
     const textSources = ["docx", "txt", "md", "markdown", "html", "htm"];
     const pdfTextSources = [...textSources, "pdf"];
     const imageSources = ["png", "jpg", "jpeg", "webp", "svg"];
+    const pdfSources = [...pdfTextSources, ...imageSources];
     const formats = [
       { value: "html", label: "HTML document", sources: pdfTextSources, ready: true },
       { value: "docx", label: "Word document (.docx)", sources: pdfTextSources, ready: true },
       { value: "markdown", label: "Markdown (.md)", sources: pdfTextSources, ready: true },
-      { value: "pdf", label: "PDF document", sources: textSources, ready: true },
+      { value: "pdf", label: "PDF document", sources: pdfSources, ready: true },
       { value: "png", label: "Image (PNG)", sources: imageSources, ready: true },
       { value: "jpeg", label: "Image (JPEG)", sources: imageSources, ready: true },
       { value: "webp", label: "Image (WebP)", sources: imageSources, ready: true },
@@ -2291,6 +2292,57 @@
     return { bytes: join(chunks), unsupportedCharacters: fallbackState.used };
   }
 
+  function makeImagePdfBytes(jpegBytes, imageWidth, imageHeight) {
+    const encoder = new TextEncoder();
+    const encode = (value) => encoder.encode(value);
+    const join = (parts) => {
+      const output = new Uint8Array(parts.reduce((length, part) => length + part.length, 0));
+      let offset = 0;
+      for (const part of parts) { output.set(part, offset); offset += part.length; }
+      return output;
+    };
+    const pageWidth = 595.28;
+    const pageHeight = 841.89;
+    const scale = Math.min(pageWidth / imageWidth, pageHeight / imageHeight);
+    const drawWidth = imageWidth * scale;
+    const drawHeight = imageHeight * scale;
+    const left = (pageWidth - drawWidth) / 2;
+    const bottom = (pageHeight - drawHeight) / 2;
+    const content = encode("q\n" + drawWidth + " 0 0 " + drawHeight + " " + left + " " + bottom + " cm\n/Im0 Do\nQ");
+    const objects = [
+      encode("<< /Type /Catalog /Pages 2 0 R >>"),
+      encode("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+      encode("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + pageWidth + " " + pageHeight + "] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>"),
+      join([encode("<< /Type /XObject /Subtype /Image /Width " + imageWidth + " /Height " + imageHeight + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + jpegBytes.length + " >>\nstream\n"), jpegBytes, encode("\nendstream")]),
+      join([encode("<< /Length " + content.length + " >>\nstream\n"), content, encode("\nendstream")]),
+    ];
+    const chunks = [Uint8Array.from([37,80,68,70,45,49,46,52,10,37,226,227,207,211,10])];
+    const offsets = [0];
+    let position = chunks[0].length;
+    for (let index = 0; index < objects.length; index++) {
+      offsets.push(position);
+      const object = join([encode((index + 1) + " 0 obj\n"), objects[index], encode("\nendobj\n")]);
+      chunks.push(object);
+      position += object.length;
+    }
+    const xrefOffset = position;
+    const xref = ["xref\n0 " + (objects.length + 1) + "\n0000000000 65535 f \n"];
+    for (const offset of offsets.slice(1)) xref.push(String(offset).padStart(10, "0") + " 00000 n \n");
+    chunks.push(encode(xref.join("") + "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xrefOffset + "\n%%EOF"));
+    return join(chunks);
+  }
+
+  async function convertImageToPdf(file) {
+    const jpeg = await convertRasterImage(file, "jpeg");
+    const bitmap = await createImageBitmap(jpeg);
+    try {
+      const bytes = makeImagePdfBytes(new Uint8Array(await jpeg.arrayBuffer()), bitmap.width, bitmap.height);
+      return { blob: new Blob([bytes], { type: "application/pdf" }), preview: await blobToDataUrl(jpeg) };
+    } finally {
+      bitmap.close?.();
+    }
+  }
+
   function makeSvgDocument(html, documentTitle) {
     const body = new DOMParser().parseFromString(String(html), "text/html").body;
     const blocks = Array.from(body.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,td,th"))
@@ -2338,6 +2390,19 @@
     $("#conversion-progress").textContent = "Reading source file…";
     try {
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (target === "pdf" && ["png", "jpg", "jpeg", "webp", "svg"].includes(extension)) {
+        const result = await convertImageToPdf(file);
+        conversionOutputBlob = result.blob;
+        conversionOutputName = safeFilename(file.name.replace(/\.[^.]+$/, "")) + ".pdf";
+        $("#conversion-preview").srcdoc = '<!doctype html><html lang="en"><meta charset="utf-8"><style>body{margin:0;display:grid;place-items:center;min-height:100vh;background:#f4f6fa}img{max-width:100%;max-height:100vh;object-fit:contain}</style><img alt="Image placed on the generated PDF page" src="' + result.preview + '"></html>';
+        $("#conversion-preview").hidden = false;
+        $("#conversion-result-name").textContent = conversionOutputName;
+        $("#conversion-download").disabled = false;
+        $("#conversion-warning").textContent = "The image is placed on a single page. Transparency, metadata, and animation are not retained.";
+        $("#conversion-warning").hidden = false;
+        $("#conversion-progress").textContent = "Image-to-PDF conversion complete. Download the PDF.";
+        return;
+      }
       if (["png", "jpeg", "webp"].includes(target)) {
         const imageBlob = await convertRasterImage(file, target);
         conversionOutputBlob = imageBlob;
