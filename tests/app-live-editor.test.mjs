@@ -230,7 +230,13 @@ try {
   window.document.querySelector("#merge-run").click();
   for (let attempt = 0; attempt < 200 && !window.document.querySelector("#merge-status").textContent.includes("Merge complete."); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(window.__downloads.at(-1), "merged-documents.docx", "merge creates a downloadable Word document");
-  const mergedArchive = window.fflate.unzipSync(new Uint8Array(await window.__lastDownloadedBlob.arrayBuffer()));
+  const mergedBuffer = await new Promise((resolve, reject) => {
+    const reader = new window.FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(window.__lastDownloadedBlob);
+  });
+  const mergedArchive = window.fflate.unzipSync(new Uint8Array(mergedBuffer));
   const mergedXml = window.fflate.strFromU8(mergedArchive["word/document.xml"]);
   assert.ok(mergedXml.indexOf("two.txt") < mergedXml.indexOf("one.txt") && mergedXml.indexOf("one.txt") < mergedXml.indexOf("three.txt"), "the output follows the selected merge order");
   assert.match(window.document.querySelector("#merge-status").textContent, /Merge complete/);
