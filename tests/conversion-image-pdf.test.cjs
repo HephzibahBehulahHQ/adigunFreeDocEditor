@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 
 const app = fs.readFileSync(require.resolve("../app.js"), "utf8");
-assert.match(app, /pdfjs\\.GlobalWorkerOptions\\.workerSrc = new URL\\("\.\/assets\/vendor\/pdf\.worker\.mjs", document\.baseURI\\)\.href/);
+assert.ok(app.includes('pdfjs.GlobalWorkerOptions.workerSrc = new URL("./assets/vendor/pdf.worker.mjs", document.baseURI).href;'));
 const siteRootWorker = new URL("./assets/vendor/pdf.worker.mjs", "https://adigunfreedoceditor.hephzibahbehulah.com/").href;
 assert.equal(siteRootWorker, "https://adigunfreedoceditor.hephzibahbehulah.com/assets/vendor/pdf.worker.mjs");
 const nestedWorkspaceWorker = new URL("./assets/vendor/pdf.worker.mjs", "https://example.test/editor/").href;
