@@ -82,7 +82,7 @@ jobs:
           mkdir -p _site/assets/vendor
           cp index.html styles.css app.js document-model.js editor-runtime.js CNAME _site/
           cp assets/hb-official.jpg _site/assets/
-          cp assets/vendor/mammoth.browser.min.js assets/vendor/MAMMOTH-LICENSE assets/vendor/fflate.min.js assets/vendor/FFLATE-LICENSE assets/vendor/pdf.mjs assets/vendor/pdf.worker.mjs assets/vendor/PDFJS-LICENSE _site/assets/vendor/
+          cp assets/vendor/mammoth.browser.min.js assets/vendor/MAMMOTH-LICENSE assets/vendor/fflate.min.js assets/vendor/FFLATE-LICENSE assets/vendor/pdf.min.js assets/vendor/pdf.worker.min.js assets/vendor/PDFJS-LICENSE _site/assets/vendor/
           cp node_modules/@tiptap/core/LICENSE.md _site/assets/vendor/TIPTAP-LICENSE.md
           cp node_modules/@tiptap/pm/LICENSE node_modules/@tiptap/pm/THIRD_PARTY_LICENSES.md _site/assets/vendor/
           python - <<'PY'
@@ -92,7 +92,7 @@ jobs:
           index = Path("_site/index.html")
           html = index.read_text()
           version = os.environ["GITHUB_SHA"]
-          for asset in ("styles.css", "document-model.js", "editor-runtime.js", "app.js", "assets/vendor/fflate.min.js", "assets/vendor/pdf.mjs", "assets/vendor/pdf.worker.mjs"):
+          for asset in ("styles.css", "document-model.js", "editor-runtime.js", "app.js", "assets/vendor/fflate.min.js", "assets/vendor/pdf.min.js", "assets/vendor/pdf.worker.min.js"):
               html = html.replace(f'./{asset}"', f'./{asset}?v={version}"')
           index.write_text(html)
           PY
