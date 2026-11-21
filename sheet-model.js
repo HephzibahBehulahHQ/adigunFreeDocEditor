@@ -32,6 +32,46 @@ export function hiddenFilterRows(filter, valueAt) {
   return hidden;
 }
 
+export function sortSheetRange(sheet, { range, column, direction }, valueAt) {
+  const target = parseSheetFilter({ range, column, value: "sort" });
+  if (!target || !["asc", "desc"].includes(direction)) throw new Error("Choose a header row, data rows and a sort column.");
+  const [start, end] = target.range.split(":");
+  const first = Number(start.slice(1));
+  const last = Number(end.slice(1));
+  if (last > sheet.rows || end.charCodeAt(0) - 64 > sheet.columns) throw new Error("Choose a range within this sheet.");
+  const left = start.charCodeAt(0) - 65;
+  const right = end.charCodeAt(0) - 65;
+  const rows = Array.from({ length: last - first }, (_, index) => first + index + 1);
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+  const numeric = (value) => typeof value === "number" || typeof value === "string" &&
+    /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()) && Number.isFinite(Number(value));
+  const values = new Map(rows.map((row) => [row, valueAt(target.column + row)]));
+  const compare = (a, b) => {
+    if (a === "" || b === "") return Number(a === "") - Number(b === "");
+    let difference;
+    if (numeric(a) && numeric(b)) difference = Number(a) - Number(b);
+    else if (numeric(a) !== numeric(b)) difference = numeric(a) ? -1 : 1;
+    else difference = collator.compare(String(a), String(b));
+    return direction === "asc" ? difference : -difference;
+  };
+  const order = rows.slice().sort((a, b) => compare(values.get(a), values.get(b)));
+  const result = {};
+  for (const key of ["cells", "formats", "validation"]) result[key] = { ...sheet[key] };
+  for (const [offset, sourceRow] of order.entries()) {
+    const targetRow = rows[offset];
+    for (let index = left; index <= right; index++) {
+      const source = cellAddress(sourceRow - 1, index);
+      const destination = cellAddress(targetRow - 1, index);
+      for (const key of ["cells", "formats", "validation"]) {
+        const value = sheet[key]?.[source];
+        if (value === undefined) delete result[key][destination];
+        else result[key][destination] = key === "cells" ? shiftCellFormula(value, targetRow - sourceRow, 0) : value;
+      }
+    }
+  }
+  return result;
+}
+
 export function parseChartRange(range = "") {
   if (typeof range !== "string") return null;
   const match = /^([A-Z])([1-9]\d?|100):([A-Z])([1-9]\d?|100)$/.exec(range.toUpperCase().trim());
