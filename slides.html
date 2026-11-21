@@ -37,6 +37,9 @@
         <button type="button" data-slide-theme="violet">Violet</button>
         <button type="button" data-slide-theme="midnight">Midnight</button>
       </div></details>
+      <details name="slide-commands" class="command-menu"><summary>Animations</summary><div>
+        <button id="slide-animate" type="button">Animation settings</button>
+      </div></details>
       <a class="button button-outline" href="./ai.html?kind=slides">Draft with AI</a>
       <input id="slide-file" type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
     </div>
@@ -52,6 +55,29 @@
       </section>
     </div>
   </main>
+  <dialog id="slide-animation-dialog" class="pdf-tool-dialog" aria-labelledby="slide-animation-title">
+    <h2 id="slide-animation-title">Slide animation</h2>
+    <form>
+      <label>Effect
+        <select name="effect">
+          <option value="none">None</option>
+          <optgroup label="Entrance"><option value="fade">Fade in</option><option value="rise">Rise in</option></optgroup>
+          <optgroup label="Emphasis"><option value="pulse">Pulse</option></optgroup>
+          <optgroup label="Exit"><option value="exit">Fade out</option></optgroup>
+          <optgroup label="Motion paths"><option value="drift">Side to side</option></optgroup>
+        </select>
+      </label>
+      <label>Apply to <select name="target"><option value="both">Title and text</option><option value="title">Title</option><option value="content">Text</option></select></label>
+      <label>Start <select name="start"><option value="auto">When slide opens</option><option value="manual">When Play effect is pressed</option></select></label>
+      <label>Duration (seconds) <input name="duration" type="number" min="0.1" max="5" step="0.1" required></label>
+      <label>Delay (seconds) <input name="delay" type="number" min="0" max="10" step="0.1" required></label>
+      <p>Effects play in the browser slideshow. PowerPoint exports contain static slides.</p>
+      <div class="slides-actions">
+        <button class="button button-outline" type="submit">Save effect</button>
+        <button class="button button-outline" type="button" data-close>Cancel</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="slide-show" class="slide-show" aria-label="Present slides">
     <section class="slides-paper">
       <h2 id="present-title"></h2>
@@ -61,6 +87,7 @@
       <button id="present-prev" class="button button-outline" type="button">Previous</button>
       <output id="present-count"></output>
       <button id="present-next" class="button button-outline" type="button">Next</button>
+      <button id="present-play" class="button button-outline" type="button" hidden>Play effect</button>
       <button id="present-close" class="button button-outline" type="button">Close</button>
     </div>
   </dialog>
