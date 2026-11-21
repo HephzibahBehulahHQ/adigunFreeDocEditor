@@ -35,6 +35,9 @@
         <label class="pdf-format-option"><input id="pdf-page-numbers" type="checkbox"> Number output pages</label>
         <label class="pdf-format-option">Footer text <input id="pdf-footer-text" type="text" maxlength="60"></label>
       </div></details>
+      <details name="pdf-commands" class="command-menu"><summary>Forms</summary><div>
+        <button id="pdf-form-open" type="button" disabled>Fill form fields</button>
+      </div></details>
       <details name="pdf-commands" class="command-menu"><summary>Scan &amp; OCR</summary><div>
         <button id="pdf-ocr" type="button" disabled>Recognize text</button>
       </div></details>
@@ -52,6 +55,18 @@
       <iframe id="pdf-preview" title="PDF preview" hidden></iframe>
     </div>
   </main>
+  <dialog id="pdf-form-dialog" class="pdf-tool-dialog" aria-labelledby="pdf-form-title">
+    <h2 id="pdf-form-title">Fill PDF form</h2>
+    <form>
+      <label>Source PDF <select data-source></select></label>
+      <div data-fields></div>
+      <p role="status"></p>
+      <div class="slides-actions">
+        <button class="button button-outline" type="submit" disabled>Download filled PDF</button>
+        <button class="button button-outline" type="button" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="pdf-ocr-dialog" class="pdf-tool-dialog" aria-labelledby="pdf-ocr-title">
     <h2 id="pdf-ocr-title">Recognize text</h2>
     <form>
