@@ -90,7 +90,29 @@
 }
 .document-page hr[data-page-break="true"]{height:0;position:relative;overflow:visible;margin:26px 0;border:0;border-top:2px dashed #8995a8}
 .document-page hr[data-page-break="true"]::after{content:"Page break";position:absolute;right:8px;top:-9px;padding:0 7px;background:var(--panel);color:var(--muted);font:10px/16px Inter,ui-sans-serif,system-ui,sans-serif}
-@media print{.document-page hr[data-page-break="true"]{border:0;height:0;break-before:page;page-break-before:always;margin:0}}
+@page adigun-a4{size:A4 portrait;margin:0}
+@page adigun-letter{size:letter portrait;margin:0}
+@page adigun-a4-landscape{size:A4 landscape;margin:0}
+@page adigun-letter-landscape{size:letter landscape;margin:0}
+@media print{
+  .editing-document :is(.sidebar,.document-top-strip,.document-command-bar,.ribbon-tools,.stage-heading,.document-outline,.document-ruler,.page-meta,.page-footer,.adigun-window,#review-comments),
+  body:has(.editing-document) :is(.toast,dialog){display:none!important}
+  .app-shell.editing-document,
+  .editing-document :is(.workspace,.document-stage,.editor-layout,.editor-card,.editor-card .document-page){display:block!important;min-height:0!important;width:100%!important;max-width:none!important;margin:0!important;padding:0!important;background:white!important;border:0!important;overflow:visible!important;box-shadow:none!important;transform:none!important;zoom:1!important}
+  .editing-document .document-page{color:#182035}
+  .editing-document .document-page .document-sheet{page:adigun-a4;min-height:296.5mm!important;width:100%!important;max-width:none!important;margin:0!important;box-shadow:none!important;outline:none!important;padding:25.4mm!important;transform:none!important}
+  .editing-document .paper-letter .document-page .document-sheet{page:adigun-letter;min-height:278.9mm!important}
+  .editing-document .landscape .document-page .document-sheet{page:adigun-a4-landscape;min-height:209.5mm!important}
+  .editing-document .paper-letter.landscape .document-page .document-sheet{page:adigun-letter-landscape;min-height:215.4mm!important}
+  .editing-document .margin-narrow .document-page .document-sheet{padding:12.7mm!important}
+  .editing-document .margin-wide .document-page .document-sheet{padding:25.4mm 50.8mm!important}
+  .editing-document .margin-custom .document-page .document-sheet{padding:var(--page-margin-top) var(--page-margin-right) var(--page-margin-bottom) var(--page-margin-left)!important}
+  .editing-document .document-sheet+.document-sheet{break-before:page}
+  .editing-document .document-sheet hr[data-page-break="true"],
+  .editing-document .document-sheet .ProseMirror-separator,
+  .editing-document .document-sheet .column-resize-handle{display:none!important}
+  .editing-document .document-sheet img{max-width:100%;height:auto}
+}
 .page-break-navigation{margin-top:15px;padding-top:13px;border-top:1px solid var(--line)}.break-navigation-heading{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px}.break-navigation-heading h3{margin:0;color:var(--navy);font-size:11px;font-weight:700}.break-navigation-list{display:flex;flex-direction:column;gap:3px;max-height:28vh;overflow:auto}.break-navigation-item{width:100%;padding:7px 8px;border:0;border-radius:5px;background:transparent;color:#465168;text-align:left;font-size:10px;line-height:1.4}.break-navigation-item:hover,.break-navigation-item:focus-visible{background:var(--purple-soft);color:var(--navy)}.break-navigation-item:focus-visible{outline:2px solid var(--purple);outline-offset:1px}.break-navigation-item.page-thumbnail-item{display:grid;grid-template-columns:68px minmax(0,1fr);align-items:center;gap:9px;padding:6px}.page-thumbnail-preview{position:relative;display:block;width:68px;height:92px;overflow:hidden;border:1px solid #dce2ed;border-radius:3px;background:#fff;box-shadow:0 1px 3px rgba(34,46,75,.1)}.page-thumbnail-sheet{position:absolute;top:0;left:0;overflow:hidden;box-shadow:none!important;outline:0!important}.page-thumbnail-label{min-width:0;font-size:11px;font-weight:600}.page-thumbnail-item.active{background:var(--purple-soft);color:var(--navy);box-shadow:inset 0 0 0 1px var(--purple)}.page-thumbnail-item.active .page-thumbnail-preview{border-color:var(--purple);box-shadow:0 0 0 1px var(--purple)}.page-break-navigation .outline-empty{margin:5px 0 0;font-size:9px}
 .editor-card:not(.landing) .document-page{width:100%;min-height:0;aspect-ratio:auto;box-shadow:0 0 0 1px var(--line)}
 /* Paginated editor sheets */
