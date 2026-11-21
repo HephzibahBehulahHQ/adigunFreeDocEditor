@@ -13,6 +13,7 @@ assert.equal(buildPivot(pivotSource, { ...pivotConfig, aggregate: "average" }).c
 assert.equal(buildPivot(pivotSource, { ...pivotConfig, aggregate: "count" }).cells.B2, "2");
 assert.throws(() => buildPivot(pivotSource, { ...pivotConfig, group: "C" }), /within/);
 assert.equal(displayCell(0.375, "percent", "en-US"), "37.50%");
+assert.equal(displayCell(1234.5, "decimal", "en-US"), "1234.50");
 assert.equal(displayCell("#ERROR!", "number", "en-US"), "#ERROR!");
 assert.deepEqual(parseCsv('name,value\r\n"one, two","a ""quote"""\r\n"line\nbreak",5'), [
   ["name", "value"], ["one, two", 'a "quote"'], ["line\nbreak", "5"],
@@ -66,6 +67,9 @@ try {
   const parts = zip.unzipSync(bytes);
   assert.match(zip.strFromU8(parts["xl/worksheets/sheet1.xml"]), /<f>SUM\(A1:A2\)<\/f><v>30<\/v>/);
   assert.match(zip.strFromU8(parts["xl/worksheets/sheet1.xml"]), /<row r="3" hidden="1">/);
+  const worksheet = zip.strFromU8(parts["xl/worksheets/sheet1.xml"]);
+  parts["xl/worksheets/sheet1.xml"] = zip.strToU8(worksheet.replace("<filters>", '<filters blank="0">'));
+  assert.deepEqual(importWorkbook(zip.zipSync(parts), zip, dom.window.DOMParser)[0].filter, filter);
   parts["xl/worksheets/sheet2.xml"] = zip.strToU8(zip.strFromU8(parts["xl/worksheets/sheet2.xml"]).replace('r="A1"', 'r="AA1"'));
   assert.throws(() => importWorkbook(zip.zipSync(parts), zip, dom.window.DOMParser), /26-column/);
 } finally {

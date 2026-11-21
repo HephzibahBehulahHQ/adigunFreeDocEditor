@@ -1,7 +1,7 @@
 export const maxRows = 100;
 export const maxColumns = 26;
 export const maxCellLength = 4000;
-export const numberFormats = { general: 0, number: 4, percent: 10 };
+export const numberFormats = { general: 0, number: 4, percent: 10, decimal: 2 };
 
 export function validationOptions(value) {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string" ||
@@ -60,6 +60,7 @@ export function displayCell(value, format, locale) {
     style: format === "percent" ? "percent" : "decimal",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+    useGrouping: format !== "decimal",
   }).format(Number(value));
 }
 
