@@ -50,6 +50,7 @@
         <button type="button" data-sheet-format="number">Number (2 decimals)</button>
         <button type="button" data-sheet-format="decimal">Number (no grouping)</button>
         <button type="button" data-sheet-format="percent">Percentage</button>
+        <button id="sheet-rule-open" type="button" aria-controls="sheet-rule-panel" aria-expanded="false">Conditional formatting</button>
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Formulas</summary><div>
         <button type="button" id="sheet-autosum">Sum cells above</button>
@@ -90,6 +91,20 @@
         </form>
         <p id="sheet-chart-message" role="status"></p>
         <ol id="sheet-chart-values" class="sheet-chart-values" aria-label="Chart values"></ol>
+      </aside>
+      <aside id="sheet-rule-panel" class="sheet-chart-panel" aria-labelledby="sheet-rule-title" hidden>
+        <header><h2 id="sheet-rule-title">Conditional formatting</h2><button id="sheet-rule-close" class="button button-outline" type="button">Close</button></header>
+        <form id="sheet-rule-form">
+          <label>Apply to <input name="range" placeholder="B2:B20" maxlength="9" required></label>
+          <label>Cell value <select name="operator"><option value="greaterThan">Greater than</option><option value="lessThan">Less than</option><option value="equal">Equals</option></select></label>
+          <label>Compare with <input name="threshold" type="number" step="any" required></label>
+          <label>Fill <select name="color"><option value="yellow">Yellow</option><option value="green">Green</option><option value="red">Red</option></select></label>
+          <div class="sheets-actions">
+            <button class="button button-outline" type="submit">Apply rule</button>
+            <button id="sheet-rule-remove" class="button button-outline" type="button" disabled>Remove rule</button>
+          </div>
+          <p id="sheet-rule-status" role="status"></p>
+        </form>
       </aside>
     </div>
     <div class="sheets-tab-bar" aria-label="Workbook sheets">

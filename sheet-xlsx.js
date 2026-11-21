@@ -1,4 +1,4 @@
-import { calculateWorkbook, cellAddress, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseSheetFilter, validationOptions } from "./sheet-model.js";
+import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeConditionalRule, numberFormats, parseSheetFilter, validationOptions } from "./sheet-model.js";
 import { readWorksheetChart, writeWorksheetChart } from "./sheet-chart-xlsx.js";
 
 const mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -10,13 +10,14 @@ const worksheetType = "application/vnd.openxmlformats-officedocument.spreadsheet
 const workbookType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
 export const xlsxMime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const styleNames = Object.keys(numberFormats);
+const conditionNames = Object.keys(conditionalColors);
 
 function xml(value) {
   return String(value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, "")
     .replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
 }
 
-function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart }, valueAt) {
+function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart, conditionalRule }, valueAt) {
   const rows = new Map();
   for (const address of new Set([...Object.keys(cells), ...Object.keys(formats)])) {
     const raw = cells[address] ?? "";
@@ -57,7 +58,11 @@ function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {}, f
     : "";
   const drawing = sheetChart ? '<drawing r:id="rId1"/>' : "";
   const relationship = sheetChart ? ` xmlns:r="${officeNs}"` : "";
-  return `<worksheet xmlns="${mainNs}"${relationship}>${views}<sheetData>${data}</sheetData>${filterMarkup}${validations}${drawing}</worksheet>`;
+  const condition = normalizeConditionalRule(conditionalRule);
+  const conditional = condition
+    ? `<conditionalFormatting sqref="${condition.range}"><cfRule type="cellIs" dxfId="${conditionNames.indexOf(condition.color)}" priority="1" operator="${condition.operator}"><formula>${condition.threshold}</formula></cfRule></conditionalFormatting>`
+    : "";
+  return `<worksheet xmlns="${mainNs}"${relationship}>${views}<sheetData>${data}</sheetData>${filterMarkup}${conditional}${validations}${drawing}</worksheet>`;
 }
 
 function readFilter(worksheet) {
@@ -119,11 +124,16 @@ export function exportWorkbook(sheets, zip) {
     files["xl/" + target] = makeWorksheet(sheet, valueAt);
     if (sheet.chart) writeWorksheetChart(files, overrides, id, name, sheet.chart, valueAt, xml);
   }
-  if (sheets.some((sheet) => Object.keys(sheet.formats ?? {}).length)) {
+  const hasConditions = sheets.some((sheet) => normalizeConditionalRule(sheet.conditionalRule));
+  if (hasConditions || sheets.some((sheet) => Object.keys(sheet.formats ?? {}).length)) {
     rels.push(`<Relationship Id="rIdStyles" Type="${officeNs}/styles" Target="styles.xml"/>`);
     overrides.push('<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>');
     const formats = styleNames.map((name) => `<xf numFmtId="${numberFormats[name]}" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>`).join("");
     files["xl/styles.xml"] = `<styleSheet xmlns="${mainNs}"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${styleNames.length}">${formats}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+    if (hasConditions) {
+      const fills = conditionNames.map((name) => `<dxf><fill><patternFill patternType="solid"><fgColor rgb="FF${conditionalColors[name]}"/><bgColor rgb="FF${conditionalColors[name]}"/></patternFill></fill></dxf>`).join("");
+      files["xl/styles.xml"] = files["xl/styles.xml"].replace("</styleSheet>", `<dxfs count="${conditionNames.length}">${fills}</dxfs></styleSheet>`);
+    }
   }
   const workbookViews = sheets.some((sheet) => sheet.freezeFirstRow || sheet.hidden)
     ? `<bookViews><workbookView activeTab="${Math.max(0, sheets.findIndex((sheet) => !sheet.hidden))}"/></bookViews>`
@@ -159,9 +169,14 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
   const textRuns = (node) => [...node.getElementsByTagNameNS("*", "t")].map((run) => run.textContent).join("");
   const shared = Object.hasOwn(files, "xl/sharedStrings.xml")
     ? [...parse("xl/sharedStrings.xml").getElementsByTagNameNS("*", "si")].map(textRuns) : [];
-  const cellXfs = Object.hasOwn(files, "xl/styles.xml") ? parse("xl/styles.xml").getElementsByTagNameNS("*", "cellXfs")[0] : null;
+  const styles = Object.hasOwn(files, "xl/styles.xml") ? parse("xl/styles.xml") : null;
+  const cellXfs = styles?.getElementsByTagNameNS("*", "cellXfs")[0];
   const savedFormats = Array.from(cellXfs?.children ?? [], (xf) =>
     styleNames.find((format) => String(numberFormats[format]) === xf.getAttribute("numFmtId")));
+  const fills = Array.from(styles?.getElementsByTagNameNS(mainNs, "dxfs")[0]?.children ?? [], (dxf) => {
+    const color = dxf.getElementsByTagNameNS(mainNs, "fgColor")[0]?.getAttribute("rgb")?.toUpperCase();
+    return conditionNames.find((name) => "FF" + conditionalColors[name] === color);
+  });
   const definitions = [...parse("xl/workbook.xml").getElementsByTagNameNS("*", "sheet")];
   if (!definitions.length || definitions.length > 12) throw new Error("A workbook must contain between 1 and 12 sheets.");
   return definitions.map((definition) => {
@@ -178,6 +193,16 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const chart = readWorksheetChart(files, parse, worksheet, path, name);
     const validation = readValidation(worksheet);
     const filter = readFilter(worksheet);
+    const conditionalRange = worksheet.getElementsByTagNameNS(mainNs, "conditionalFormatting")[0];
+    const condition = conditionalRange?.getElementsByTagNameNS(mainNs, "cfRule")[0];
+    const threshold = condition?.getElementsByTagNameNS(mainNs, "formula")[0]?.textContent?.trim();
+    const conditionalRule = condition?.getAttribute("type") === "cellIs" && threshold
+      ? normalizeConditionalRule({
+        range: conditionalRange.getAttribute("sqref"),
+        operator: condition.getAttribute("operator"),
+        threshold: Number(threshold),
+        color: fills[condition.getAttribute("dxfId")],
+      }) : null;
     const pane = worksheet.getElementsByTagNameNS(mainNs, "pane")[0];
     const freezeFirstRow = pane?.getAttribute("state") === "frozen" && pane.getAttribute("ySplit") === "1" &&
       !Number(pane.getAttribute("xSplit"));
@@ -208,8 +233,8 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       rows = Math.max(rows, Number(address.slice(1)));
       columns = Math.max(columns, address.charCodeAt(0) - 64);
     }
-    if (filter) {
-      const end = filter.range.split(":")[1];
+    for (const rule of [filter, conditionalRule].filter(Boolean)) {
+      const end = rule.range.split(":").at(-1);
       rows = Math.max(rows, Number(end.slice(1)));
       columns = Math.max(columns, end.charCodeAt(0) - 64);
     }
@@ -218,6 +243,6 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       columns = Math.max(columns, chart.values.charCodeAt(0) - 64);
     }
     const hidden = ["hidden", "veryHidden"].includes(definition.getAttribute("state"));
-    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, freezeFirstRow, validation, filter, chart, hidden };
+    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, freezeFirstRow, validation, filter, chart, hidden, conditionalRule };
   });
 }
