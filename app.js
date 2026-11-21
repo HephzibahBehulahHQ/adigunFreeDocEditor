@@ -180,6 +180,7 @@
     file: [
       [{ label: "New document", action: "file-new", icon: "New document" }, { label: "Open a file", action: "file-open", icon: "Open a file" }, { label: "Save now", action: "file-save", icon: "Save now" }],
       [{ label: "Download Word", action: "file-docx", icon: "Download Word" }, { label: "Download HTML", action: "file-html", icon: "Download HTML" }],
+      [{ label: "Print or save as PDF", action: "file-print", icon: "Print / PDF" }],
     ],
     home: [
       [{ label: "Font family", select: "font", options: [["", "Font"], ...supportedFontFamilies.map((family) => [family, family])] }, { label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Heading 1"], ["h2", "Heading 2"], ["h3", "Heading 3"], ["h4", "Heading 4"], ["h5", "Heading 5"], ["h6", "Heading 6"]] }, { label: "Font size", select: "size", options: [["11pt", "11"], ["14pt", "14"], ["18pt", "18"], ["24pt", "24"]] }],
@@ -3321,7 +3322,9 @@
       }
       if (!allowedTags.has(tag)) { removed++; const fragment = document.createDocumentFragment(); for (const child of [...node.childNodes]) { const safeChild = copy(child); if (safeChild) fragment.append(safeChild); } return fragment; }
       const element = document.createElement(tag);
-      if (tag === "hr" && node.getAttribute("data-page-break") === "true") element.setAttribute("data-page-break", "true");
+      if (tag === "hr" && (node.getAttribute("data-page-break") === "true" || node.classList.contains("adigun-imported-page-break"))) {
+        element.setAttribute("data-page-break", "true");
+      }
       if (tag === "a") {
         const href = node.getAttribute("href") || "";
         try { const url = new URL(href, location.href); if (["http:", "https:", "mailto:"].includes(url.protocol)) element.setAttribute("href", url.href); else removed++; } catch { removed++; }
@@ -3484,11 +3487,14 @@
         const arrayBuffer = await file.arrayBuffer();
         const archiveEntry = inspectDocxArchive(arrayBuffer);
         const revisionCounts = await readDocxRevisionCounts(arrayBuffer, archiveEntry);
-        const converted = await window.mammoth.convertToHtml({ arrayBuffer });
+        const converted = await window.mammoth.convertToHtml({ arrayBuffer }, {
+          styleMap: ["br[type='page'] => hr.adigun-imported-page-break:fresh"],
+        });
         const sanitized = sanitizeDocxHtml(converted.value);
         const revisionMapping = mapDocxRevisionsToHtml(sanitized.html, revisionCounts?.paragraphs);
         const commentTargetText = new DOMParser().parseFromString("<main>" + revisionMapping.html + "</main>", "text/html").querySelector("main")?.textContent || "";
         const importedCommentData = await readDocxReviewComments(arrayBuffer, archiveEntry, commentTargetText);
+        const importedPageLayout = await readDocxPageLayout(arrayBuffer, archiveEntry);
         if (revisionMapping.html.length > 12 * 1024 * 1024) throw new Error("The editable document exceeds the 12 MB safety limit.");
         if (!(await flushActiveDocument())) { notify("Save the open document before importing another file."); return; }
         if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
@@ -4443,6 +4449,9 @@
       case "file-save": $("#save-document").click(); break;
       case "file-docx": $("#export-docx").click(); break;
       case "file-html": $("#export-html").click(); break;
+      case "file-print":
+        if (editor.contentEditable === "true" && !$("#editor-card").classList.contains("landing")) window.print();
+        break;
       case "style-preset": runCommand("formatBlock", `<${button.dataset.stylePreset}>`); break;
       case "clipboard-copy": case "clipboard-cut": case "clipboard-paste": void runClipboardAction(action); break;
       case "format-painter": paintFormatting(); break;
