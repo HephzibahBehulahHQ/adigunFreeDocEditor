@@ -122,7 +122,9 @@
     $("present-prev").disabled = presentedSlide === 0;
     $("present-next").disabled = presentedSlide >= deck.slides.length - 1;
   }
-  $("slide-present").addEventListener("click", () => { presentedSlide = deck.active; renderPresentation(); slideShow.showModal(); });
+  const presentFrom = (index) => { presentedSlide = index; renderPresentation(); slideShow.showModal(); };
+  $("slide-present").addEventListener("click", () => presentFrom(deck.active));
+  $("slide-present-start").addEventListener("click", () => presentFrom(0));
   $("present-close").addEventListener("click", () => slideShow.close());
   $("present-prev").addEventListener("click", () => { presentedSlide--; renderPresentation(); });
   $("present-next").addEventListener("click", () => { presentedSlide++; renderPresentation(); });

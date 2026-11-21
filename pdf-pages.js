@@ -16,7 +16,7 @@ export function parsePages(input, count) {
   return [...selected];
 }
 
-export async function buildPdf(sources, { PDFDocument, degrees, StandardFonts, rgb }, { numberPages = false } = {}) {
+export async function buildPdf(sources, { PDFDocument, degrees, StandardFonts, rgb }, { numberPages = false, footer = "" } = {}) {
   if (!sources.length) throw new Error("Add a PDF before exporting.");
   const output = await PDFDocument.create();
   for (const { document, selection, rotation } of sources) {
@@ -31,7 +31,7 @@ export async function buildPdf(sources, { PDFDocument, degrees, StandardFonts, r
       output.addPage(page);
     }
   }
-  if (numberPages) {
+  if (numberPages || footer) {
     const font = await output.embedFont(StandardFonts.Helvetica);
     for (const [index, page] of output.getPages().entries()) {
       const box = page.getCropBox();
@@ -40,7 +40,14 @@ export async function buildPdf(sources, { PDFDocument, degrees, StandardFonts, r
       const yInset = Math.min(24, box.height / 4);
       const offsets = { 0: [xInset, yInset], 90: [box.width - xInset, yInset], 180: [box.width - xInset, box.height - yInset], 270: [xInset, box.height - yInset] };
       const [x, y] = offsets[rotation] ?? offsets[0];
-      page.drawText(String(index + 1), { x: box.x + x, y: box.y + y, font, size: 10, color: rgb(.18, .22, .29), rotate: degrees(rotation) });
+      const text = [footer, numberPages ? String(index + 1) : ""].filter(Boolean).join(" · ");
+      const width = rotation === 90 || rotation === 270 ? box.height : box.width;
+      const available = width - 2 * Math.min(xInset, yInset);
+      let textWidth;
+      try { textWidth = font.widthOfTextAtSize(text, 10); }
+      catch { throw new Error("The footer contains characters unsupported by the PDF font."); }
+      const size = Math.min(10, 10 * available / textWidth);
+      page.drawText(text, { x: box.x + x, y: box.y + y, font, size, color: rgb(.18, .22, .29), rotate: degrees(rotation) });
     }
   }
   return output.save();

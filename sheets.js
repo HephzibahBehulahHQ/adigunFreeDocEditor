@@ -150,6 +150,31 @@ $("sheet-gridlines").addEventListener("click", (event) => {
   const hidden = grid.classList.toggle("sheets-no-gridlines");
   event.currentTarget.setAttribute("aria-pressed", String(!hidden));
 });
+const findDialog = $("sheet-find-dialog");
+$("sheet-find").addEventListener("click", () => {
+  $("sheet-find-status").textContent = "";
+  findDialog.showModal();
+  $("sheet-find-query").focus();
+});
+$("sheet-find-close").addEventListener("click", () => findDialog.close());
+$("sheet-find-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const query = $("sheet-find-query").value.trim().toLocaleLowerCase();
+  if (!query) return;
+  const inputs = [...grid.querySelectorAll("[data-cell]")];
+  const offset = inputs.findIndex((input) => input.dataset.cell === selectedAddress) + 1;
+  const sheet = currentSheet();
+  const valueAt = calculateSheet(sheet.cells);
+  const match = [...inputs.slice(offset), ...inputs.slice(0, offset)].find(({ dataset }) => {
+    const address = dataset.cell;
+    return [sheet.cells[address] ?? "", displayCell(valueAt(address), sheet.formats?.[address])]
+      .some((value) => String(value).toLocaleLowerCase().includes(query));
+  });
+  if (!match) { $("sheet-find-status").textContent = "No matching cells."; return; }
+  findDialog.close();
+  match.focus();
+  status(`Found in ${match.dataset.cell}`);
+});
 grid.addEventListener("keydown", (event) => {
   const address = event.target.dataset.cell;
   if (event.key !== "Enter" || !address || event.isComposing) return;
