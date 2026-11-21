@@ -32,6 +32,7 @@
         <button id="sheet-add-row" type="button">Add row</button>
         <button id="sheet-add-column" type="button">Add column</button>
         <button id="sheet-pivot" type="button">PivotTable</button>
+        <button id="sheet-chart-open" type="button" aria-controls="sheet-chart-panel" aria-expanded="false">Bar chart</button>
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Format</summary><div>
         <button type="button" data-sheet-format="general">General</button>
@@ -61,8 +62,22 @@
       <select id="sheet-validation-picker" aria-label="Allowed values for the active cell" hidden></select>
     </div>
     <p class="sheets-help" id="sheets-help">Use formulas such as =SUM(A1:A5) or ='Sheet 2'!$B$4. CSV downloads contain calculated values from the active sheet.</p>
-    <div class="sheets-grid" tabindex="0" role="region" aria-label="Editable spreadsheet">
-      <table id="sheet-grid" aria-label="Cells" aria-describedby="sheets-help"></table>
+    <div class="sheet-work-area">
+      <div class="sheets-grid" tabindex="0" role="region" aria-label="Editable spreadsheet">
+        <table id="sheet-grid" aria-label="Cells" aria-describedby="sheets-help"></table>
+      </div>
+      <aside id="sheet-chart-panel" class="sheet-chart-panel" aria-labelledby="sheet-chart-title" hidden>
+        <header><h2 id="sheet-chart-title">Bar chart</h2><button id="sheet-chart-close" class="button button-outline" type="button">Close</button></header>
+        <form id="sheet-chart-form">
+          <label>Two columns with headers <input name="range" placeholder="A1:B5" maxlength="9" required></label>
+          <div class="sheets-actions">
+            <button class="button button-outline" type="submit">Apply range</button>
+            <button id="sheet-chart-remove" class="button button-outline" type="button" disabled>Remove chart</button>
+          </div>
+        </form>
+        <p id="sheet-chart-message" role="status"></p>
+        <ol id="sheet-chart-values" class="sheet-chart-values" aria-label="Chart values"></ol>
+      </aside>
     </div>
     <div class="sheets-tab-bar" aria-label="Workbook sheets">
       <div id="sheet-tabs" role="group" aria-label="Select sheet"></div>

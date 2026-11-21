@@ -518,6 +518,20 @@ a.nav-item{text-decoration:none}
 #sheet-find-query{max-width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:5px}
 .sheets-grid .sheets-no-gridlines td{border-color:transparent}
 .sheets-grid{max-height:65vh;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.sheet-work-area{display:grid;gap:12px}
+.sheet-work-area:has(.sheet-chart-panel:not([hidden])){grid-template-columns:minmax(0,1fr) minmax(240px,300px)}
+.sheet-chart-panel{max-height:65vh;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.sheet-chart-panel header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sheet-chart-panel h2{margin:0;font-size:16px}
+.sheet-chart-panel label{display:grid;gap:4px;margin:10px 0}
+.sheet-chart-panel input{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:5px;font:inherit}
+.sheet-chart-values{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.sheet-chart-values li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;font-size:13px}
+.sheet-chart-values span{overflow-wrap:anywhere}
+.sheet-chart-track{position:relative;grid-column:1/-1;min-height:9px;background:var(--canvas);border-radius:3px}
+.sheet-chart-bar{position:absolute;top:0;bottom:0;border-radius:3px;background:#6446bc}
+.sheet-chart-bar.negative{background:#aa4660}
+@media(max-width:700px){.sheet-work-area:has(.sheet-chart-panel:not([hidden])){grid-template-columns:minmax(0,1fr)}}
 .sheets-grid table{border-spacing:0;table-layout:fixed;width:max-content;min-width:100%}
 .sheets-grid :is(td,th){padding:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
 .sheets-grid th,.sheets-grid thead td{padding:5px 10px;background:var(--canvas);color:var(--muted);font-size:11px}
