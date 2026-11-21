@@ -489,6 +489,21 @@ a.nav-item{text-decoration:none}
 .slide-notes-panel textarea{display:block;width:100%;margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:5px;font:inherit}
 .transition-preview{overflow:hidden;margin:10px 0;border:1px solid var(--line);border-radius:7px;background:var(--canvas)}
 .transition-preview div{display:grid;place-items:center;min-height:105px;background:var(--purple-soft);color:var(--navy)}
+.slide-work-area{min-width:0}
+.slide-work-area:has(.slide-object-panel:not([hidden])){display:grid;grid-template-columns:minmax(0,1fr) minmax(210px,250px);gap:12px;align-items:start}
+.slides-paper{position:relative;overflow:hidden}
+.slide-object-layer{position:absolute;inset:0;pointer-events:none}
+.slide-object{position:absolute;display:grid;place-items:center;overflow:hidden;padding:5px;border:1px solid transparent;background:var(--object-fill);color:#182035;white-space:pre-wrap;overflow-wrap:anywhere;text-align:center;font-size:clamp(11px,1.3vw,19px)}
+.slide-object-text{background:transparent;color:var(--slide-text,var(--ink))}
+.slide-object-ellipse{border-radius:50%}
+button.slide-object{pointer-events:auto;touch-action:none;cursor:grab}
+button.slide-object[aria-pressed="true"],button.slide-object:focus-visible{outline:2px solid var(--blue)}
+.slide-object-panel{padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.slide-object-panel h2{font-size:16px;margin:0 0 8px}
+.slide-object-panel label{display:grid;gap:4px;margin-bottom:8px;font-size:12px}
+.slide-object-panel :is(input,textarea){width:100%;min-width:0;padding:6px;border:1px solid var(--line);border-radius:5px;font:inherit}
+.slide-object-fields{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
+@media(max-width:900px){.slide-work-area:has(.slide-object-panel:not([hidden])){grid-template-columns:minmax(0,1fr)}}
 #slide-list{display:grid;gap:6px;max-height:55vh;overflow:auto;list-style:none;margin:0 0 10px;padding:0}
 #slide-list button{width:100%;min-height:38px;overflow-wrap:anywhere;text-align:left}
 #slide-list button[aria-pressed="true"]{border-color:var(--purple);background:var(--purple-soft)}

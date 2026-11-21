@@ -34,6 +34,11 @@
         <button id="slide-hide" type="button" aria-pressed="false">Hide slide</button>
         <button id="slide-remove" type="button">Delete slide</button>
       </div></details>
+      <details name="slide-commands" class="command-menu"><summary>Insert</summary><div>
+        <button type="button" data-slide-object="text">Text box</button>
+        <button type="button" data-slide-object="rectangle">Rectangle</button>
+        <button type="button" data-slide-object="ellipse">Ellipse</button>
+      </div></details>
       <details name="slide-commands" class="command-menu"><summary>Slide Show</summary><div>
         <button id="slide-present-start" type="button">Present from beginning</button>
         <button id="slide-present" type="button">Present from current slide</button>
@@ -56,16 +61,40 @@
       <aside class="slides-sidebar" aria-label="Slides">
         <ol id="slide-list"></ol>
       </aside>
+      <div class="slide-work-area">
       <div>
       <section class="slides-paper" aria-label="Current slide">
         <label for="slide-title" class="sr-only">Slide title</label>
         <input id="slide-title" maxlength="120" placeholder="Slide title">
         <label for="slide-content" class="sr-only">Slide text</label>
         <textarea id="slide-content" maxlength="1500" placeholder="Add slide text"></textarea>
+        <div id="slide-object-layer" class="slide-object-layer"></div>
       </section>
       <details id="slide-notes-panel" class="slide-notes-panel"><summary>Speaker notes</summary>
         <textarea id="slide-notes" aria-label="Speaker notes" maxlength="4000" rows="4"></textarea>
       </details>
+      </div>
+      <aside id="slide-object-panel" class="slide-object-panel" aria-labelledby="slide-object-heading" hidden>
+        <h2 id="slide-object-heading">Object properties</h2>
+        <form id="slide-object-form">
+          <label>Text <textarea name="text" rows="3" maxlength="500"></textarea></label>
+          <div class="slide-object-fields">
+            <label>Left % <input name="x" type="number" min="0" max="100" step="0.1" required></label>
+            <label>Top % <input name="y" type="number" min="0" max="100" step="0.1" required></label>
+            <label>Width % <input name="width" type="number" min="8" max="100" step="0.1" required></label>
+            <label>Height % <input name="height" type="number" min="8" max="100" step="0.1" required></label>
+            <label>Rotation ° <input name="rotation" type="number" min="-180" max="180" step="0.1" required></label>
+            <label>Fill <input name="fill" type="color"></label>
+          </div>
+          <div class="slides-actions">
+            <button class="button button-outline" type="submit">Apply</button>
+            <button id="slide-object-front" class="button button-outline" type="button">Bring to front</button>
+            <button id="slide-object-back" class="button button-outline" type="button">Send to back</button>
+            <button id="slide-object-delete" class="button button-outline" type="button">Remove object</button>
+            <button id="slide-object-close" class="button button-outline" type="button">Close</button>
+          </div>
+        </form>
+      </aside>
       </div>
     </div>
     <footer class="sheet-status-bar"><span id="slide-status-index"></span></footer>
@@ -112,6 +141,7 @@
     <section class="slides-paper">
       <h2 id="present-title"></h2>
       <div id="present-content"></div>
+      <div id="present-object-layer" class="slide-object-layer"></div>
     </section>
     <div class="slides-actions">
       <button id="present-prev" class="button button-outline" type="button">Previous</button>
