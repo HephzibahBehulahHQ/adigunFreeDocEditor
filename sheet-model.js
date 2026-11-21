@@ -10,6 +10,28 @@ export function validationOptions(value) {
   return options.join(",").length <= 253 ? options : [];
 }
 
+export function parseSheetFilter(input) {
+  const { range, column, value } = input ?? {};
+  if (typeof range !== "string" || typeof column !== "string" || typeof value !== "string" ||
+    !value || value.length > 255) return null;
+  const match = /^([A-Z])([1-9]\d?|100):([A-Z])([1-9]\d?|100)$/.exec(range.toUpperCase().trim());
+  if (!match) return null;
+  const [, left, first, right, last] = match;
+  const key = column.toUpperCase().trim();
+  if (!/^[A-Z]$/.test(key) || key < left || key > right || Number(last) <= Number(first)) return null;
+  return { range: match[0], column: key, value };
+}
+
+export function hiddenFilterRows(filter, valueAt) {
+  if (!filter) return new Set();
+  const [, first, last] = /^[A-Z](\d+):[A-Z](\d+)$/.exec(filter.range);
+  const hidden = new Set();
+  for (let row = Number(first) + 1; row <= Number(last); row++) {
+    if (String(valueAt(filter.column + row)).toUpperCase() !== filter.value.toUpperCase()) hidden.add(row);
+  }
+  return hidden;
+}
+
 export function displayCell(value, format, locale) {
   if (!Object.hasOwn(numberFormats, format) || format === "general") return value;
   const numeric = typeof value === "number" || (typeof value === "string" && /^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(value.trim()));
