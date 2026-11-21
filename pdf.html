@@ -40,7 +40,7 @@
         <button id="pdf-navigation-toggle" type="button" aria-controls="pdf-navigation" aria-expanded="false" disabled>Pages and search</button>
       </div></details>
       <details name="pdf-commands" class="command-menu"><summary>Comment</summary><div>
-        <button id="pdf-comments-open" type="button" disabled>Add sticky notes</button>
+        <button id="pdf-comments-open" type="button" disabled>Annotate pages</button>
       </div></details>
       <details name="pdf-commands" class="command-menu"><summary>Forms</summary><div>
         <button id="pdf-form-open" type="button" disabled>Fill form fields</button>
@@ -96,21 +96,32 @@
     </div>
   </dialog>
   <dialog id="pdf-comments-dialog" class="pdf-tool-dialog pdf-redact-dialog" aria-labelledby="pdf-comments-title">
-    <h2 id="pdf-comments-title">PDF sticky notes</h2>
+    <h2 id="pdf-comments-title">Annotate PDF pages</h2>
     <form>
       <div class="pdf-redact-fields">
         <label>Source PDF <select name="source"></select></label>
         <label>Page <select name="page"></select></label>
       </div>
       <canvas aria-label="Page preview with sticky note markers" hidden></canvas>
+      <label>Markup type <select name="kind">
+        <option value="note">Sticky note</option>
+        <option value="highlight">Highlight</option>
+        <option value="underline">Underline</option>
+        <option value="strike">Strikeout</option>
+        <option value="box">Rectangle</option>
+      </select></label>
       <div class="pdf-redact-fields">
         <label>Left % <input name="left" type="number" min="0" max="100" step="0.1" value="10" required></label>
         <label>Top % <input name="top" type="number" min="0" max="100" step="0.1" value="10" required></label>
       </div>
-      <label>Note <textarea name="text" rows="2" maxlength="1000" required></textarea></label>
+      <div class="pdf-redact-fields" data-area hidden>
+        <label>Width % <input name="width" type="number" min="0.1" max="100" step="0.1" value="25" required></label>
+        <label>Height % <input name="height" type="number" min="0.1" max="100" step="0.1" value="5" required></label>
+      </div>
+      <label>Comment <textarea name="text" rows="2" maxlength="1000" required></textarea></label>
       <button class="button button-outline" type="submit">Add to page</button>
     </form>
-    <ol aria-label="Notes in this review"></ol>
+    <ol aria-label="Markers in this review"></ol>
     <p role="status"></p>
     <div class="slides-actions">
       <button class="button button-outline" type="button" data-export disabled>Download reviewed PDF</button>
