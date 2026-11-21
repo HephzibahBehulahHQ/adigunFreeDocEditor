@@ -16,6 +16,7 @@
         <a href="./slides.html" target="_blank" rel="noopener" aria-label="Slides (opens in a new tab)">Slides</a>
         <a href="./pdf.html" target="_blank" rel="noopener" aria-label="PDF (opens in a new tab)">PDF</a>
       </nav>
+    <input id="workbook-title" class="suite-file-name" aria-label="Workbook name" maxlength="100" spellcheck="false" value="Untitled workbook">
     <span id="sheet-save" role="status">Stored on this device</span>
   </header>
   <main class="sheets-workspace">
@@ -23,9 +24,11 @@
       <button id="sheet-undo" class="button button-outline" type="button" title="Undo workbook edit (Ctrl+Z)" disabled>Undo</button>
       <button id="sheet-redo" class="button button-outline" type="button" title="Redo workbook edit (Ctrl+Shift+Z)" disabled>Redo</button>
       <details name="sheet-commands" class="command-menu"><summary>File</summary><div>
+        <button id="workbook-new" type="button">New workbook</button>
         <button id="sheet-open" type="button">Open CSV</button>
         <button id="workbook-open" type="button">Open Excel</button>
         <button id="workbook-export" type="button">Download Excel</button>
+        <button id="workbook-save" type="button">Save on this device</button>
         <button id="sheet-export" type="button">Download CSV</button>
       </div></details>
       <details name="sheet-commands" class="command-menu" open><summary>Home</summary><div>
@@ -92,12 +95,30 @@
     <div class="sheets-tab-bar" aria-label="Workbook sheets">
       <div id="sheet-tabs" role="group" aria-label="Select sheet"></div>
       <button id="sheet-add" type="button" class="button button-outline">＋ Sheet</button>
+      <button id="sheet-manage" type="button" class="button button-outline">Manage sheets</button>
     </div>
     <footer class="sheet-status-bar" aria-label="Selection statistics">
       <span id="sheet-active-name"></span>
       <span id="sheet-selection-statistics"></span>
     </footer>
   </main>
+  <dialog id="sheet-manage-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-manage-title">
+    <h2 id="sheet-manage-title">Manage sheets</h2>
+    <form>
+      <label>Sheet <select name="sheet"></select></label>
+      <label>Sheet name <input name="label" maxlength="31" required></label>
+      <p role="status"></p>
+      <div class="sheets-actions">
+        <button class="button button-outline" type="submit">Rename</button>
+        <button class="button button-outline" type="button" data-manage="duplicate">Duplicate</button>
+        <button class="button button-outline" type="button" data-manage="earlier">Move earlier</button>
+        <button class="button button-outline" type="button" data-manage="later">Move later</button>
+        <button class="button button-outline" type="button" data-manage="visibility">Hide</button>
+        <button class="button button-outline" type="button" data-manage="delete">Delete</button>
+        <button class="button button-outline" type="button" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="sheet-sort-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-sort-title">
     <h2 id="sheet-sort-title">Sort records</h2>
     <form>
