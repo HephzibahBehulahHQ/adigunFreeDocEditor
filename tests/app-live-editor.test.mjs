@@ -52,7 +52,7 @@ window.indexedDB = {
   },
 };
 
-for (const file of ["document-model.js", "editor-runtime.js", "assets/vendor/fflate.min.js"]) {
+for (const file of ["document-model.js", "editor-runtime.js", "assets/vendor/fflate.min.js", "presentation-package.js"]) {
   window.eval(fs.readFileSync(path.join(root, file), "utf8"));
 }
 window.__downloads = [];
