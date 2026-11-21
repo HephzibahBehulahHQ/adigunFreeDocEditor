@@ -528,6 +528,16 @@ button.slide-object[aria-pressed="true"],button.slide-object:focus-visible{outli
 .slide-object-panel :is(input,textarea){width:100%;min-width:0;padding:6px;border:1px solid var(--line);border-radius:5px;font:inherit}
 .slide-object-fields{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
 @media(max-width:900px){.slide-work-area:has(.slide-object-panel:not([hidden])){grid-template-columns:minmax(0,1fr)}}
+.slide-print-layout{display:none}
+@page adigun-slide{size:13.333in 7.5in;margin:0}
+@media print{
+  .slides-page>:not(.slide-print-layout){display:none!important}
+  .slides-page .slide-print-layout{display:block}
+  .slide-print-layout .slides-paper{page:adigun-slide;display:block;width:13.32in;height:7.49in;min-height:0;margin:0;padding:.6in;border:0;border-radius:0;box-shadow:none;break-inside:avoid;print-color-adjust:exact}
+  .slide-print-layout .slides-paper+.slides-paper{break-before:page}
+  .slide-print-layout .slides-paper h2{font-size:28pt;margin:0 0 .3in}
+  .slide-print-content{white-space:pre-wrap;font-size:18pt;overflow-wrap:anywhere}
+}
 #slide-list{display:grid;gap:6px;max-height:55vh;overflow:auto;list-style:none;margin:0 0 10px;padding:0}
 #slide-list button{width:100%;min-height:38px;overflow-wrap:anywhere;text-align:left}
 #slide-list button[aria-pressed="true"]{border-color:var(--purple);background:var(--purple-soft)}

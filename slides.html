@@ -23,8 +23,11 @@
       <label for="deck-title" class="sr-only">Presentation name</label>
       <input id="deck-title" maxlength="100" placeholder="Presentation name">
       <details name="slide-commands" class="command-menu"><summary>File</summary><div>
+        <button id="slide-new-deck" type="button">New presentation</button>
         <button id="slide-import" type="button">Open PowerPoint</button>
+        <button id="slide-save-deck" type="button">Save on this device</button>
         <button id="slide-export" type="button">Download PowerPoint</button>
+        <button id="slide-print-deck" type="button">Print visible slides / PDF</button>
       </div></details>
       <details name="slide-commands" class="command-menu" open><summary>Slide</summary><div>
         <button id="slide-add" type="button">New slide</button>
@@ -99,6 +102,7 @@
     </div>
     <footer class="sheet-status-bar"><span id="slide-status-index"></span></footer>
   </main>
+  <div id="slide-print-layout" class="slide-print-layout"></div>
   <dialog id="slide-transition-dialog" class="pdf-tool-dialog" aria-labelledby="slide-transition-title">
     <h2 id="slide-transition-title">Slide transition</h2>
     <form>

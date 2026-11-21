@@ -3,6 +3,7 @@
   const storageKey = "adigun-slides-v1";
   const maxSlides = 40;
   const blank = () => ({ title: "", content: "" });
+  const newDeck = () => ({ name: "Untitled presentation", active: 0, slides: [blank()] });
   const slideShow = $("slide-show");
   const animationDialog = $("slide-animation-dialog");
   const animationForm = animationDialog.querySelector("form");
@@ -20,7 +21,7 @@
   let playing = [];
   let transitioning;
   let advanceTimer;
-  let deck = { name: "Untitled presentation", active: 0, slides: [blank()] };
+  let deck = newDeck();
   let presentedSlide = 0;
   let draggedSlide = null;
   let selectedObject = null;
@@ -133,6 +134,7 @@
     const allHidden = deck.slides.every((item) => item.hidden);
     $("slide-present").disabled = allHidden;
     $("slide-present-start").disabled = allHidden;
+    $("slide-print-deck").disabled = allHidden;
     $("slide-status-index").textContent = `Slide ${deck.active + 1} of ${deck.slides.length}${slide.hidden ? " · Hidden in slideshow" : ""}`;
     renderList();
     renderObjects();
@@ -443,6 +445,35 @@
   });
 
   $("slide-import").addEventListener("click", () => $("slide-file").click());
+  $("slide-save-deck").addEventListener("click", save);
+  $("slide-new-deck").addEventListener("click", () => {
+    const hasContent = deck.name !== "Untitled presentation" || deck.slides.length > 1 ||
+      deck.slides.some((slide) => slide.title || slide.content || slide.notes || slide.objects?.length);
+    if (hasContent && !window.confirm("Start a new presentation? Download a PowerPoint copy first if you want to keep this one.")) return;
+    deck = newDeck();
+    save();
+    render();
+    $("deck-title").focus();
+  });
+  function buildPrintDeck() {
+    $("slide-print-layout").replaceChildren(...deck.slides.filter((slide) => !slide.hidden).map((slide) => {
+      const paper = document.createElement("section");
+      paper.className = "slides-paper";
+      const heading = document.createElement("h2");
+      heading.textContent = slide.title;
+      const text = document.createElement("div");
+      text.className = "slide-print-content";
+      text.textContent = slide.content;
+      const objects = document.createElement("div");
+      objects.className = "slide-object-layer";
+      drawObjects(objects, slide.objects);
+      applyTheme(paper, slide.theme);
+      paper.append(heading, text, objects);
+      return paper;
+    }));
+  }
+  window.addEventListener("beforeprint", buildPrintDeck);
+  $("slide-print-deck").addEventListener("click", () => window.print());
   $("slide-file").addEventListener("change", async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
