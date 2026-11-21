@@ -14,6 +14,7 @@
       const slides = stored.slides.slice(0, maxSlides).map((slide) => ({
         title: typeof slide?.title === "string" ? slide.title.slice(0, 120) : "",
         content: typeof slide?.content === "string" ? slide.content.slice(0, 1500) : "",
+        theme: Object.hasOwn(window.AdigunPresentation.themes, slide?.theme) ? slide.theme : "paper",
       }));
       const active = Number.isInteger(stored.active) ? Math.max(0, Math.min(stored.active, slides.length - 1)) : 0;
       deck = { name: typeof stored.name === "string" ? stored.name.slice(0, 100) : deck.name, active, slides };
@@ -51,12 +52,31 @@
     $("deck-title").value = deck.name;
     $("slide-title").value = slide.title;
     $("slide-content").value = slide.content;
+    applyTheme($("slide-title").closest(".slides-paper"), slide.theme);
+    for (const button of document.querySelectorAll("[data-slide-theme]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.slideTheme === (slide.theme || "paper")));
+    }
     $("slide-add").disabled = deck.slides.length >= maxSlides;
     $("slide-duplicate").disabled = deck.slides.length >= maxSlides;
     $("slide-remove").disabled = deck.slides.length === 1;
     $("slide-earlier").disabled = deck.active === 0;
     $("slide-later").disabled = deck.active === deck.slides.length - 1;
     renderList();
+  }
+
+  function applyTheme(paper, theme) {
+    const { themes } = window.AdigunPresentation;
+    const palette = Object.hasOwn(themes, theme) ? themes[theme] : themes.paper;
+    paper.style.setProperty("--slide-background", "#" + palette.background);
+    paper.style.setProperty("--slide-text", "#" + palette.text);
+  }
+
+  for (const button of document.querySelectorAll("[data-slide-theme]")) {
+    button.addEventListener("click", () => {
+      deck.slides[deck.active].theme = button.dataset.slideTheme;
+      save();
+      render();
+    });
   }
 
   function addSlide(slide) {
@@ -97,6 +117,7 @@
     const slide = deck.slides[presentedSlide];
     $("present-title").textContent = slide.title;
     $("present-content").textContent = slide.content;
+    applyTheme($("present-title").closest(".slides-paper"), slide.theme);
     $("present-count").textContent = `${presentedSlide + 1} / ${deck.slides.length}`;
     $("present-prev").disabled = presentedSlide === 0;
     $("present-next").disabled = presentedSlide >= deck.slides.length - 1;
@@ -134,7 +155,7 @@
     const button = event.currentTarget;
     button.disabled = true;
     try {
-      const slides = deck.slides.map((slide) => ({ title: slide.title, lines: slide.content.split("\n") }));
+      const slides = deck.slides.map((slide) => ({ title: slide.title, lines: slide.content.split("\n"), theme: slide.theme }));
       const blob = await window.AdigunPresentation.createBlob(slides);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
