@@ -120,6 +120,11 @@ try {
   window.__testEditor.commands.setContent("<p>Live text</p>");
   window.__testEditor.commands.setTextSelection({ from: 1, to: 10 });
   const blockStyle = window.document.querySelector('#ribbon-tools [data-tool="block"]');
+  const headingTile = window.document.querySelector('[data-style-preset="h2"]');
+  headingTile.click();
+  assert.equal(window.__testEditor.getJSON().content[0].attrs.level, 2, "a style preview applies a semantic heading");
+  assert.equal(headingTile.getAttribute("aria-pressed"), "true", "the active style preview is marked");
+  assert.equal(blockStyle.value, "h2", "the style menu tracks the visual picker");
   assert.deepEqual([...blockStyle.options].map((option) => option.textContent), ["Normal", "Heading 1", "Heading 2", "Heading 3", "Heading 4", "Heading 5", "Heading 6"], "the text-style menu exposes all supported semantic heading levels");
   blockStyle.value = "h1";
   blockStyle.dispatchEvent(new window.Event("change", { bubbles: true }));
