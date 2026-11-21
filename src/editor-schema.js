@@ -93,6 +93,19 @@ const ModelAttributes = Extension.create({
     return [
       { types: paragraphTypes, attributes: paragraphAttributes },
       {
+        types: ["paragraph", "heading"],
+        attributes: Object.fromEntries([
+          ["revisionId", "data-revision-id"],
+          ["revisionAuthor", "data-revision-author"],
+          ["revisionCreatedAt", "data-revision-created-at"],
+        ].map(([name, attribute]) => [name, {
+          default: null,
+          keepOnSplit: false,
+          parseHTML: (element) => element.getAttribute(attribute),
+          renderHTML: (attrs) => attrs[name] ? { [attribute]: String(attrs[name]) } : {},
+        }])),
+      },
+      {
         types: ["tableRow"],
         attributes: {
           section: {
@@ -249,6 +262,9 @@ function modelAttrsToEditor(attrs = {}) {
     indentLevel: attrs["data-indent-level"] || null,
     lineSpacing: attrs["data-line-spacing"] || null,
     paragraphSpacing: attrs["data-paragraph-spacing"] || null,
+    revisionId: attrs["data-revision-id"] || null,
+    revisionAuthor: attrs["data-revision-author"] || null,
+    revisionCreatedAt: attrs["data-revision-created-at"] || null,
     value: parseOrderedListOrdinal(attrs.value),
   };
 }
@@ -360,6 +376,11 @@ function editorAttrsToModel(attrs = {}) {
   if (attrs.indentLevel) result["data-indent-level"] = String(attrs.indentLevel);
   if (attrs.lineSpacing) result["data-line-spacing"] = String(attrs.lineSpacing);
   if (attrs.paragraphSpacing) result["data-paragraph-spacing"] = String(attrs.paragraphSpacing);
+  if (attrs.revisionId) {
+    result["data-revision-id"] = attrs.revisionId;
+    if (attrs.revisionAuthor) result["data-revision-author"] = attrs.revisionAuthor;
+    if (attrs.revisionCreatedAt) result["data-revision-created-at"] = String(attrs.revisionCreatedAt);
+  }
   const value = parseOrderedListOrdinal(attrs.value);
   if (value !== null) result.value = value;
   return result;
