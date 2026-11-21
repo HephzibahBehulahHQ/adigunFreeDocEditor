@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, displayCell, maxCellLength, maxColumns, maxRows, numberFormats, parseCsv, toCsv } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, displayCell, maxCellLength, maxColumns, maxRows, numberFormats, parseCsv, toCsv, validationOptions } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
@@ -26,6 +26,8 @@ try {
       formats: Object.fromEntries(Object.entries(item?.formats ?? {}).filter(([key, value]) =>
         validAddress.test(key) && Object.hasOwn(numberFormats, value))),
       freezeFirstRow: item?.freezeFirstRow === true,
+      validation: Object.fromEntries(Object.entries(item?.validation ?? {})
+        .filter(([address, options]) => validAddress.test(address) && validationOptions(options).length)),
       pivot: item?.pivot && Number.isInteger(item.pivot.source) &&
         ["range", "group", "measure", "aggregate"].every((key) => typeof item.pivot[key] === "string" && item.pivot[key].length <= 25)
         ? item.pivot : undefined,
@@ -94,6 +96,9 @@ $("sheet-pivot-refresh").addEventListener("click", () => {
   if (!source || source === sheet) { status("The source sheet is unavailable."); return; }
   try {
     const result = buildPivot(source.cells, sheet.pivot, workbookValues(sheet.pivot.source));
+    if (Object.entries(result.cells).some(([address, value]) => !acceptsValue(sheet, address, value))) {
+      throw new Error("Remove the conflicting dropdown validation before refreshing this PivotTable.");
+    }
     recordEdit();
     Object.assign(sheet, result);
     save();
@@ -149,10 +154,25 @@ function refreshSelection(valueAt = workbookValues()) {
 function refreshFormula() {
   $("sheet-selected").value = selectedRange?.label || selectedAddress;
   $("sheet-formula").value = currentSheet().cells[selectedAddress] ?? "";
+  const picker = $("sheet-validation-picker");
+  const options = currentSheet().validation?.[selectedAddress] || [];
+  picker.hidden = !options.length;
+  picker.replaceChildren(new Option("Choose value", ""), ...options.map((value) => new Option(value)));
+  picker.value = options.includes($("sheet-formula").value) ? $("sheet-formula").value : "";
+}
+
+function acceptsValue(sheet, address, value) {
+  return !value || !sheet.validation?.[address] || sheet.validation[address].includes(value);
 }
 
 function updateCell(address, value, mergeTyping = false) {
-  const { cells } = currentSheet();
+  const sheet = currentSheet();
+  const { cells } = sheet;
+  if (!acceptsValue(sheet, address, value)) {
+    status(`Choose an allowed value for ${address}.`);
+    refreshFormula();
+    return;
+  }
   if ((cells[address] ?? "") === value) return;
   recordEdit(mergeTyping ? address : undefined);
   if (value) cells[address] = value;
@@ -233,7 +253,48 @@ grid.addEventListener("input", (event) => {
   const address = event.target.dataset.cell;
   if (!address) return;
   selectedAddress = address;
-  updateCell(address, event.target.value, true);
+  if (!currentSheet().validation?.[address]) updateCell(address, event.target.value, true);
+});
+grid.addEventListener("change", (event) => {
+  const address = event.target.dataset.cell;
+  if (currentSheet().validation?.[address]) updateCell(address, event.target.value);
+});
+$("sheet-validation-picker").addEventListener("change", (event) => updateCell(selectedAddress, event.target.value));
+
+const validationDialog = $("sheet-validation-dialog");
+const validationForm = validationDialog.querySelector("form");
+const validationStatus = validationForm.querySelector("[role=status]");
+$("sheet-validation").addEventListener("click", () => {
+  $("sheet-validation-range").value = selectedRange?.label || selectedAddress;
+  validationForm.elements.options.value = currentSheet().validation?.[selectedAddress]?.join("\n") ?? "";
+  validationStatus.textContent = "";
+  validationDialog.showModal();
+});
+validationDialog.querySelector("[data-close]").addEventListener("click", () => validationDialog.close());
+validationForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const values = validationForm.elements.options.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+  const allowed = validationOptions(values);
+  if (values.length && !allowed.length) {
+    validationStatus.textContent = "Use short values without commas, quotation marks, or formula prefixes.";
+    return;
+  }
+  const sheet = currentSheet();
+  const addresses = selectionAddresses();
+  const invalid = addresses.find((address) => allowed.length && sheet.cells[address] && !allowed.includes(sheet.cells[address]));
+  if (invalid) {
+    validationStatus.textContent = `Include the existing value in ${invalid} or change that cell first.`;
+    return;
+  }
+  recordEdit();
+  sheet.validation ??= {};
+  for (const address of addresses) {
+    if (allowed.length) sheet.validation[address] = allowed;
+    else delete sheet.validation[address];
+  }
+  save();
+  validationDialog.close();
+  refreshFormula();
 });
 grid.addEventListener("paste", (event) => {
   const address = event.target.dataset.cell;
@@ -247,16 +308,16 @@ grid.addEventListener("paste", (event) => {
     const column = address.charCodeAt(0) - 65;
     const width = Math.max(...rows.map((fields) => fields.length));
     if (row + rows.length > maxRows || column + width > maxColumns) throw new Error("The pasted range exceeds the workbook grid.");
-    recordEdit();
     const sheet = currentSheet();
+    const changes = rows.flatMap((fields, offset) => fields.map((value, index) => [cellAddress(row + offset, column + index), value]));
+    const invalid = changes.find(([target, value]) => !acceptsValue(sheet, target, value));
+    if (invalid) throw new Error(`Choose an allowed value for ${invalid[0]} before pasting.`);
+    recordEdit();
     sheet.rows = Math.max(sheet.rows, row + rows.length);
     sheet.columns = Math.max(sheet.columns, column + width);
-    for (const [offset, fields] of rows.entries()) {
-      for (const [index, value] of fields.entries()) {
-        const target = cellAddress(row + offset, column + index);
-        if (value) sheet.cells[target] = value;
-        else delete sheet.cells[target];
-      }
+    for (const [target, value] of changes) {
+      if (value) sheet.cells[target] = value;
+      else delete sheet.cells[target];
     }
     save();
     render();

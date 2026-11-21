@@ -3,6 +3,13 @@ export const maxColumns = 26;
 export const maxCellLength = 4000;
 export const numberFormats = { general: 0, number: 4, percent: 10 };
 
+export function validationOptions(value) {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" ||
+    !item || /[",\r\n]/.test(item) || /^[=']/.test(item))) return [];
+  const options = [...new Set(value)];
+  return options.join(",").length <= 253 ? options : [];
+}
+
 export function displayCell(value, format, locale) {
   if (!Object.hasOwn(numberFormats, format) || format === "general") return value;
   const numeric = typeof value === "number" || (typeof value === "string" && /^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(value.trim()));
