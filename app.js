@@ -309,22 +309,26 @@
     return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   }
 
+  function wordTotal(text) {
+    return (text.match(/[\p{L}\p{N}]+(?:['’_-][\p{L}\p{N}]+)*/gu) || []).length;
+  }
+
   function countWords() {
     const isEditableDocument = editor.contentEditable === "true";
     const plainText = isEditableDocument ? editor.innerText.trim() : "";
     applyPaperCanvasMinimumHeight();
     scheduleEditorPagination();
-    const words = plainText.match(/[\p{L}\p{N}]+(?:['’_-][\p{L}\p{N}]+)*/gu) || [];
-    $("#word-count").textContent = `${words.length} ${words.length === 1 ? "word" : "words"}`;
+    const words = wordTotal(plainText);
+    $("#word-count").textContent = `${words} ${words === 1 ? "word" : "words"}`;
     const characterCount = isEditableDocument ? plainText.length : null;
     $("#character-count").textContent = characterCount === null
       ? "— characters"
       : `${characterCount.toLocaleString()} ${characterCount === 1 ? "character" : "characters"}`;
     const pageCount = Math.max(1, editor.querySelectorAll(".document-sheet").length);
     $("#page-count").textContent = `${pageCount} ${pageCount === 1 ? "page" : "pages"}`;
-    $("#insight-words").textContent = isEditableDocument ? words.length.toLocaleString() : "—";
+    $("#insight-words").textContent = isEditableDocument ? words.toLocaleString() : "—";
     $("#insight-characters").textContent = isEditableDocument ? plainText.length.toLocaleString() : "—";
-    $("#insight-reading").textContent = isEditableDocument ? (words.length < 180 ? "<1 min" : `${Math.ceil(words.length / 180)} min`) : "—";
+    $("#insight-reading").textContent = isEditableDocument ? (words < 180 ? "<1 min" : `${Math.ceil(words / 180)} min`) : "—";
  
     renderOutline();
   }
@@ -427,7 +431,9 @@
   }
   function updateCurrentPageNavigation() {
     const sheets = [...editor.querySelectorAll(".document-sheet")];
-    if (!sheets.length) return;
+    const output = $("#current-page-indicator");
+    output.hidden = !sheets.length || editor.contentEditable !== "true";
+    if (output.hidden) return;
     const viewportCenter = window.innerHeight / 2;
     let currentIndex = 0;
     let closestDistance = Infinity;
@@ -436,6 +442,7 @@
       const distance = Math.abs((rect.top + rect.bottom) / 2 - viewportCenter);
       if (distance < closestDistance) { closestDistance = distance; currentIndex = index; }
     });
+    output.textContent = `Page ${currentIndex + 1} of ${sheets.length}`;
     $("#break-navigation-list").querySelectorAll("[data-page-index]").forEach((button, index) => {
       if (index === currentIndex) {
         button.classList.add("active");
@@ -3723,6 +3730,11 @@
     const focusNode = selection?.focusNode || selection?.anchorNode;
     const anchorNode = selection?.anchorNode;
     const inEditor = (node) => node && (node === editor || editor.contains(node));
+    const selectedWords = $("#selection-word-count");
+    const count = !selection?.isCollapsed && inEditor(focusNode) && inEditor(anchorNode) && editor.contentEditable === "true"
+      ? wordTotal(selection.toString()) : 0;
+    selectedWords.hidden = !count;
+    selectedWords.textContent = count ? `${count} selected` : "";
     const selectionImage = imageAtSelection(selection);
     if (selectionImage) activeImage = selectionImage;
     else if (document.activeElement === editor) activeImage = null;
