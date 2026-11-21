@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, chartValues, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseChartRange, parseCsv, parseSheetFilter, renameSheetReferences, shiftCellFormula, sortSheetRange, toCsv, validationOptions } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeConditionalRule, numberFormats, parseChartRange, parseCsv, parseSheetFilter, renameSheetReferences, shiftCellFormula, sortSheetRange, toCsv, validationOptions } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
@@ -29,6 +29,7 @@ try {
       freezeFirstRow: item?.freezeFirstRow === true,
       filter: parseSheetFilter(item?.filter),
       chart: parseChartRange(item?.chart?.range),
+      conditionalRule: normalizeConditionalRule(item?.conditionalRule),
       hidden: item?.hidden === true,
       validation: Object.fromEntries(Object.entries(item?.validation ?? {})
         .filter(([address, options]) => validAddress.test(address) && validationOptions(options).length)),
@@ -137,8 +138,15 @@ function save() {
 function refreshValues() {
   const sheet = currentSheet();
   const valueAt = workbookValues();
+  const fillAt = conditionalFill(sheet.conditionalRule);
   for (const field of grid.querySelectorAll("input")) {
-    if (document.activeElement !== field) field.value = displayCell(valueAt(field.dataset.cell), sheet.formats?.[field.dataset.cell]);
+    const address = field.dataset.cell;
+    const value = valueAt(address);
+    if (document.activeElement !== field) field.value = displayCell(value, sheet.formats?.[address]);
+    const fill = fillAt(address, value);
+    field.toggleAttribute("data-conditional-fill", Boolean(fill));
+    if (fill) field.style.setProperty("--conditional-fill", "#" + fill);
+    else field.style.removeProperty("--conditional-fill");
   }
   const hidden = hiddenFilterRows(sheet.filter, valueAt);
   for (const [index, row] of [...grid.tBodies[0].rows].entries()) {
@@ -188,6 +196,7 @@ function showChartPanel(open) {
   chartPanel.hidden = !open;
   $("sheet-chart-open").setAttribute("aria-expanded", String(open));
   if (open) {
+    showRulePanel(false);
     chartForm.elements.range.value = currentSheet().chart?.range || selectedRange?.label || "";
     refreshChart(workbookValues());
     chartForm.elements.range.focus();
@@ -218,6 +227,56 @@ $("sheet-chart-remove").addEventListener("click", () => {
   chartForm.elements.range.value = "";
   save();
   refreshChart(workbookValues());
+});
+
+const rulePanel = $("sheet-rule-panel");
+const ruleForm = $("sheet-rule-form");
+function refreshRuleForm() {
+  const { range, operator, threshold, color } = ruleForm.elements;
+  const rule = currentSheet().conditionalRule;
+  range.value = rule?.range || selectedRange?.label || selectedAddress;
+  operator.value = rule?.operator || "greaterThan";
+  threshold.value = rule?.threshold ?? "";
+  color.value = rule?.color || "yellow";
+  $("sheet-rule-remove").disabled = !rule;
+  $("sheet-rule-status").textContent = "";
+}
+function showRulePanel(open) {
+  rulePanel.hidden = !open;
+  $("sheet-rule-open").setAttribute("aria-expanded", String(open));
+  if (open) {
+    showChartPanel(false);
+    refreshRuleForm();
+    ruleForm.elements.range.focus();
+  }
+}
+$("sheet-rule-open").addEventListener("click", () => showRulePanel(true));
+$("sheet-rule-close").addEventListener("click", () => {
+  showRulePanel(false);
+  $("sheet-rule-open").focus();
+});
+ruleForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const { range, operator, threshold, color } = ruleForm.elements;
+  const rule = normalizeConditionalRule({ range: range.value, operator: operator.value, threshold: threshold.valueAsNumber, color: color.value });
+  const sheet = currentSheet();
+  const end = rule?.range.split(":").at(-1);
+  if (!end || Number(end.slice(1)) > sheet.rows || end.charCodeAt(0) - 64 > sheet.columns) {
+    $("sheet-rule-status").textContent = "Choose a valid range and number within this sheet.";
+    return;
+  }
+  recordEdit();
+  sheet.conditionalRule = rule;
+  save();
+  refreshValues();
+  refreshRuleForm();
+});
+$("sheet-rule-remove").addEventListener("click", () => {
+  recordEdit();
+  currentSheet().conditionalRule = null;
+  save();
+  refreshValues();
+  refreshRuleForm();
 });
 
 function selectionAddresses() {
@@ -285,6 +344,7 @@ function render() {
   const sheet = currentSheet();
   chartForm.elements.range.value = sheet.chart?.range ?? "";
   selectedRange = null;
+  if (!rulePanel.hidden) refreshRuleForm();
   $("sheet-pivot-refresh").disabled = !sheet.pivot;
   if (Number(selectedAddress.slice(1)) > sheet.rows || selectedAddress.charCodeAt(0) - 64 > sheet.columns) selectedAddress = "A1";
   const header = document.createElement("thead");

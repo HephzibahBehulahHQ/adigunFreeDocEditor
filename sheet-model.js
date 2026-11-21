@@ -2,6 +2,31 @@ export const maxRows = 100;
 export const maxColumns = 26;
 export const maxCellLength = 4000;
 export const numberFormats = { general: 0, number: 4, percent: 10, decimal: 2 };
+export const conditionalColors = { yellow: "FFF3B8", green: "D6F3DE", red: "FFDDE3" };
+
+export function normalizeConditionalRule(input) {
+  const { range, operator, threshold, color } = input ?? {};
+  if (typeof range !== "string" || !["greaterThan", "lessThan", "equal"].includes(operator) ||
+    !Number.isFinite(threshold) || !Object.hasOwn(conditionalColors, color)) return null;
+  const match = /^([A-Z])([1-9]\d?|100)(?::([A-Z])([1-9]\d?|100))?$/.exec(range.toUpperCase().trim());
+  if (!match) return null;
+  const [, left, top, right = left, bottom = top] = match;
+  if (right < left || Number(bottom) < Number(top)) return null;
+  return { range: match[0], operator, threshold, color };
+}
+
+export function conditionalFill(rule) {
+  if (!rule) return () => "";
+  const [first, last = first] = rule.range.split(":");
+  return (address, value) => {
+    if (address[0] < first[0] || address[0] > last[0] || Number(address.slice(1)) < Number(first.slice(1)) ||
+      Number(address.slice(1)) > Number(last.slice(1)) || !String(value).trim() || !Number.isFinite(Number(value))) return "";
+    const number = Number(value);
+    const match = rule.operator === "greaterThan" ? number > rule.threshold :
+      rule.operator === "lessThan" ? number < rule.threshold : number === rule.threshold;
+    return match ? conditionalColors[rule.color] : "";
+  };
+}
 
 export function validationOptions(value) {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string" ||
