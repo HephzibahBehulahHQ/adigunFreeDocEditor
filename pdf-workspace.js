@@ -35,6 +35,8 @@ function button(label, handler, disabled = false) {
 function render() {
   $("pdf-add").disabled = busy;
   $("pdf-export").disabled = busy || sources.length === 0;
+  $("pdf-preview-output").disabled = busy || sources.length === 0;
+  $("pdf-reset-pages").disabled = busy || sources.length === 0;
   $("pdf-source-list").replaceChildren(...sources.map((source, index) => {
     const item = document.createElement("li");
     item.className = "pdf-source";
@@ -106,12 +108,23 @@ $("pdf-files").addEventListener("change", async (event) => {
   status(rejected[0] || `${added} ${added === 1 ? "PDF" : "PDFs"} added`);
 });
 
-$("pdf-export").addEventListener("click", async () => {
+$("pdf-reset-pages").addEventListener("click", () => {
+  for (const source of sources) { source.selection = ""; source.rotation = 0; }
+  render();
+  status("All source pages and original rotations restored.");
+});
+
+async function outputPages(show) {
   if (busy) return;
   busy = true;
   render();
   try {
     const bytes = await buildPdf(sources, window.PDFLib);
+    if (show) {
+      showPreview(new File([bytes], "Selected pages.pdf", { type: "application/pdf" }));
+      status("Showing the selected pages");
+      return;
+    }
     const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
     const link = document.createElement("a");
     link.href = url;
@@ -120,6 +133,8 @@ $("pdf-export").addEventListener("click", async () => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     status("PDF exported");
   } catch (error) { status(error.message || "Could not export the selected pages."); }
-  finally { busy = false; render(); $("pdf-export").focus(); }
-});
+  finally { busy = false; render(); $(show ? "pdf-preview-output" : "pdf-export").focus(); }
+}
+$("pdf-export").addEventListener("click", () => void outputPages(false));
+$("pdf-preview-output").addEventListener("click", () => void outputPages(true));
 render();
