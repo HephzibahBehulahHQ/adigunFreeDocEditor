@@ -15,6 +15,7 @@
         <div class="brand"><img src="./assets/hb-official.jpg" alt="Hephzibah Behulah corporate identity" /><button class="mobile-menu-close" id="close-workspace-menu" type="button" aria-label="Close workspace menu" title="Close workspace menu">×</button></div>
         <div class="product-name"><span class="product-mark" aria-hidden="true">✦</span><span>adigun<span class="product-accent">FreeDocEditor</span></span></div>
         <p class="sidebar-caption">DOCUMENT WORKSPACE</p>
+        <button class="nav-item" id="workspace-home" type="button"><span class="nav-icon" aria-hidden="true">⌂</span>Home</button>
         <button class="nav-item primary-nav" id="new-document" type="button"><span class="nav-icon" aria-hidden="true">＋</span>New document</button>
         <button class="nav-item" id="open-document" type="button"><span class="nav-icon" aria-hidden="true">↥</span>Open a file</button>
         <p class="sidebar-caption">FILE TOOLS</p>
@@ -58,6 +59,7 @@
           <button class="new-document-tab" id="new-document-tab" type="button" aria-label="Create a new document">＋</button>
         </div>
 
+        <div class="document-command-bar">
         <nav class="ribbon-tabs" role="tablist" aria-label="Document tools">
           <button class="ribbon-tab selected" id="ribbon-tab-home" role="tab" aria-selected="true" aria-controls="ribbon-tools" tabindex="0" data-tab="home" type="button">Home</button>
           <button class="ribbon-tab" id="ribbon-tab-insert" role="tab" aria-selected="false" aria-controls="ribbon-tools" tabindex="-1" data-tab="insert" type="button">Insert</button>
@@ -66,14 +68,16 @@
           <button class="ribbon-tab" id="ribbon-tab-review" role="tab" aria-selected="false" aria-controls="ribbon-tools" tabindex="-1" data-tab="review" type="button">Review</button>
           <button class="ribbon-tab" id="ribbon-tab-view" role="tab" aria-selected="false" aria-controls="ribbon-tools" tabindex="-1" data-tab="view" type="button">View</button>
         </nav>
+        <div class="stage-actions" id="document-command-actions" hidden>
+          <button class="text-button outline-toggle" id="toggle-outline" type="button" aria-controls="document-outline" aria-expanded="false" hidden>☷ Outline</button>
+          <button class="text-button" id="assist-button" type="button" aria-controls="adigun-window" aria-expanded="false" aria-label="Toggle Adigun assistant"><span aria-hidden="true">✧</span> Adigun</button>
+        </div>
+        </div>
         <div class="ribbon-tools" id="ribbon-tools" role="tabpanel" aria-labelledby="ribbon-tab-home" tabindex="0" aria-label="Formatting tools"></div>
 
         <div class="document-stage" id="document-stage">
           <div class="stage-heading">
             <div><span class="eyebrow">YOUR WORKSPACE</span><h1 id="stage-title">Untitled document</h1></div>
-            <div class="stage-actions"><button class="text-button outline-toggle" id="toggle-outline" type="button" aria-controls="document-outline" aria-expanded="false" hidden>☷ Outline</button>
-            <button class="text-button" id="assist-button" type="button" aria-controls="adigun-window" aria-expanded="false" aria-label="Toggle Adigun assistant"><span aria-hidden="true">✧</span> Adigun</button>
-          </div>
           </div>
           <div class="editor-layout" id="editor-layout">
             <aside class="document-outline" id="document-outline" aria-label="Document outline">

@@ -2,6 +2,15 @@
 
 Browser based document workspace for the Hephzibah Behulah product family. The current foundation provides a responsive editor, browser-local saving, DOCX/TXT/Markdown/HTML import, PDF viewing, and local HTML/Word export.
 
+## Interface direction
+
+Use the supplied WPS Office home and editor screenshots as workflow references for a visually distinct Adigun workspace.
+
+- **Home.** Put document search and real New document, Open file, and Templates actions above a recent-documents list. Show saved names and modification times. Keep document navigation and available file tools within reach.
+- **Editor.** Put open document tabs, quick actions, and a compact ribbon above the writing area. Group text, paragraph, layout, and review controls so users can find them by task.
+- **Canvas.** Center the paper on a neutral background. Keep the outline, indent ruler, and Adigun tools available on demand, with the document taking priority.
+- **Verification.** Check Home, document search, opening a recent file, editing, and returning to Home at desktop and mobile widths. Confirm the deployed commit on the public site before marking the interface work complete.
+
 ## Run locally
 
 Serve the repository root with any static HTTP server. For example:
