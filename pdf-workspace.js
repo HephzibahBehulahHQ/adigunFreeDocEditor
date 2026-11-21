@@ -3,6 +3,7 @@ import { bindPdfOcr } from "./pdf-ocr.js";
 import { bindPdfRedaction } from "./pdf-redact.js";
 import { bindPdfForms } from "./pdf-forms.js";
 import { bindPdfNavigation } from "./pdf-navigation.js";
+import { bindPdfComments } from "./pdf-comments.js";
 
 const $ = (id) => document.getElementById(id);
 const sources = [];
@@ -10,6 +11,7 @@ bindPdfOcr(sources);
 bindPdfRedaction(sources);
 bindPdfForms(sources, showPreview);
 const closeNavigation = bindPdfNavigation(sources, showPreview);
+bindPdfComments(sources, showPreview);
 const preview = $("pdf-preview");
 let previewUrl;
 let busy = false;
@@ -43,6 +45,7 @@ function button(label, handler, disabled = false) {
 function render() {
   closeNavigation();
   $("pdf-navigation-toggle").disabled = busy || sources.length === 0;
+  $("pdf-comments-open").disabled = busy || sources.length === 0;
   $("pdf-form-open").disabled = busy || sources.length === 0;
   $("pdf-redact").disabled = busy || sources.length === 0;
   $("pdf-ocr").disabled = busy || sources.length === 0;
