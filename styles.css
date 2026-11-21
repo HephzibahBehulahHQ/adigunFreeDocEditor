@@ -475,6 +475,17 @@ button:disabled{cursor:not-allowed;opacity:.48}
 .home-ribbon .tool-group{display:grid;align-content:space-between;height:auto;gap:3px;padding-inline:9px}
 .home-ribbon .tool-group-caption{color:var(--muted);font-size:10px;text-align:center}
 .home-ribbon [aria-label="Editing"] .tool-button{width:100%;text-align:left}
+.home-ribbon [data-style-preset]{
+  min-width:68px;height:34px;padding-inline:6px;border-color:var(--line);
+  background:var(--panel);font-family:Georgia,"Times New Roman",serif;white-space:nowrap;
+}
+.home-ribbon [data-style-preset]:hover,.home-ribbon [data-style-preset][aria-pressed="true"]{
+  border-color:var(--purple);background:var(--purple-soft);
+}
+.home-ribbon [data-style-preset="h1"]{font-size:15px;font-weight:700}
+.home-ribbon [data-style-preset="h2"]{font-size:13px;font-weight:650}
+.home-ribbon [aria-label="Styles"] [data-tool="block"]{width:100%;max-width:none}
+@media(max-width:1050px){.home-ribbon [data-style-preset]{height:44px}}
 .home-ribbon [data-action="bold"]{font-weight:750}
 .home-ribbon [data-action="italic"]{font-style:italic}
 .home-ribbon [data-action="underline"]{text-decoration:underline}

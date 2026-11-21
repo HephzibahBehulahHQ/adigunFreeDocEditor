@@ -3624,8 +3624,16 @@
     const [type, colors, spacing, emphasis, lists, indents, alignment] = toolsets.home;
     const groups = activeTab === "home" ? [
       { label: "Clipboard", rows: [[{ label: "Paste text", action: "clipboard-paste", icon: "▣ Paste", shortcut: "Control+V Meta+V" }], [{ label: "Cut selection", action: "clipboard-cut", icon: "✂ Cut", shortcut: "Control+X Meta+X" }, { label: "Copy selection", action: "clipboard-copy", icon: "▤ Copy", shortcut: "Control+C Meta+C" }]] },
-      { label: "Text", rows: [type, [...emphasis, ...colors]] },
+      { label: "Text", rows: [type.filter((tool) => tool.select !== "block"), [...emphasis, ...colors]] },
       { label: "Paragraph", rows: [[...lists, ...indents], [...alignment, ...spacing]] },
+      { label: "Styles", rows: [
+        [
+          { label: "Normal", action: "style-preset", style: "p", icon: "Normal" },
+          { label: "Heading 1", action: "style-preset", style: "h1", icon: "Heading 1" },
+          { label: "Heading 2", action: "style-preset", style: "h2", icon: "Heading 2" },
+        ],
+        [type.find((tool) => tool.select === "block")],
+      ] },
       { label: "Editing", rows: [[{ label: "Find and replace", action: "find", icon: "⌕ Find & replace" }], [{ label: "Fit to page width", action: "zoom-fit", icon: "↔ Fit width" }]] },
     ] : toolsets[activeTab].map((group) => ({ rows: [group] }));
     for (const { label, rows } of groups) {
@@ -3681,6 +3689,11 @@
         control = document.createElement("button");
         control.type = "button"; control.className = "tool-button"; control.dataset.action = tool.action; control.textContent = tool.action === "orientation" && pageOrientation === "landscape" ? "▭ Landscape" : tool.icon; control.title = tool.title || tool.label; control.setAttribute("aria-label", tool.label);
         if (tool.shortcut) control.setAttribute("aria-keyshortcuts", tool.shortcut);
+        if (tool.style) {
+          control.dataset.stylePreset = tool.style;
+          control.setAttribute("aria-pressed", "false");
+          control.addEventListener("pointerdown", (event) => event.preventDefault());
+        }
         if (tool.action.startsWith("clipboard-")) control.addEventListener("pointerdown", (event) => event.preventDefault());
         if (tool.pressed || ["page-numbers", "track-changes"].includes(tool.action)) control.setAttribute("aria-pressed", tool.action === "page-numbers" ? String(pageNumbersEnabled) : tool.action === "track-changes" ? String(trackChangesEnabled) : "false");
         if (tool.action === "indent-ruler") {
@@ -3762,10 +3775,12 @@
     const contextNode = inEditor(focusNode) ? focusNode : anchorNode;
     const focusElement = contextNode.nodeType === Node.ELEMENT_NODE ? contextNode : contextNode.parentElement;
     const block = focusElement?.closest("h1,h2,h3,h4,h5,h6,p,li,th,td,blockquote,pre");
+    const tag = block?.tagName.toLowerCase();
+    const paragraphStyle = /^h[1-6]$/.test(tag || "") ? tag : "p";
     const blockSelect = ribbon.querySelector("[data-tool=block]");
-    if (blockSelect) {
-      const tag = block?.tagName.toLowerCase();
-      blockSelect.value = /^h[1-6]$/.test(tag || "") ? tag : "p";
+    if (blockSelect) blockSelect.value = paragraphStyle;
+    for (const button of ribbon.querySelectorAll("[data-style-preset]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.stylePreset === paragraphStyle));
     }
     const familySelect = ribbon.querySelector("[data-tool=font]");
     const fontNode = focusElement?.closest("span[data-font-family],font[face]");
@@ -4352,6 +4367,7 @@
 
   function runTool(action, button) {
     switch (action) {
+      case "style-preset": runCommand("formatBlock", `<${button.dataset.stylePreset}>`); break;
       case "clipboard-copy": case "clipboard-cut": case "clipboard-paste": void runClipboardAction(action); break;
       case "page-numbers": setPageNumbers(!pageNumbersEnabled, button); break;
       case "indent-ruler":
