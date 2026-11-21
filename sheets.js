@@ -1,13 +1,14 @@
-import { buildPivot, calculateWorkbook, cellAddress, chartValues, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseChartRange, parseCsv, parseSheetFilter, shiftCellFormula, sortSheetRange, toCsv, validationOptions } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, chartValues, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseChartRange, parseCsv, parseSheetFilter, renameSheetReferences, shiftCellFormula, sortSheetRange, toCsv, validationOptions } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
 const storageKey = "adigun-sheets-v1";
 const maxSheets = 12;
+const defaultWorkbookName = "Untitled workbook";
 const blankSheet = () => ({ rows: 20, columns: 8, cells: {}, formats: {} });
 const validAddress = /^[A-Z](?:[1-9]\d?|100)$/;
 const grid = $("sheet-grid");
-let workbook = { active: 0, sheets: [blankSheet()] };
+let workbook = { name: defaultWorkbookName, active: 0, sheets: [blankSheet()] };
 let selectedAddress = "A1";
 let selectedRange = null;
 const undoStack = [];
@@ -17,8 +18,8 @@ let editingAddress;
 try {
   const stored = JSON.parse(localStorage.getItem(storageKey));
   if (Array.isArray(stored?.sheets) && stored.sheets.length) {
-    const sheets = stored.sheets.slice(0, maxSheets).map((item) => ({
-      name: typeof item?.name === "string" ? item.name.slice(0, 31) : "",
+    const sheets = stored.sheets.slice(0, maxSheets).map((item, index) => ({
+      name: typeof item?.name === "string" && item.name ? item.name.slice(0, 31) : `Sheet ${index + 1}`,
       rows: Math.max(20, Math.min(maxRows, Number.isInteger(item?.rows) ? item.rows : 20)),
       columns: Math.max(8, Math.min(maxColumns, Number.isInteger(item?.columns) ? item.columns : 8)),
       cells: Object.fromEntries(Object.entries(item?.cells ?? {}).filter(([key, value]) =>
@@ -28,14 +29,17 @@ try {
       freezeFirstRow: item?.freezeFirstRow === true,
       filter: parseSheetFilter(item?.filter),
       chart: parseChartRange(item?.chart?.range),
+      hidden: item?.hidden === true,
       validation: Object.fromEntries(Object.entries(item?.validation ?? {})
         .filter(([address, options]) => validAddress.test(address) && validationOptions(options).length)),
       pivot: item?.pivot && Number.isInteger(item.pivot.source) &&
         ["range", "group", "measure", "aggregate"].every((key) => typeof item.pivot[key] === "string" && item.pivot[key].length <= 25)
         ? item.pivot : undefined,
     }));
-    const active = Number.isInteger(stored.active) ? Math.max(0, Math.min(stored.active, sheets.length - 1)) : 0;
-    workbook = { active, sheets };
+    let active = Number.isInteger(stored.active) ? Math.max(0, Math.min(stored.active, sheets.length - 1)) : 0;
+    if (sheets[active].hidden) active = Math.max(0, sheets.findIndex((sheet) => !sheet.hidden));
+    sheets[active].hidden = false;
+    workbook = { name: typeof stored.name === "string" && stored.name.trim() ? stored.name.slice(0, 100) : defaultWorkbookName, active, sheets };
   }
 } catch {
   status("Local workbook could not be read.");
@@ -44,6 +48,17 @@ try {
 function status(message) { $("sheet-save").textContent = message; }
 function currentSheet() { return workbook.sheets[workbook.active]; }
 function workbookValues(index = workbook.active) { return calculateWorkbook(workbook.sheets, index); }
+function sheetName(index) { return workbook.sheets[index].name || `Sheet ${index + 1}`; }
+
+function uniqueName(base, used = new Set(workbook.sheets.map((_, index) => sheetName(index).toUpperCase()))) {
+  const compact = base.slice(0, 31);
+  if (!used.has(compact.toUpperCase())) return compact;
+  for (let number = 2; ; number++) {
+    const suffix = " " + number;
+    const candidate = base.slice(0, 31 - suffix.length) + suffix;
+    if (!used.has(candidate.toUpperCase())) return candidate;
+  }
+}
 
 function updateHistoryButtons() {
   $("sheet-undo").disabled = !undoStack.length;
@@ -86,7 +101,8 @@ $("sheet-pivot-form").addEventListener("submit", (event) => {
   try {
     const result = buildPivot(currentSheet().cells, pivot, workbookValues());
     recordEdit();
-    workbook.active = workbook.sheets.push({ ...blankSheet(), ...result, pivot, name: "Pivot " + workbook.sheets.length }) - 1;
+    const name = uniqueName("Pivot " + workbook.sheets.length);
+    workbook.active = workbook.sheets.push({ ...blankSheet(), ...result, pivot, name }) - 1;
     pivotDialog.close();
     save();
     render();
@@ -114,7 +130,7 @@ function save() {
     localStorage.setItem(storageKey, JSON.stringify(workbook));
     status("Saved on this device");
   } catch {
-    status("Local saving is unavailable. Download a CSV to keep the active sheet.");
+    status("Local saving is unavailable. Download Excel to keep the workbook.");
   }
 }
 
@@ -265,6 +281,7 @@ function updateCell(address, value, mergeTyping = false) {
 }
 
 function render() {
+  $("workbook-title").value = workbook.name;
   const sheet = currentSheet();
   chartForm.elements.range.value = sheet.chart?.range ?? "";
   selectedRange = null;
@@ -308,7 +325,8 @@ function render() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "button button-outline";
-    button.textContent = _sheet.name || "Sheet " + (index + 1);
+    button.textContent = sheetName(index);
+    button.hidden = Boolean(_sheet.hidden);
     button.setAttribute("aria-pressed", String(index === workbook.active));
     button.addEventListener("click", () => { workbook.active = index; save(); render(); $("sheet-tabs").children[index].focus(); });
     return button;
@@ -643,7 +661,8 @@ grid.addEventListener("keydown", (event) => {
 });
 $("sheet-add").addEventListener("click", () => {
   recordEdit();
-  workbook.active = workbook.sheets.push(blankSheet()) - 1;
+  const name = uniqueName(`Sheet ${workbook.sheets.length + 1}`);
+  workbook.active = workbook.sheets.push({ ...blankSheet(), name }) - 1;
   save();
   render();
   grid.querySelector('[data-cell="A1"]').focus();
@@ -670,7 +689,7 @@ $("sheet-file").addEventListener("change", async (event) => {
   try {
     const rows = parseCsv((await file.text()).replace(/^\uFEFF/, ""));
     if (workbook.sheets.length >= maxSheets) { status("The workbook already contains 12 sheets."); return; }
-    const sheet = blankSheet();
+    const sheet = { ...blankSheet(), name: uniqueName(`Sheet ${workbook.sheets.length + 1}`) };
     sheet.rows = Math.max(sheet.rows, rows.length);
     for (const [row, fields] of rows.entries()) {
       sheet.columns = Math.max(sheet.columns, fields.length);
@@ -695,8 +714,24 @@ $("workbook-file").addEventListener("change", async (event) => {
     const emptyWorkbook = workbook.sheets.length === 1 && !Object.keys(workbook.sheets[0].cells).length;
     const existing = emptyWorkbook ? [] : workbook.sheets;
     if (existing.length + sheets.length > maxSheets) { status("The import would exceed the workbook’s 12-sheet limit."); return; }
+    const used = new Set(existing.map((_, index) => sheetName(index).toUpperCase()));
+    const renamed = new Map();
+    for (const [index, sheet] of sheets.entries()) {
+      const original = sheet.name || `Sheet ${index + 1}`;
+      sheet.name = uniqueName(original, used);
+      used.add(sheet.name.toUpperCase());
+      if (sheet.name !== original) renamed.set(original.toUpperCase(), sheet.name);
+    }
+    if (renamed.size) for (const sheet of sheets) {
+      for (const address of Object.keys(sheet.cells)) sheet.cells[address] = renameSheetReferences(sheet.cells[address], renamed);
+    }
     recordEdit();
-    workbook = { active: existing.length, sheets: [...existing, ...sheets] };
+    const firstVisible = sheets.findIndex((sheet) => !sheet.hidden);
+    if (firstVisible < 0) sheets[0].hidden = false;
+    workbook = {
+      name: existing.length ? workbook.name : file.name.replace(/\.xlsx$/i, "").slice(0, 100),
+      active: existing.length + Math.max(0, firstVisible), sheets: [...existing, ...sheets],
+    };
     save();
     render();
     status("Excel data and supported workbook settings imported.");
@@ -719,10 +754,120 @@ $("sheet-export").addEventListener("click", () => {
 });
 $("workbook-export").addEventListener("click", () => {
   try {
-    download(exportWorkbook(workbook.sheets, window.fflate), xlsxMime, "adigun-workbook.xlsx");
+    const name = workbook.name.trim().replace(/[\\/:*?"<>|]/g, "-") || defaultWorkbookName;
+    download(exportWorkbook(workbook.sheets, window.fflate), xlsxMime, name + ".xlsx");
   } catch {
     status("The Excel workbook could not be exported.");
   }
 });
+
+$("workbook-title").addEventListener("change", (event) => {
+  const name = event.target.value.trim() || defaultWorkbookName;
+  event.target.value = name;
+  if (name === workbook.name) return;
+  recordEdit();
+  workbook.name = name;
+  save();
+});
+$("workbook-save").addEventListener("click", save);
+$("workbook-new").addEventListener("click", () => {
+  if ((workbook.name !== defaultWorkbookName || workbook.sheets.length > 1 || Object.keys(currentSheet().cells).length) &&
+    !window.confirm("Start a new workbook? Download a copy first if you want to keep this one.")) return;
+  recordEdit();
+  workbook = { name: defaultWorkbookName, active: 0, sheets: [blankSheet()] };
+  selectedAddress = "A1";
+  save();
+  render();
+  $("workbook-title").focus();
+});
+
+const manageDialog = $("sheet-manage-dialog");
+const manageForm = manageDialog.querySelector("form");
+const managedSheet = manageForm.elements.sheet;
+const manageStatus = manageForm.querySelector("[role=status]");
+
+function manageButton(action) { return manageForm.querySelector(`[data-manage="${action}"]`); }
+
+function renderManagement(index = Number(managedSheet.value)) {
+  managedSheet.replaceChildren(...workbook.sheets.map((sheet, position) => new Option(
+    sheetName(position) + (sheet.hidden ? " (hidden)" : ""), position,
+  )));
+  managedSheet.value = index;
+  const sheet = workbook.sheets[index];
+  const visible = workbook.sheets.filter((item) => !item.hidden).length;
+  manageForm.elements.label.value = sheetName(index);
+  manageButton("duplicate").disabled = workbook.sheets.length >= maxSheets;
+  manageButton("earlier").disabled = index === 0;
+  manageButton("later").disabled = index === workbook.sheets.length - 1;
+  manageButton("visibility").textContent = sheet.hidden ? "Unhide" : "Hide";
+  manageButton("visibility").disabled = !sheet.hidden && visible < 2;
+  manageButton("delete").disabled = !sheet.hidden && visible < 2;
+}
+
+function finishManagement(index) {
+  save();
+  render();
+  renderManagement(index);
+}
+
+$("sheet-manage").addEventListener("click", () => {
+  manageStatus.textContent = "";
+  renderManagement(workbook.active);
+  manageDialog.showModal();
+});
+managedSheet.addEventListener("change", () => renderManagement());
+manageForm.querySelector("[data-close]").addEventListener("click", () => manageDialog.close());
+manageForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const index = Number(managedSheet.value);
+  const previous = sheetName(index);
+  const name = manageForm.elements.label.value.trim();
+  if (!name || name.length > 31 || /[\\/:?*\[\]]/.test(name) || /^'|'$/.test(name) ||
+    workbook.sheets.some((_, position) => position !== index && sheetName(position).toUpperCase() === name.toUpperCase())) {
+    manageStatus.textContent = "Enter a unique Excel sheet name without brackets, slashes, colons, question marks or asterisks.";
+    return;
+  }
+  if (name === previous) return;
+  recordEdit();
+  workbook.sheets[index].name = name;
+  const names = new Map([[previous.toUpperCase(), name]]);
+  for (const sheet of workbook.sheets) {
+    for (const address of Object.keys(sheet.cells)) sheet.cells[address] = renameSheetReferences(sheet.cells[address], names);
+  }
+  manageStatus.textContent = "Sheet renamed.";
+  finishManagement(index);
+});
+
+function sheetMutation(action) {
+  const index = Number(managedSheet.value);
+  const sheet = workbook.sheets[index];
+  const current = currentSheet();
+  if (action === "delete" && !window.confirm(`Delete ${sheetName(index)}? Use Undo to restore it before closing the workbook.`)) return;
+  recordEdit();
+  const before = [...workbook.sheets];
+  for (const [position, item] of before.entries()) item.name ||= `Sheet ${position + 1}`;
+  if (action === "duplicate") {
+    workbook.sheets.push({ ...structuredClone(sheet), name: uniqueName(sheet.name + " copy"), hidden: false });
+    workbook.active = workbook.sheets.length - 1;
+    finishManagement(workbook.active);
+    return;
+  }
+  if (action === "visibility") sheet.hidden = !sheet.hidden;
+  if (action === "delete") workbook.sheets.splice(index, 1);
+  if (action === "earlier" || action === "later") {
+    const target = index + (action === "earlier" ? -1 : 1);
+    [workbook.sheets[index], workbook.sheets[target]] = [workbook.sheets[target], workbook.sheets[index]];
+  }
+  workbook.active = workbook.sheets.indexOf(current);
+  if (workbook.active < 0 || current.hidden) workbook.active = workbook.sheets.findIndex((item) => !item.hidden);
+  for (const item of workbook.sheets) {
+    if (item.pivot) item.pivot.source = workbook.sheets.indexOf(before[item.pivot.source]);
+  }
+  const destination = workbook.sheets.indexOf(sheet);
+  finishManagement(destination < 0 ? workbook.active : destination);
+}
+for (const button of manageForm.querySelectorAll("[data-manage]")) {
+  button.addEventListener("click", () => sheetMutation(button.dataset.manage));
+}
 
 render();

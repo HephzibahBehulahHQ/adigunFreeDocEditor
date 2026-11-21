@@ -112,7 +112,7 @@ export function exportWorkbook(sheets, zip) {
       name = base.slice(0, 30 - String(suffix).length) + " " + suffix;
     }
     names.add(name.toLowerCase());
-    workbookSheets.push(`<sheet name="${xml(name)}" sheetId="${id}" r:id="rId${id}"/>`);
+    workbookSheets.push(`<sheet name="${xml(name)}" sheetId="${id}"${sheet.hidden ? ' state="hidden"' : ""} r:id="rId${id}"/>`);
     rels.push(`<Relationship Id="rId${id}" Type="${officeNs}/worksheet" Target="${target}"/>`);
     overrides.push(`<Override PartName="/xl/${target}" ContentType="${worksheetType}"/>`);
     const valueAt = calculateWorkbook(sheets, index);
@@ -125,7 +125,9 @@ export function exportWorkbook(sheets, zip) {
     const formats = styleNames.map((name) => `<xf numFmtId="${numberFormats[name]}" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>`).join("");
     files["xl/styles.xml"] = `<styleSheet xmlns="${mainNs}"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${styleNames.length}">${formats}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
   }
-  const workbookViews = sheets.some((sheet) => sheet.freezeFirstRow) ? "<bookViews><workbookView/></bookViews>" : "";
+  const workbookViews = sheets.some((sheet) => sheet.freezeFirstRow || sheet.hidden)
+    ? `<bookViews><workbookView activeTab="${Math.max(0, sheets.findIndex((sheet) => !sheet.hidden))}"/></bookViews>`
+    : "";
   files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}">${workbookViews}<sheets>${workbookSheets.join("")}</sheets></workbook>`;
   files["xl/_rels/workbook.xml.rels"] = `<Relationships xmlns="${packageNs}">${rels.join("")}</Relationships>`;
   files["_rels/.rels"] = `<Relationships xmlns="${packageNs}"><Relationship Id="rId1" Type="${officeNs}/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
@@ -215,6 +217,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       rows = Math.max(rows, chart.last);
       columns = Math.max(columns, chart.values.charCodeAt(0) - 64);
     }
-    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, freezeFirstRow, validation, filter, chart };
+    const hidden = ["hidden", "veryHidden"].includes(definition.getAttribute("state"));
+    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, freezeFirstRow, validation, filter, chart, hidden };
   });
 }

@@ -160,6 +160,15 @@ export function shiftCellFormula(value, rowDelta, columnDelta) {
   });
 }
 
+export function renameSheetReferences(value, names) {
+  if (!value.startsWith("=")) return value;
+  return value.replace(/"(?:[^"]|"")*"|('(?:[^']|'')+'|[A-Za-z_][\w.]*)!(?=\$?[A-Za-z]\$?\d+)/g, (part, name) => {
+    const key = name?.replace(/^'|'$/g, "").replaceAll("''", "'").toUpperCase();
+    const replacement = names.get(key);
+    return replacement ? "'" + replacement.replaceAll("'", "''") + "'!" : part;
+  });
+}
+
 export function buildPivot(cells, { range, group, measure, aggregate }, valueAt = calculateSheet(cells)) {
   const match = /^([A-Z])([1-9]\d?|100):([A-Z])([1-9]\d?|100)$/.exec(range.toUpperCase().trim());
   if (!match) throw new Error("Enter a source range such as A1:D20, including the header row.");

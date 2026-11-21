@@ -490,6 +490,8 @@ a.nav-item{text-decoration:none}
 .suite-switcher a:hover,.suite-switcher [aria-current]{background:var(--lavender,#eae3fb);color:#261652}
 .suite-switcher a:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 .suite-product{font-weight:500}
+.suite-file-name{min-width:0;max-width:min(100%,250px);padding:5px 8px;border:1px solid #ffffff45;border-radius:5px;background:#ffffff12;color:inherit}
+.suite-file-name:focus-visible{outline:2px solid #d8ccff;outline-offset:1px}
 .document-top-strip>.suite-switcher{grid-column:1/-1;order:-1;padding:3px clamp(8px,2vw,24px);background:var(--panel);border-bottom:1px solid var(--line)}
 .workspace.mode-no-document-title .document-top-strip>.suite-switcher{display:none}
 .slides-workspace{max-width:1450px;margin:auto;padding:16px clamp(12px,3vw,36px)}
