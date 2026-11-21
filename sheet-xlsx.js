@@ -1,4 +1,5 @@
 import { calculateWorkbook, cellAddress, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseSheetFilter, validationOptions } from "./sheet-model.js";
+import { readWorksheetChart, writeWorksheetChart } from "./sheet-chart-xlsx.js";
 
 const mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const officeNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -15,7 +16,7 @@ function xml(value) {
     .replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
 }
 
-function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {}, filter }, valueAt) {
+function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart }, valueAt) {
   const rows = new Map();
   for (const address of new Set([...Object.keys(cells), ...Object.keys(formats)])) {
     const raw = cells[address] ?? "";
@@ -54,7 +55,9 @@ function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {}, f
   const filterMarkup = filter
     ? `<autoFilter ref="${filter.range}"><filterColumn colId="${filter.column.charCodeAt(0) - filter.range.charCodeAt(0)}"><filters><filter val="${xml(filter.value)}"/></filters></filterColumn></autoFilter>`
     : "";
-  return `<worksheet xmlns="${mainNs}">${views}<sheetData>${data}</sheetData>${filterMarkup}${validations}</worksheet>`;
+  const drawing = sheetChart ? '<drawing r:id="rId1"/>' : "";
+  const relationship = sheetChart ? ` xmlns:r="${officeNs}"` : "";
+  return `<worksheet xmlns="${mainNs}"${relationship}>${views}<sheetData>${data}</sheetData>${filterMarkup}${validations}${drawing}</worksheet>`;
 }
 
 function readFilter(worksheet) {
@@ -112,7 +115,9 @@ export function exportWorkbook(sheets, zip) {
     workbookSheets.push(`<sheet name="${xml(name)}" sheetId="${id}" r:id="rId${id}"/>`);
     rels.push(`<Relationship Id="rId${id}" Type="${officeNs}/worksheet" Target="${target}"/>`);
     overrides.push(`<Override PartName="/xl/${target}" ContentType="${worksheetType}"/>`);
-    files["xl/" + target] = makeWorksheet(sheet, calculateWorkbook(sheets, index));
+    const valueAt = calculateWorkbook(sheets, index);
+    files["xl/" + target] = makeWorksheet(sheet, valueAt);
+    if (sheet.chart) writeWorksheetChart(files, overrides, id, name, sheet.chart, valueAt, xml);
   }
   if (sheets.some((sheet) => Object.keys(sheet.formats ?? {}).length)) {
     rels.push(`<Relationship Id="rIdStyles" Type="${officeNs}/styles" Target="styles.xml"/>`);
@@ -132,7 +137,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
   let total = 0;
   const files = zip.unzipSync(bytes, {
     filter({ name, originalSize }) {
-      if (!/^xl\/(?:workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|styles\.xml|worksheets\/[\w.-]+\.xml)$/.test(name)) return false;
+      if (!/^xl\/(?:workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|styles\.xml|(?:worksheets|drawings|charts)\/[\w.-]+\.xml|(?:worksheets|drawings)\/_rels\/[\w.-]+\.xml\.rels)$/.test(name)) return false;
       total += originalSize;
       if (total > 12 * 1024 * 1024) throw new Error("Workbook content is too large.");
       return true;
@@ -167,6 +172,8 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     let rows = 20;
     let columns = 8;
     const worksheet = parse(path);
+    const name = definition.getAttribute("name") || "";
+    const chart = readWorksheetChart(files, parse, worksheet, path, name);
     const validation = readValidation(worksheet);
     const filter = readFilter(worksheet);
     const pane = worksheet.getElementsByTagNameNS(mainNs, "pane")[0];
@@ -204,6 +211,10 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       rows = Math.max(rows, Number(end.slice(1)));
       columns = Math.max(columns, end.charCodeAt(0) - 64);
     }
-    return { name: definition.getAttribute("name") || "", rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, freezeFirstRow, validation, filter };
+    if (chart) {
+      rows = Math.max(rows, chart.last);
+      columns = Math.max(columns, chart.values.charCodeAt(0) - 64);
+    }
+    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, freezeFirstRow, validation, filter, chart };
   });
 }
