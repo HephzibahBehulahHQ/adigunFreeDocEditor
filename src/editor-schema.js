@@ -199,6 +199,11 @@ const ModelOrderedList = OrderedList.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
+      generatedToc: {
+        default: false,
+        parseHTML: (element) => element.getAttribute("data-generated-toc") === "true",
+        renderHTML: (attrs) => attrs.generatedToc ? { "data-generated-toc": "true" } : {},
+      },
       start: {
         default: 1,
         parseHTML: (element) => parseOrderedListOrdinal(element.getAttribute("start")) ?? 1,
@@ -343,7 +348,11 @@ function modelNodeToEditor(node, marks = []) {
   if (tag === "p") return [{ type: "paragraph", attrs: modelAttrsToEditor(attrs), content: childrenToEditor(children, marks) }];
   if (/^h[1-6]$/.test(tag)) return [{ type: "heading", attrs: { ...modelAttrsToEditor(attrs), level: Number(tag.slice(1)) }, content: childrenToEditor(children, marks) }];
   if (tag === "ul") return [{ type: "bulletList", content: ensureEditorBlocks(childrenToEditor(children, marks)) }];
-  if (tag === "ol") return [{ type: "orderedList", attrs: { start: parseOrderedListOrdinal(attrs.start) ?? 1 }, content: ensureEditorBlocks(childrenToEditor(children, marks)) }];
+  if (tag === "ol") return [{
+    type: "orderedList",
+    attrs: { start: parseOrderedListOrdinal(attrs.start) ?? 1, generatedToc: attrs["data-generated-toc"] === "true" },
+    content: ensureEditorBlocks(childrenToEditor(children, marks)),
+  }];
   if (tag === "li") return [{ type: "listItem", attrs: modelAttrsToEditor(attrs), content: ensureEditorBlocks(childrenToEditor(children, marks)) }];
   if (tag === "blockquote") return [{ type: "blockquote", content: ensureEditorBlocks(childrenToEditor(children, marks)) }];
   if (tag === "pre") return [{ type: "codeBlock", content: [{ type: "text", text: children.map(modelPlainText).join("") }] }];
@@ -434,7 +443,9 @@ function editorNodeToModel(node) {
     case "bulletList": return { type: "element", tag: "ul", attrs: {}, children };
     case "orderedList": {
       const start = parseOrderedListOrdinal(node.attrs.start);
-      return { type: "element", tag: "ol", attrs: start !== null && start !== 1 ? { start: String(start) } : {}, children };
+      const listAttrs = start !== null && start !== 1 ? { start: String(start) } : {};
+      if (node.attrs.generatedToc) listAttrs["data-generated-toc"] = "true";
+      return { type: "element", tag: "ol", attrs: listAttrs, children };
     }
     case "listItem": return { type: "element", tag: "li", attrs, children };
     case "blockquote": return { type: "element", tag: "blockquote", attrs: {}, children };

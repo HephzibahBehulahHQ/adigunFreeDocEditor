@@ -200,6 +200,7 @@
     ],
     references: [
       [{ label: "Document outline", action: "outline", icon: "☷ Outline" }, { label: "Quick overview", action: "quick-overview", icon: "✧ Quick overview" }],
+      [{ label: "Insert or refresh table of contents", action: "contents", icon: "Table of contents" }],
     ],
     review: [
       [{ label: "Track changes", action: "track-changes", icon: "▤ Track changes" }, { label: "Add comment", action: "add-comment", icon: "▧ Comment" }, { label: "Review comments", action: "show-comments", icon: "☷ Comments" }],
@@ -4122,6 +4123,43 @@
     countWords(); saveDocument();
   }
 
+  function updateTableOfContents() {
+    if (!liveEditor) return;
+    const headings = editorOutlineHeadings().filter((heading) => heading.textContent.trim()).map(outlineHeadingText);
+    if (!headings.length) { notify("Add a heading before inserting a table of contents."); return; }
+    const list = {
+      type: "orderedList",
+      attrs: { generatedToc: true },
+      content: headings.map((text) => ({
+        type: "listItem",
+        content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+      })),
+    };
+    const { doc, schema, tr } = liveEditor.state;
+    const positions = [];
+    doc.descendants((node, position) => {
+      if (node.type.name !== "orderedList" || !node.attrs.generatedToc) return true;
+      positions.push({ from: position, to: position + node.nodeSize });
+      return false;
+    });
+    if (!positions.length) {
+      const inserted = liveEditor.chain().focus().insertContentAt(liveEditor.state.selection.to, list).run();
+      if (inserted) {
+        countWords();
+        saveDocument();
+        notify("Table of contents inserted. Run the command again to refresh it after changing headings.");
+      } else notify("Place the cursor in a document paragraph to insert the table of contents.");
+      return;
+    }
+    const [first, ...continuations] = positions;
+    for (const { from, to } of continuations.reverse()) tr.delete(from, to);
+    tr.replaceWith(first.from, first.to, schema.nodeFromJSON(list));
+    liveEditor.view.dispatch(tr);
+    countWords();
+    saveDocument();
+    notify("Table of contents refreshed.");
+  }
+
   function insertTableRow(position) {
     const activeCell = selectedTableCell();
     if (!activeCell) { notify("Place the cursor in a table cell first."); return; }
@@ -4415,6 +4453,7 @@
         button.setAttribute("aria-pressed", String(showIndentRuler));
         break;
       case "outline": $("#toggle-outline").click(); break;
+      case "contents": updateTableOfContents(); break;
       case "quick-overview": toggleAssistant(true); buildOverview(); break;
       case "track-changes":
         trackChangesEnabled = !trackChangesEnabled;
