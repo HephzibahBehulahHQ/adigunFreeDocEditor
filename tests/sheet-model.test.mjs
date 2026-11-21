@@ -2,10 +2,16 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
-import { calculateSheet, cellAddress, displayCell, parseCsv, toCsv } from "../sheet-model.js";
+import { buildPivot, calculateSheet, cellAddress, displayCell, parseCsv, toCsv } from "../sheet-model.js";
 import { exportWorkbook, importWorkbook } from "../sheet-xlsx.js";
 
 assert.equal(cellAddress(99, 25), "Z100");
+const pivotSource = { A1: "Region", B1: "Sales", A2: "North", B2: "4", A3: "South", B3: "3", A4: "North", B4: "=B2+2" };
+const pivotConfig = { range: "A1:B4", group: "A", measure: "B", aggregate: "sum" };
+assert.deepEqual(buildPivot(pivotSource, pivotConfig).cells, { A1: "Region", B1: "SUM of Sales", A2: "North", B2: "10", A3: "South", B3: "3" });
+assert.equal(buildPivot(pivotSource, { ...pivotConfig, aggregate: "average" }).cells.B2, "5");
+assert.equal(buildPivot(pivotSource, { ...pivotConfig, aggregate: "count" }).cells.B2, "2");
+assert.throws(() => buildPivot(pivotSource, { ...pivotConfig, group: "C" }), /within/);
 assert.equal(displayCell(0.375, "percent", "en-US"), "37.50%");
 assert.equal(displayCell("#ERROR!", "number", "en-US"), "#ERROR!");
 assert.deepEqual(parseCsv('name,value\r\n"one, two","a ""quote"""\r\n"line\nbreak",5'), [
