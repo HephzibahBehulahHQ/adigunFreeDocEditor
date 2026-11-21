@@ -1,4 +1,4 @@
-import { calculateSheet, maxCellLength, maxColumns, maxRows, numberFormats } from "./sheet-model.js";
+import { calculateWorkbook, maxCellLength, maxColumns, maxRows, numberFormats } from "./sheet-model.js";
 
 const mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const officeNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -15,9 +15,8 @@ function xml(value) {
     .replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
 }
 
-function makeWorksheet(cells, formats = {}) {
+function makeWorksheet(cells, formats = {}, valueAt) {
   const rows = new Map();
-  const valueAt = calculateSheet(cells);
   for (const address of new Set([...Object.keys(cells), ...Object.keys(formats)])) {
     const raw = cells[address] ?? "";
     const row = Number(address.slice(1));
@@ -59,7 +58,7 @@ export function exportWorkbook(sheets, zip) {
     workbookSheets.push(`<sheet name="${xml(name)}" sheetId="${id}" r:id="rId${id}"/>`);
     rels.push(`<Relationship Id="rId${id}" Type="${officeNs}/worksheet" Target="${target}"/>`);
     overrides.push(`<Override PartName="/xl/${target}" ContentType="${worksheetType}"/>`);
-    files["xl/" + target] = makeWorksheet(sheet.cells, sheet.formats);
+    files["xl/" + target] = makeWorksheet(sheet.cells, sheet.formats, calculateWorkbook(sheets, index));
   }
   if (sheets.some((sheet) => Object.keys(sheet.formats ?? {}).length)) {
     rels.push(`<Relationship Id="rIdStyles" Type="${officeNs}/styles" Target="styles.xml"/>`);

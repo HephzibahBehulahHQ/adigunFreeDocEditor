@@ -1,4 +1,4 @@
-import { buildPivot, calculateSheet, cellAddress, displayCell, maxCellLength, maxColumns, maxRows, numberFormats, parseCsv, toCsv } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, displayCell, maxCellLength, maxColumns, maxRows, numberFormats, parseCsv, toCsv } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
@@ -38,6 +38,7 @@ try {
 
 function status(message) { $("sheet-save").textContent = message; }
 function currentSheet() { return workbook.sheets[workbook.active]; }
+function workbookValues(index = workbook.active) { return calculateWorkbook(workbook.sheets, index); }
 
 function updateHistoryButtons() {
   $("sheet-undo").disabled = !undoStack.length;
@@ -78,7 +79,7 @@ $("sheet-pivot-form").addEventListener("submit", (event) => {
   const pivot = Object.fromEntries(["range", "group", "measure", "aggregate"].map((key) => [key, $("pivot-" + key).value]));
   pivot.source = workbook.active;
   try {
-    const result = buildPivot(currentSheet().cells, pivot);
+    const result = buildPivot(currentSheet().cells, pivot, workbookValues());
     recordEdit();
     workbook.active = workbook.sheets.push({ ...blankSheet(), ...result, pivot, name: "Pivot " + workbook.sheets.length }) - 1;
     pivotDialog.close();
@@ -91,7 +92,7 @@ $("sheet-pivot-refresh").addEventListener("click", () => {
   const source = workbook.sheets[sheet.pivot?.source];
   if (!source || source === sheet) { status("The source sheet is unavailable."); return; }
   try {
-    const result = buildPivot(source.cells, sheet.pivot);
+    const result = buildPivot(source.cells, sheet.pivot, workbookValues(sheet.pivot.source));
     recordEdit();
     Object.assign(sheet, result);
     save();
@@ -111,7 +112,7 @@ function save() {
 
 function refreshValues() {
   const sheet = currentSheet();
-  const valueAt = calculateSheet(sheet.cells);
+  const valueAt = workbookValues();
   for (const field of grid.querySelectorAll("input")) {
     if (document.activeElement !== field) field.value = displayCell(valueAt(field.dataset.cell), sheet.formats?.[field.dataset.cell]);
   }
@@ -128,7 +129,7 @@ function selectionAddresses() {
   return addresses;
 }
 
-function refreshSelection(valueAt = calculateSheet(currentSheet().cells)) {
+function refreshSelection(valueAt = workbookValues()) {
   const addresses = selectionAddresses();
   const selected = new Set(addresses);
   for (const field of grid.querySelectorAll("[data-cell]")) {
@@ -323,7 +324,7 @@ $("sheet-find-form").addEventListener("submit", (event) => {
   const inputs = [...grid.querySelectorAll("[data-cell]")];
   const offset = inputs.findIndex((input) => input.dataset.cell === selectedAddress) + 1;
   const sheet = currentSheet();
-  const valueAt = calculateSheet(sheet.cells);
+  const valueAt = workbookValues();
   const match = [...inputs.slice(offset), ...inputs.slice(0, offset)].find(({ dataset }) => {
     const address = dataset.cell;
     return [sheet.cells[address] ?? "", displayCell(valueAt(address), sheet.formats?.[address])]
@@ -422,7 +423,7 @@ function download(content, type, filename) {
 }
 
 $("sheet-export").addEventListener("click", () => {
-  download(toCsv(currentSheet().cells), "text/csv;charset=utf-8", "adigun-sheet-" + (workbook.active + 1) + ".csv");
+  download(toCsv(currentSheet().cells, workbookValues()), "text/csv;charset=utf-8", "adigun-sheet-" + (workbook.active + 1) + ".csv");
 });
 $("workbook-export").addEventListener("click", () => {
   try {
