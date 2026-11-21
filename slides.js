@@ -40,6 +40,7 @@
         theme: Object.hasOwn(window.AdigunPresentation.themes, slide?.theme) ? slide.theme : "paper",
         animation: normalizeAnimation(slide?.animation),
         hidden: slide?.hidden === true,
+        notes: typeof slide?.notes === "string" ? slide.notes.slice(0, 4000) : "",
       }));
       const active = Number.isInteger(stored.active) ? Math.max(0, Math.min(stored.active, slides.length - 1)) : 0;
       deck = { name: typeof stored.name === "string" ? stored.name.slice(0, 100) : deck.name, active, slides };
@@ -108,6 +109,7 @@
     $("deck-title").value = deck.name;
     $("slide-title").value = slide.title;
     $("slide-content").value = slide.content;
+    $("slide-notes").value = slide.notes || "";
     applyTheme($("slide-title").closest(".slides-paper"), slide.theme);
     for (const button of document.querySelectorAll("[data-slide-theme]")) {
       button.setAttribute("aria-pressed", String(button.dataset.slideTheme === (slide.theme || "paper")));
@@ -160,6 +162,7 @@
   $("deck-title").addEventListener("input", (event) => { deck.name = event.target.value; save(); });
   $("slide-title").addEventListener("input", (event) => { deck.slides[deck.active].title = event.target.value; save(); renderList(); });
   $("slide-content").addEventListener("input", (event) => { deck.slides[deck.active].content = event.target.value; save(); renderList(); });
+  $("slide-notes").addEventListener("input", (event) => { deck.slides[deck.active].notes = event.target.value; save(); });
   $("slide-add").addEventListener("click", () => addSlide(blank()));
   $("slide-duplicate").addEventListener("click", () => addSlide({ ...deck.slides[deck.active] }));
   $("slide-earlier").addEventListener("click", () => moveSlideTo(deck.active, deck.active - 1));
@@ -218,6 +221,9 @@
     const slide = deck.slides[presentedSlide];
     $("present-title").textContent = slide.title;
     $("present-content").textContent = slide.content;
+    $("present-notes").textContent = slide.notes || "";
+    $("present-notes-toggle").hidden = !slide.notes;
+    setPresenterNotes(false);
     applyTheme($("present-title").closest(".slides-paper"), slide.theme);
     $("present-count").textContent = `${presentedSlide + 1} / ${deck.slides.length}`;
     $("present-prev").disabled = visibleSlide(presentedSlide - 1, -1) < 0;
@@ -240,6 +246,12 @@
     renderPresentation();
   };
   $("present-play").addEventListener("click", playAnimation);
+  function setPresenterNotes(open) {
+    $("present-notes").hidden = !open;
+    $("present-notes-toggle").setAttribute("aria-expanded", String(open));
+    $("present-notes-toggle").textContent = open ? "Hide speaker notes" : "Show speaker notes";
+  }
+  $("present-notes-toggle").addEventListener("click", () => setPresenterNotes($("present-notes").hidden));
   slideShow.addEventListener("close", stopAnimation);
   reducedMotion.addEventListener("change", () => { if (slideShow.open) renderPresentation(); });
   $("slide-present").addEventListener("click", () => presentFrom(deck.active));
@@ -260,13 +272,13 @@
     if (file.size > 8 * 1024 * 1024) { status("Choose a PPTX file under 8 MB."); return; }
     try {
       const slides = window.AdigunPresentation.importTextSlides(new Uint8Array(await file.arrayBuffer()));
-      const empty = deck.slides.length === 1 && !deck.slides[0].title && !deck.slides[0].content;
+      const empty = deck.slides.length === 1 && !deck.slides[0].title && !deck.slides[0].content && !deck.slides[0].notes;
       const existing = empty ? [] : deck.slides;
       if (existing.length + slides.length > maxSlides) { status("This import would exceed the 40-slide limit."); return; }
       deck = { name: empty ? file.name.replace(/\.pptx$/i, "").slice(0, 100) : deck.name, active: existing.length, slides: [...existing, ...slides] };
       save();
       render();
-      status("Slide text imported. Images and original formatting are not included.");
+      status("Slide text and supported speaker notes imported. Images and original formatting are not included.");
     } catch (error) {
       status(error.message || "This PowerPoint file could not be opened.");
     }
@@ -276,7 +288,7 @@
     const button = event.currentTarget;
     button.disabled = true;
     try {
-      const slides = deck.slides.map((slide) => ({ title: slide.title, lines: slide.content.split("\n"), theme: slide.theme, hidden: slide.hidden }));
+      const slides = deck.slides.map((slide) => ({ title: slide.title, lines: slide.content.split("\n"), theme: slide.theme, hidden: slide.hidden, notes: slide.notes }));
       const blob = await window.AdigunPresentation.createBlob(slides);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
