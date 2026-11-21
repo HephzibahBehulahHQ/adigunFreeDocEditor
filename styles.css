@@ -639,3 +639,24 @@ a.nav-item{text-decoration:none}
 [data-theme="dark"] .tool-file-label,[data-theme="dark"] .tool-file-order-actions button{background:var(--canvas);color:var(--ink)}
 @media(max-width:560px){.file-tool-grid{grid-template-columns:1fr}.tool-file-order-actions button{width:40px;height:40px}}
 
+.pdf-tool-dialog {
+  width: min(38rem, 92vw);
+  max-height: 92vh;
+  border: 1px solid #d6dfea;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.pdf-tool-dialog label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.pdf-tool-dialog input,
+.pdf-tool-dialog select,
+.pdf-tool-dialog textarea {
+  width: 100%;
+  padding: 8px;
+  font: inherit;
+}

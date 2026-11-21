@@ -1,7 +1,9 @@
 import { buildPdf } from "./pdf-pages.js";
+import { bindPdfOcr } from "./pdf-ocr.js";
 
 const $ = (id) => document.getElementById(id);
 const sources = [];
+bindPdfOcr(sources);
 const preview = $("pdf-preview");
 let previewUrl;
 let busy = false;
@@ -33,6 +35,7 @@ function button(label, handler, disabled = false) {
 }
 
 function render() {
+  $("pdf-ocr").disabled = busy || sources.length === 0;
   $("pdf-add").disabled = busy;
   $("pdf-export").disabled = busy || sources.length === 0;
   $("pdf-preview-output").disabled = busy || sources.length === 0;

@@ -30,6 +30,9 @@
         <label class="pdf-format-option"><input id="pdf-page-numbers" type="checkbox"> Number output pages</label>
         <label class="pdf-format-option">Footer text <input id="pdf-footer-text" type="text" maxlength="60"></label>
       </div></details>
+      <details name="pdf-commands" class="command-menu"><summary>Scan &amp; OCR</summary><div>
+        <button id="pdf-ocr" type="button" disabled>Recognize text</button>
+      </div></details>
       <input id="pdf-files" type="file" accept=".pdf,application/pdf" multiple hidden>
     </div>
     <p class="sheets-help">Enter page numbers or ranges such as 4, 1-2. Export follows the file order and the page order you enter. Leave the selection blank for all pages.</p>
@@ -41,7 +44,24 @@
       <iframe id="pdf-preview" title="PDF preview" hidden></iframe>
     </div>
   </main>
+  <dialog id="pdf-ocr-dialog" class="pdf-tool-dialog" aria-labelledby="pdf-ocr-title">
+    <h2 id="pdf-ocr-title">Recognize text</h2>
+    <form>
+      <label>Source PDF <select name="source"></select></label>
+      <label>Pages <input name="pages" maxlength="800" placeholder="All pages"></label>
+      <p>Recognize up to 10 pages of English text on this device.</p>
+      <label>Recognized text <textarea name="result" rows="10"></textarea></label>
+      <p role="status" aria-live="polite"></p>
+      <div class="slides-actions">
+        <button class="button button-outline" type="submit">Recognize</button>
+        <button class="button button-outline" type="button" data-download disabled>Download text</button>
+        <button class="button button-outline" type="button" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
   <script src="./assets/vendor/pdf-lib.min.js" defer></script>
+  <script src="./assets/vendor/pdf.min.js" defer></script>
+  <script src="./assets/vendor/ocr/tesseract.min.js" defer></script>
   <script type="module" src="./pdf-workspace.js"></script>
 </body>
 </html>
