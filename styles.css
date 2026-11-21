@@ -430,7 +430,10 @@ a.nav-item{text-decoration:none}
 .command-menu :is(button,a):hover:not(:disabled){background:var(--purple-soft)}
 .command-menu button[aria-pressed="true"]{background:var(--purple-soft);font-weight:650}
 .pdf-format-option{display:flex;align-items:center;gap:8px;padding:8px 10px}
-@media(max-width:700px){.command-menu summary,.command-menu :is(button,a){min-height:44px}}
+@media(max-width:700px){
+  .command-menu summary,.command-menu :is(button,a){min-height:44px}
+  .command-menu div{position:static;min-width:0;max-width:calc(100vw - 28px);box-shadow:none}
+}
 .sheets-header{
   display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px clamp(16px,4vw,40px);
   background:var(--navy);color:var(--ivory);
@@ -495,6 +498,11 @@ a.nav-item{text-decoration:none}
 .sheet-formula-line{display:flex;align-items:center;gap:8px;margin:10px 0}
 .sheet-formula-line>span:first-child{min-width:48px;font-weight:650}
 .sheet-formula-line input{flex:1;min-width:0;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
+#sheet-find-dialog{width:min(420px,calc(100vw - 24px));border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);padding:16px}
+#sheet-find-dialog::backdrop{background:#0b122066}
+#sheet-find-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#sheet-find-form :is(h2,label,p){width:100%;margin:0}
+#sheet-find-query{max-width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:5px}
 .sheets-grid .sheets-no-gridlines td{border-color:transparent}
 .sheets-grid{max-height:65vh;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .sheets-grid table{border-spacing:0;table-layout:fixed;width:max-content;min-width:100%}

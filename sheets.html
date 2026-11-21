@@ -36,6 +36,9 @@
       <details name="sheet-commands" class="command-menu"><summary>View</summary><div>
         <button type="button" id="sheet-gridlines" aria-pressed="true">Show gridlines</button>
       </div></details>
+      <details name="sheet-commands" class="command-menu"><summary>Data</summary><div>
+        <button type="button" id="sheet-find">Find in this sheet</button>
+      </div></details>
       <input id="sheet-file" type="file" accept=".csv,text/csv" hidden>
       <input id="workbook-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
     </div>
@@ -49,6 +52,15 @@
       <button id="sheet-add" type="button" class="button button-outline">＋ Sheet</button>
     </div>
   </main>
+  <dialog id="sheet-find-dialog" aria-labelledby="sheet-find-title">
+    <form id="sheet-find-form">
+      <h2 id="sheet-find-title">Find in this sheet</h2>
+      <label>Value or formula <input id="sheet-find-query" type="search" required maxlength="100"></label>
+      <button class="button button-outline" type="submit">Find next</button>
+      <button class="button button-outline" id="sheet-find-close" type="button">Close</button>
+      <p id="sheet-find-status" role="status"></p>
+    </form>
+  </dialog>
   <script src="./assets/vendor/fflate.min.js" defer></script>
   <script type="module" src="./sheets.js"></script>
 </body>
