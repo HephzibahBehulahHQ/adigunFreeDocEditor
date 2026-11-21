@@ -31,7 +31,7 @@ Open `http://localhost:4173`. The DOCX converter is vendored locally; the app do
 
 ## Current support
 
-- Open **Sheets** from the sidebar to edit a browser-local workbook with up to 12 sheets, 100 rows, and 26 columns per sheet. Use arithmetic, cell references, and SUM, AVERAGE, MIN, and MAX. Import CSV into a new sheet and export the active sheet’s calculated values as CSV. Excel workbook files are a future increment.
+- Open **Sheets** from the sidebar to edit a browser-local workbook with up to 12 sheets, 100 rows, and 26 columns per sheet. Use arithmetic, cell references, and SUM, AVERAGE, MIN, and MAX. Import CSV into a new sheet and export the active sheet’s calculated values as CSV. Open Excel .xlsx workbooks for cell values and supported formulas, and export the workbook as .xlsx. Excel formatting, charts, macros, and cross-sheet formulas are outside this increment.
 
 - Start from six on-device templates for meeting notes, project briefs, formal letters, status reports, research notes, and resumes, or create a blank document. Template content opens in the editable workspace and stays in this browser.
 - Create and edit text with headings, emphasis, lists, alignment, links, tables, local PNG/JPEG/GIF images (up to 8 MB each) and browser spellcheck.

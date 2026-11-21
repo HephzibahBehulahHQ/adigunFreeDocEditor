@@ -1,4 +1,5 @@
 import { calculateSheet, cellAddress, maxCellLength, maxColumns, maxRows, parseCsv, toCsv } from "./sheet-model.js";
+import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
 const storageKey = "adigun-sheets-v1";
@@ -12,6 +13,7 @@ try {
   const stored = JSON.parse(localStorage.getItem(storageKey));
   if (Array.isArray(stored?.sheets) && stored.sheets.length) {
     const sheets = stored.sheets.slice(0, maxSheets).map((item) => ({
+      name: typeof item?.name === "string" ? item.name.slice(0, 31) : "",
       rows: Math.max(20, Math.min(maxRows, Number.isInteger(item?.rows) ? item.rows : 20)),
       columns: Math.max(8, Math.min(maxColumns, Number.isInteger(item?.columns) ? item.columns : 8)),
       cells: Object.fromEntries(Object.entries(item?.cells ?? {}).filter(([key, value]) =>
@@ -79,7 +81,7 @@ function render() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "button button-outline";
-    button.textContent = "Sheet " + (index + 1);
+    button.textContent = _sheet.name || "Sheet " + (index + 1);
     button.setAttribute("aria-pressed", String(index === workbook.active));
     button.addEventListener("click", () => { workbook.active = index; save(); render(); $("sheet-tabs").children[index].focus(); });
     return button;
@@ -150,13 +152,44 @@ $("sheet-file").addEventListener("change", async (event) => {
     status(error.message || "This CSV could not be opened.");
   }
 });
-$("sheet-export").addEventListener("click", () => {
-  const url = URL.createObjectURL(new Blob([toCsv(currentSheet().cells)], { type: "text/csv;charset=utf-8" }));
+$("workbook-open").addEventListener("click", () => $("workbook-file").click());
+$("workbook-file").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  if (file.size > 4 * 1024 * 1024) { status("Choose an XLSX file under 4 MB."); return; }
+  try {
+    const sheets = importWorkbook(new Uint8Array(await file.arrayBuffer()), window.fflate);
+    const emptyWorkbook = workbook.sheets.length === 1 && !Object.keys(workbook.sheets[0].cells).length;
+    const existing = emptyWorkbook ? [] : workbook.sheets;
+    if (existing.length + sheets.length > maxSheets) { status("The import would exceed the workbook’s 12-sheet limit."); return; }
+    workbook = { active: existing.length, sheets: [...existing, ...sheets] };
+    save();
+    render();
+    status("Excel values and formulas imported. Original formatting is not included.");
+  } catch (error) {
+    status(error.message || "This Excel file could not be opened.");
+  }
+});
+
+function download(content, type, filename) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = "adigun-sheet-" + (workbook.active + 1) + ".csv";
+  link.download = filename;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+$("sheet-export").addEventListener("click", () => {
+  download(toCsv(currentSheet().cells), "text/csv;charset=utf-8", "adigun-sheet-" + (workbook.active + 1) + ".csv");
+});
+$("workbook-export").addEventListener("click", () => {
+  try {
+    download(exportWorkbook(workbook.sheets, window.fflate), xlsxMime, "adigun-workbook.xlsx");
+  } catch {
+    status("The Excel workbook could not be exported.");
+  }
 });
 
 render();
