@@ -19,7 +19,7 @@
     <span id="sheet-save" role="status">Stored on this device</span>
   </header>
   <main class="sheets-workspace">
-    <div class="sheets-actions" aria-label="Workbook actions">
+    <div class="sheets-actions suite-ribbon" aria-label="Workbook actions">
       <button id="sheet-undo" class="button button-outline" type="button" title="Undo workbook edit (Ctrl+Z)" disabled>Undo</button>
       <button id="sheet-redo" class="button button-outline" type="button" title="Redo workbook edit (Ctrl+Shift+Z)" disabled>Redo</button>
       <details name="sheet-commands" class="command-menu"><summary>File</summary><div>
@@ -28,7 +28,7 @@
         <button id="workbook-export" type="button">Download Excel</button>
         <button id="sheet-export" type="button">Download CSV</button>
       </div></details>
-      <details name="sheet-commands" class="command-menu"><summary>Home</summary><div>
+      <details name="sheet-commands" class="command-menu" open><summary>Home</summary><div>
         <button id="sheet-copy" type="button">Copy selection</button>
         <button id="sheet-cut" type="button">Cut selection</button>
         <button id="sheet-paste" type="button">Paste from clipboard</button>
