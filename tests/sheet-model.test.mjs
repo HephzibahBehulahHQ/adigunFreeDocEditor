@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
-import { buildPivot, calculateSheet, calculateWorkbook, cellAddress, displayCell, parseCsv, toCsv } from "../sheet-model.js";
+import { buildPivot, calculateSheet, calculateWorkbook, cellAddress, displayCell, parseChartRange, parseCsv, toCsv } from "../sheet-model.js";
 import { exportWorkbook, importWorkbook } from "../sheet-xlsx.js";
 
 assert.equal(cellAddress(99, 25), "Z100");
@@ -53,7 +53,8 @@ try {
   const sheets = [{ name: "Sales & costs", cells: { A1: "10", A2: "20", A3: "=SUM(A1:A2)", B1: "001", B2: "'=literal" }, formats: { A3: "number", C1: "percent" } }, { name: "Notes", cells: { A1: 'Quotes and <symbols> "work"' }, formats: {} }];
   const validation = { C4: ["Ready", "On hold"], C5: ["Ready", "On hold"] };
   const filter = { range: "A1:B3", column: "A", value: "20" };
-  const bytes = exportWorkbook([{ ...sheets[0], freezeFirstRow: true, validation, filter }, sheets[1]], zip);
+  const chart = parseChartRange("A1:B3");
+  const bytes = exportWorkbook([{ ...sheets[0], freezeFirstRow: true, validation, filter, chart }, sheets[1]], zip);
   const imported = importWorkbook(bytes, zip, dom.window.DOMParser);
   assert.deepEqual(imported.map(({ name, cells, formats }) => ({ name, cells, formats })), sheets);
   assert.equal(calculateSheet(imported[0].cells)("A3"), 30);
@@ -61,6 +62,7 @@ try {
   assert.equal(imported[1].freezeFirstRow, false);
   assert.deepEqual(imported[0].validation, validation);
   assert.deepEqual(imported[0].filter, filter);
+  assert.deepEqual(imported[0].chart, chart);
   const reopened = importWorkbook(exportWorkbook(linked, zip), zip, dom.window.DOMParser);
   assert.equal(reopened[0].cells.A1, linked[0].cells.A1);
   assert.equal(calculateWorkbook(reopened, 0)("A1"), 14);

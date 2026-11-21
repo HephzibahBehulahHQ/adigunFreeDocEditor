@@ -138,8 +138,6 @@ const chartForm = $("sheet-chart-form");
 
 function refreshChart(valueAt) {
   const chart = currentSheet().chart;
-  const hasCharts = workbook.sheets.some((sheet) => sheet.chart);
-  $("workbook-export").textContent = hasCharts ? "Download Excel (chart data only)" : "Download Excel";
   $("sheet-chart-remove").disabled = !chart;
   if (chartPanel.hidden) return;
   const values = chart ? chartValues(chart, valueAt) : [];
