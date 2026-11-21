@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, chartValues, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseChartRange, parseCsv, parseSheetFilter, toCsv, validationOptions } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, chartValues, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseChartRange, parseCsv, parseSheetFilter, shiftCellFormula, toCsv, validationOptions } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
@@ -238,6 +238,8 @@ function refreshFormula() {
   picker.hidden = !options.length;
   picker.replaceChildren(new Option("Choose value", ""), ...options.map((value) => new Option(value)));
   picker.value = options.includes($("sheet-formula").value) ? $("sheet-formula").value : "";
+  $("sheet-fill-down").disabled = !selectedRange || selectedRange.firstRow === selectedRange.lastRow;
+  $("sheet-fill-right").disabled = !selectedRange || selectedRange.firstColumn === selectedRange.lastColumn;
 }
 
 function acceptsValue(sheet, address, value) {
@@ -412,34 +414,107 @@ validationForm.addEventListener("submit", (event) => {
   validationDialog.close();
   refreshFormula();
 });
+function applyCellChanges(entries) {
+  const sheet = currentSheet();
+  const changes = entries.filter(([address, value]) => (sheet.cells[address] ?? "") !== value);
+  const invalid = changes.find(([address, value]) => !acceptsValue(sheet, address, value));
+  if (invalid) throw new Error(`Choose an allowed value for ${invalid[0]}.`);
+  if (!changes.length) return;
+  recordEdit();
+  for (const [address, value] of changes) {
+    sheet.rows = Math.max(sheet.rows, Number(address.slice(1)));
+    sheet.columns = Math.max(sheet.columns, address.charCodeAt(0) - 64);
+    if (value) sheet.cells[address] = value;
+    else delete sheet.cells[address];
+  }
+  save();
+}
+
+function pasteCells(address, text) {
+  if (!text) return;
+  try {
+    if (text.length > 1024 * 1024) throw new Error("Paste up to 1 MB of tabular text.");
+    const rows = /[\t\n\r]/.test(text) ? parseCsv(text, "\t") : [[text]];
+    if (rows.some((fields) => fields.some((value) => value.length > maxCellLength))) throw new Error("A pasted cell exceeds the text limit.");
+    const row = Number(address.slice(1)) - 1;
+    const column = address.charCodeAt(0) - 65;
+    const width = Math.max(...rows.map((fields) => fields.length));
+    if (row + rows.length > maxRows || column + width > maxColumns) throw new Error("The pasted range exceeds the workbook grid.");
+    applyCellChanges(rows.flatMap((fields, offset) => fields.map((value, index) => [cellAddress(row + offset, column + index), value])));
+    render();
+    grid.querySelector(`[data-cell="${address}"]`).focus();
+  } catch (error) { status(error.message); }
+}
 grid.addEventListener("paste", (event) => {
   const address = event.target.dataset.cell;
   const text = event.clipboardData?.getData("text/plain");
   if (!address || !text || !/[\t\n\r]/.test(text)) return;
   event.preventDefault();
-  try {
-    if (text.length > 1024 * 1024) throw new Error("Paste up to 1 MB of tabular text.");
-    const rows = parseCsv(text, "\t");
-    const row = Number(address.slice(1)) - 1;
-    const column = address.charCodeAt(0) - 65;
-    const width = Math.max(...rows.map((fields) => fields.length));
-    if (row + rows.length > maxRows || column + width > maxColumns) throw new Error("The pasted range exceeds the workbook grid.");
-    const sheet = currentSheet();
-    const changes = rows.flatMap((fields, offset) => fields.map((value, index) => [cellAddress(row + offset, column + index), value]));
-    const invalid = changes.find(([target, value]) => !acceptsValue(sheet, target, value));
-    if (invalid) throw new Error(`Choose an allowed value for ${invalid[0]} before pasting.`);
-    recordEdit();
-    sheet.rows = Math.max(sheet.rows, row + rows.length);
-    sheet.columns = Math.max(sheet.columns, column + width);
-    for (const [target, value] of changes) {
-      if (value) sheet.cells[target] = value;
-      else delete sheet.cells[target];
-    }
-    save();
-    render();
-    grid.querySelector(`[data-cell="${address}"]`).focus();
-  } catch (error) { status(error.message); }
+  pasteCells(address, text);
 });
+
+async function copySelection(cut) {
+  const sheet = currentSheet();
+  const addresses = selectionAddresses();
+  const values = addresses.map((address) => sheet.cells[address] ?? "");
+  const columns = selectedRange ? selectedRange.lastColumn - selectedRange.firstColumn + 1 : 1;
+  const rows = [];
+  const quote = (value) => /["\t\r\n]/.test(value) ? '"' + value.replaceAll('"', '""') + '"' : value;
+  for (let index = 0; index < values.length; index += columns) {
+    rows.push(values.slice(index, index + columns).map(quote).join("\t"));
+  }
+  const text = values.length === 1 && !/[\t\r\n]/.test(values[0]) ? values[0] : rows.join("\r\n");
+  try { await navigator.clipboard.writeText(text); }
+  catch { status("Clipboard access is unavailable in this browser."); return; }
+  if (cut && (sheet !== currentSheet() || addresses.some((address, index) => (sheet.cells[address] ?? "") !== values[index]))) {
+    status("Copied. The selection changed before it could be cut.");
+    return;
+  }
+  if (cut) clearSelection(addresses);
+  status(cut ? "Cut to clipboard." : "Copied to clipboard.");
+}
+$("sheet-copy").addEventListener("click", () => void copySelection(false));
+$("sheet-cut").addEventListener("click", () => void copySelection(true));
+$("sheet-paste").addEventListener("click", async () => {
+  const sheet = currentSheet();
+  const address = selectedAddress;
+  try {
+    const text = await navigator.clipboard.readText();
+    if (currentSheet() === sheet && selectedAddress === address) pasteCells(address, text);
+  } catch { status("Select a cell and use your browser’s Paste shortcut."); }
+});
+
+function clearSelection(addresses = selectionAddresses()) {
+  applyCellChanges(addresses.map((address) => [address, ""]));
+  $("sheet-export").disabled = Object.keys(currentSheet().cells).length === 0;
+  refreshValues();
+  refreshFormula();
+}
+$("sheet-clear-cells").addEventListener("click", () => clearSelection());
+
+function fillSelection(down) {
+  if (!selectedRange) return;
+  const { firstRow, lastRow, firstColumn, lastColumn } = selectedRange;
+  const cells = currentSheet().cells;
+  const changes = [];
+  for (let row = firstRow; row <= lastRow; row++) {
+    for (let column = firstColumn; column <= lastColumn; column++) {
+      const rowDelta = down ? row - firstRow : 0;
+      const columnDelta = down ? 0 : column - firstColumn;
+      if (!rowDelta && !columnDelta) continue;
+      const source = cells[cellAddress(row - rowDelta, column - columnDelta)] ?? "";
+      changes.push([cellAddress(row, column), shiftCellFormula(source, rowDelta, columnDelta)]);
+    }
+  }
+  try {
+    applyCellChanges(changes);
+    $("sheet-export").disabled = Object.keys(cells).length === 0;
+    refreshValues();
+    refreshFormula();
+  } catch (error) { status(error.message); }
+}
+$("sheet-fill-down").addEventListener("click", () => fillSelection(true));
+$("sheet-fill-right").addEventListener("click", () => fillSelection(false));
 $("sheet-formula").addEventListener("change", (event) => updateCell(selectedAddress, event.target.value));
 $("sheet-selected").addEventListener("keydown", (event) => {
   if (event.key === "Escape") { refreshFormula(); return; }
