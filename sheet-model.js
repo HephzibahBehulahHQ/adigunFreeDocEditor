@@ -243,7 +243,7 @@ export function cellAddress(row, column) {
 
 export function shiftCellFormula(value, rowDelta, columnDelta) {
   if (!value.startsWith("=")) return value;
-  return value.replace(/(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|[A-Za-z_][\w.]*|"(?:[^"]|"")*"/g, (token) => {
+  return value.replace(/(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|[A-Za-z_][\w.]*|"(?:[^"]|"")*"|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/gi, (token) => {
     const separator = token.lastIndexOf("!") + 1;
     const match = /^(\$?)([A-Za-z])(\$?)([1-9]\d?|100)$/.exec(token.slice(separator));
     if (!match) return token;
@@ -308,9 +308,19 @@ export function calculateSheet(cells) {
 }
 
 const numericLiteral = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
+const formulaError = /^#(?:CYCLE|ERROR|VALUE|REF|DIV\/0)!$/;
+const emptyReference = Symbol("empty reference");
+const formulaText = (value) => value === emptyReference ? "" : String(value);
+const textFunctions = new Map([
+  ["LEN", (text) => text.length],
+  ["LOWER", (text) => text.toLowerCase()],
+  ["UPPER", (text) => text.toUpperCase()],
+  ["TRIM", (text) => text.replace(/^ +| +$/g, "").replace(/ +/g, " ")],
+]);
 
 export function calculateWorkbook(sheets, active) {
   const computed = new Map();
+  const errors = new Set();
   const visiting = new Set();
   const names = new Map();
   for (const [index, sheet] of sheets.entries()) {
@@ -318,9 +328,9 @@ export function calculateWorkbook(sheets, active) {
     if (!names.has(name)) names.set(name, index);
   }
   const numeric = (value) => {
-    if (value === "") return 0;
+    if (value === "" || value === emptyReference) return 0;
     if (typeof value === "number") return value;
-    if (/^#(?:CYCLE|ERROR|VALUE|REF|DIV\/0)!$/.test(value)) throw new Error(value);
+    if (formulaError.test(value)) throw new Error(value);
     if (!numericLiteral.test(value.trim())) throw new Error("#VALUE!");
     const number = Number(value);
     if (!Number.isFinite(number)) throw new Error("#VALUE!");
@@ -336,22 +346,36 @@ export function calculateWorkbook(sheets, active) {
     visiting.add(key);
     let value;
     try {
-      value = evaluateFormula(raw.slice(1), (cell, sheet) =>
-        valueAt(sheet === undefined ? sheetIndex : names.get(sheet.toUpperCase()), cell), numeric);
-      if (!Number.isFinite(value)) value = "#DIV/0!";
+      value = evaluateFormula(raw.slice(1), (cell, sheet) => {
+        const target = sheet === undefined ? sheetIndex : names.get(sheet.toUpperCase());
+        const result = valueAt(target, cell);
+        const source = sheets[target].cells[cell] ?? "";
+        if (errors.has(`${target}:${cell}`)) throw new Error(result);
+        if (!source) return emptyReference;
+        if (Number.isFinite(Number(source)) && String(Number(source)) === source) return Number(source);
+        return result;
+      }, numeric, (cell, sheet) => valueAt(sheet === undefined ? sheetIndex : names.get(sheet.toUpperCase()), cell));
+      if (typeof value === "number" && !Number.isFinite(value)) throw new Error("#DIV/0!");
+      if (typeof value === "string" && value.length > 32767) throw new Error("#VALUE!");
     } catch (error) {
-      value = /^#(?:CYCLE|VALUE|REF|DIV\/0)!$/.test(error.message) ? error.message : "#ERROR!";
+      errors.add(key);
+      value = formulaError.test(error.message) ? error.message : "#ERROR!";
     } finally {
       visiting.delete(key);
     }
     computed.set(key, value);
     return value;
   };
-  return (address) => valueAt(active, address);
+  const calculate = (address) => valueAt(active, address);
+  calculate.isError = (address) => {
+    calculate(address);
+    return errors.has(`${active}:${address}`);
+  };
+  return calculate;
 }
 
-function evaluateFormula(expression, valueAt, numeric) {
-  const tokens = expression.match(/#REF!|(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|[A-Za-z]+|[()+*/,:-]|[^\s]/gi) ?? [];
+function evaluateFormula(expression, scalarAt, numeric, valueAt) {
+  const tokens = expression.match(/"(?:[^"]|"")*"|#REF!|(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|[A-Za-z]+|[()+*/,:&-]|[^\s]/gi) ?? [];
   if (tokens.some((token) => token.toUpperCase() === "#REF!")) throw new Error("#REF!");
   if (tokens.length > 200) throw new Error("Formula is too long.");
   let index = 0;
@@ -364,18 +388,26 @@ function evaluateFormula(expression, valueAt, numeric) {
     return { address, sheet };
   }
   function term() {
-    if (take("-")) return -term();
-    if (take("+")) return term();
+    if (take("-")) return -numeric(term());
+    if (take("+")) return numeric(term());
     if (take("(")) {
-      const value = sum();
+      const value = concatenate();
       if (!take(")")) throw new Error("Unclosed parenthesis.");
       return value;
     }
-    const token = tokens[index++]?.toUpperCase();
-    const cell = reference(token);
-    if (cell) return numeric(valueAt(cell.address, cell.sheet));
+    const source = tokens[index++];
+    const token = source?.toUpperCase();
+    if (source?.length >= 2 && source.startsWith('"')) return source.slice(1, -1).replaceAll('""', '"');
+    const cell = reference(source);
+    if (cell) return scalarAt(cell.address, cell.sheet);
     if (/^(?:\d+(?:\.\d*)?|\.\d+)(?:E[+-]?\d+)?$/.test(token)) return Number(token);
-    if (!["SUM", "AVERAGE", "MIN", "MAX", "COUNT", "ABS", "ROUND", "MOD"].includes(token) || !take("(")) throw new Error("Unknown formula.");
+    if (!take("(")) throw new Error("Unknown formula.");
+    if (textFunctions.has(token)) {
+      const value = concatenate();
+      if (!take(")")) throw new Error("#VALUE!");
+      return textFunctions.get(token)(formulaText(value));
+    }
+    if (!["SUM", "AVERAGE", "MIN", "MAX", "COUNT", "ABS", "ROUND", "MOD"].includes(token)) throw new Error("Unknown formula.");
     const scalar = ["ABS", "ROUND", "MOD"].includes(token);
     const values = [];
     do {
@@ -399,7 +431,7 @@ function evaluateFormula(expression, valueAt, numeric) {
         index++;
         const value = valueAt(start.address, start.sheet);
         if (numericLiteral.test(String(value).trim()) && Number.isFinite(Number(value))) values.push(numeric(value));
-      } else values.push(sum());
+      } else values.push(numeric(concatenate()));
     } while (take(","));
     if (!take(")")) throw new Error("Unclosed function.");
     if (token === "COUNT") return values.length;
@@ -429,9 +461,9 @@ function evaluateFormula(expression, valueAt, numeric) {
     let value = term();
     while (["*", "/"].includes(tokens[index])) {
       const operator = tokens[index++];
-      const right = term();
+      const right = numeric(term());
       if (operator === "/" && right === 0) throw new Error("#DIV/0!");
-      value = operator === "*" ? value * right : value / right;
+      value = operator === "*" ? numeric(value) * right : numeric(value) / right;
     }
     return value;
   }
@@ -439,14 +471,22 @@ function evaluateFormula(expression, valueAt, numeric) {
     let value = product();
     while (["+", "-"].includes(tokens[index])) {
       const operator = tokens[index++];
-      const right = product();
-      value = operator === "+" ? value + right : value - right;
+      const right = numeric(product());
+      value = operator === "+" ? numeric(value) + right : numeric(value) - right;
     }
     return value;
   }
-  const value = sum();
+  function concatenate() {
+    let value = sum();
+    while (take("&")) {
+      value = formulaText(value) + formulaText(sum());
+      if (value.length > 32767) throw new Error("#VALUE!");
+    }
+    return value;
+  }
+  const value = concatenate();
   if (index !== tokens.length) throw new Error("Unexpected formula tokens.");
-  return value;
+  return value === emptyReference ? 0 : value;
 }
 
 export function toCsv(cells, valueAt = calculateSheet(cells)) {
