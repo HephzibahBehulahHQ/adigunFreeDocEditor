@@ -478,6 +478,14 @@ a.nav-item{text-decoration:none}
 .sheets-tab-bar{margin-top:10px}
 .sheets-tab-bar [aria-pressed="true"]{border-color:var(--purple);background:var(--purple-soft)}
 .sheets-actions button:disabled,.sheets-tab-bar button:disabled{opacity:.55;cursor:not-allowed}
+.pdf-layout{display:grid;grid-template-columns:minmax(250px,360px) minmax(0,1fr);gap:22px;align-items:start}
+.pdf-layout h2{font-size:16px}
+#pdf-source-list{list-style:none;padding:0;display:grid;gap:8px}
+.pdf-source{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);overflow-wrap:anywhere}
+.pdf-source label{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.pdf-source :is(input,select){width:100%;padding:7px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
+#pdf-preview{width:100%;min-height:68vh;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+@media(max-width:700px){.pdf-layout{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:700px){.sheets-actions button,.sheets-tab-bar button,.sheets-grid input{min-height:44px}}
 .editor-card.landing:has(.landing-home-header){width:100%;max-width:100%}
 .landing-page:has(.landing-home-header){max-width:100%;padding-block:24px 30px}

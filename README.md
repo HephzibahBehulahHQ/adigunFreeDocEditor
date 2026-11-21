@@ -24,12 +24,15 @@ Build the bundled editor runtime and start the local server:
 ```powershell
 npm ci
 npm run build:editor
+npm run build:pdf
 python -m http.server 4173
 ```
 
 Open `http://localhost:4173`. The DOCX converter is vendored locally; the app does not load it from a CDN.
 
 ## Current support
+
+- Open **PDF** from the sidebar to preview local PDFs and assemble a new PDF from selected pages. Page ranges, file order, and per-source rotation are supported. Interactive forms and signed PDFs are excluded from page export.
 
 - Open **Slides** from the sidebar to edit and present a browser-local, text-based deck. Add, duplicate, reorder, and delete slides, or import slide titles and text from PowerPoint. Download an editable PowerPoint file. Imported images, original styling, and transitions are outside this increment.
 

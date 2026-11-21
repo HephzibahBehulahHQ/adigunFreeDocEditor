@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <title>Adigun PDF</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="sheets-header">
+    <a href="./index.html">← Documents</a>
+    <h1>Adigun PDF</h1>
+    <span id="pdf-status" role="status">Files stay on this device</span>
+  </header>
+  <main class="slides-workspace">
+    <div class="slides-actions" aria-label="PDF actions">
+      <button id="pdf-add" class="button button-outline" type="button">Add PDFs</button>
+      <button id="pdf-export" class="button button-outline" type="button" disabled>Download selected pages</button>
+      <input id="pdf-files" type="file" accept=".pdf,application/pdf" multiple hidden>
+    </div>
+    <p class="sheets-help">Enter page numbers or ranges such as 4, 1-2. Export follows the file order and the page order you enter. Leave the selection blank for all pages.</p>
+    <div class="pdf-layout">
+      <section aria-labelledby="pdf-list-title">
+        <h2 id="pdf-list-title">Source PDFs</h2>
+        <ol id="pdf-source-list"></ol>
+      </section>
+      <iframe id="pdf-preview" title="PDF preview" hidden></iframe>
+    </div>
+  </main>
+  <script src="./assets/vendor/pdf-lib.min.js" defer></script>
+  <script type="module" src="./pdf-workspace.js"></script>
+</body>
+</html>

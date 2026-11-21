@@ -85,6 +85,7 @@ jobs:
           node tests/assistant-panel-state.test.cjs
           node tests/sheet-model.test.mjs
           node tests/presentation-package.test.mjs
+          node tests/pdf-pages.test.mjs
 
 
 
