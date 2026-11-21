@@ -11,7 +11,7 @@ for (const file of ["assets/vendor/fflate.min.js", "presentation-package.js"]) {
 }
 const parts = window.AdigunPresentation.createParts([
   { title: "First <slide>", lines: ["A & B", "Second line"], theme: "midnight" },
-  { title: "Blank", lines: [] },
+  { title: "Blank", lines: [], hidden: true },
 ]);
 assert.match(window.fflate.strFromU8(parts["ppt/presentation.xml"]), /r:id="rId1".*r:id="rId2"/);
 assert.match(window.fflate.strFromU8(parts["ppt/slides/slide1.xml"]), /First &lt;slide&gt;.*A &amp; B.*Second line/);
@@ -21,7 +21,7 @@ assert.throws(() => window.AdigunPresentation.createParts(Array(81).fill({ title
 const dom = new JSDOM();
 try {
   const slides = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(parts), dom.window.DOMParser);
-  assert.deepEqual(JSON.parse(JSON.stringify(slides)), [{ title: "First <slide>", content: "A & B\nSecond line" }, { title: "Blank", content: "" }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(slides)), [{ title: "First <slide>", content: "A & B\nSecond line" }, { title: "Blank", content: "", hidden: true }]);
 } finally {
   dom.window.close();
 }

@@ -459,6 +459,9 @@ a.nav-item{text-decoration:none}
 }
 .slides-layout{display:grid;grid-template-columns:minmax(160px,200px) minmax(0,1fr);gap:20px;align-items:start;margin-top:18px}
 .slides-sidebar{padding:10px;background:var(--panel);border:1px solid var(--line);border-radius:9px}
+#slide-list button{display:grid;gap:6px;text-align:left;width:100%;overflow-wrap:anywhere}
+.slide-thumbnail{display:flex;flex-direction:column;gap:4px;aspect-ratio:16/9;overflow:hidden;padding:8px;border:1px solid var(--line);border-radius:4px;background:var(--slide-background,var(--panel));color:var(--slide-text,var(--ink));font-size:10px;line-height:1.2}
+.slide-thumbnail span{font-weight:400;white-space:pre-wrap}
 #slide-list{display:grid;gap:6px;max-height:55vh;overflow:auto;list-style:none;margin:0 0 10px;padding:0}
 #slide-list button{width:100%;min-height:38px;overflow-wrap:anywhere;text-align:left}
 #slide-list button[aria-pressed="true"]{border-color:var(--purple);background:var(--purple-soft)}

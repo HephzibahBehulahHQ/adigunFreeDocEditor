@@ -17,6 +17,7 @@
   let playing = [];
   let deck = { name: "Untitled presentation", active: 0, slides: [blank()] };
   let presentedSlide = 0;
+  let draggedSlide = null;
 
   function normalizeAnimation(animation) {
     const { effect, target, start, duration, delay } = animation || {};
@@ -38,6 +39,7 @@
         content: typeof slide?.content === "string" ? slide.content.slice(0, 1500) : "",
         theme: Object.hasOwn(window.AdigunPresentation.themes, slide?.theme) ? slide.theme : "paper",
         animation: normalizeAnimation(slide?.animation),
+        hidden: slide?.hidden === true,
       }));
       const active = Number.isInteger(stored.active) ? Math.max(0, Math.min(stored.active, slides.length - 1)) : 0;
       deck = { name: typeof stored.name === "string" ? stored.name.slice(0, 100) : deck.name, active, slides };
@@ -57,13 +59,44 @@
       const button = document.createElement("button");
       button.type = "button";
       button.className = "button button-outline";
-      button.textContent = (index + 1) + ". " + (slide.title.trim() || "Untitled slide");
+      const label = (index + 1) + ". " + (slide.title.trim() || "Untitled slide") + (slide.hidden ? " (hidden)" : "");
+      const thumbnail = document.createElement("span");
+      const heading = document.createElement("strong");
+      const summary = document.createElement("span");
+      thumbnail.className = "slide-thumbnail";
+      thumbnail.setAttribute("aria-hidden", "true");
+      heading.textContent = slide.title;
+      summary.textContent = slide.content;
+      thumbnail.append(heading, summary);
+      applyTheme(thumbnail, slide.theme);
+      const caption = document.createElement("span");
+      caption.textContent = label;
+      button.append(thumbnail, caption);
       button.setAttribute("aria-pressed", String(index === deck.active));
       button.addEventListener("click", () => {
         deck.active = index;
         save();
         render();
         $("slide-list").children[index].firstElementChild.focus();
+      });
+      item.draggable = true;
+      item.addEventListener("dragstart", (event) => {
+        draggedSlide = index;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(index + 1));
+      });
+      item.addEventListener("dragend", () => { draggedSlide = null; });
+      item.addEventListener("dragover", (event) => {
+        if (draggedSlide === null || draggedSlide === index) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+      });
+      item.addEventListener("drop", (event) => {
+        if (draggedSlide === null || draggedSlide === index) return;
+        event.preventDefault();
+        const from = draggedSlide;
+        draggedSlide = null;
+        moveSlideTo(from, index);
       });
       item.append(button);
       return item;
@@ -84,6 +117,12 @@
     $("slide-remove").disabled = deck.slides.length === 1;
     $("slide-earlier").disabled = deck.active === 0;
     $("slide-later").disabled = deck.active === deck.slides.length - 1;
+    $("slide-hide").textContent = slide.hidden ? "Show slide" : "Hide slide";
+    $("slide-hide").setAttribute("aria-pressed", String(Boolean(slide.hidden)));
+    const allHidden = deck.slides.every((item) => item.hidden);
+    $("slide-present").disabled = allHidden;
+    $("slide-present-start").disabled = allHidden;
+    $("slide-status-index").textContent = `Slide ${deck.active + 1} of ${deck.slides.length}${slide.hidden ? " · Hidden in slideshow" : ""}`;
     renderList();
   }
 
@@ -109,9 +148,7 @@
     $("slide-title").focus();
   }
 
-  function moveSlide(delta) {
-    const oldIndex = deck.active;
-    const nextIndex = oldIndex + delta;
+  function moveSlideTo(oldIndex, nextIndex) {
     const [slide] = deck.slides.splice(oldIndex, 1);
     deck.slides.splice(nextIndex, 0, slide);
     deck.active = nextIndex;
@@ -122,11 +159,16 @@
 
   $("deck-title").addEventListener("input", (event) => { deck.name = event.target.value; save(); });
   $("slide-title").addEventListener("input", (event) => { deck.slides[deck.active].title = event.target.value; save(); renderList(); });
-  $("slide-content").addEventListener("input", (event) => { deck.slides[deck.active].content = event.target.value; save(); });
+  $("slide-content").addEventListener("input", (event) => { deck.slides[deck.active].content = event.target.value; save(); renderList(); });
   $("slide-add").addEventListener("click", () => addSlide(blank()));
   $("slide-duplicate").addEventListener("click", () => addSlide({ ...deck.slides[deck.active] }));
-  $("slide-earlier").addEventListener("click", () => moveSlide(-1));
-  $("slide-later").addEventListener("click", () => moveSlide(1));
+  $("slide-earlier").addEventListener("click", () => moveSlideTo(deck.active, deck.active - 1));
+  $("slide-later").addEventListener("click", () => moveSlideTo(deck.active, deck.active + 1));
+  $("slide-hide").addEventListener("click", () => {
+    deck.slides[deck.active].hidden = !deck.slides[deck.active].hidden;
+    save();
+    render();
+  });
   $("slide-remove").addEventListener("click", () => {
     if (!window.confirm("Delete this slide from the presentation?")) return;
     deck.slides.splice(deck.active, 1);
@@ -178,21 +220,33 @@
     $("present-content").textContent = slide.content;
     applyTheme($("present-title").closest(".slides-paper"), slide.theme);
     $("present-count").textContent = `${presentedSlide + 1} / ${deck.slides.length}`;
-    $("present-prev").disabled = presentedSlide === 0;
-    $("present-next").disabled = presentedSlide >= deck.slides.length - 1;
+    $("present-prev").disabled = visibleSlide(presentedSlide - 1, -1) < 0;
+    $("present-next").disabled = visibleSlide(presentedSlide + 1, 1) < 0;
     const { effect, start } = normalizeAnimation(slide.animation);
     $("present-play").hidden = effect === "none" || reducedMotion.matches;
     if (start === "auto") playAnimation();
   }
-  const presentFrom = (index) => { presentedSlide = index; slideShow.showModal(); renderPresentation(); };
+  function visibleSlide(index, direction) {
+    for (let candidate = index; candidate >= 0 && candidate < deck.slides.length; candidate += direction) {
+      if (!deck.slides[candidate].hidden) return candidate;
+    }
+    return -1;
+  }
+  const presentFrom = (index) => {
+    const next = visibleSlide(index, 1);
+    presentedSlide = next < 0 ? visibleSlide(index, -1) : next;
+    if (presentedSlide < 0) return;
+    slideShow.showModal();
+    renderPresentation();
+  };
   $("present-play").addEventListener("click", playAnimation);
   slideShow.addEventListener("close", stopAnimation);
   reducedMotion.addEventListener("change", () => { if (slideShow.open) renderPresentation(); });
   $("slide-present").addEventListener("click", () => presentFrom(deck.active));
   $("slide-present-start").addEventListener("click", () => presentFrom(0));
   $("present-close").addEventListener("click", () => slideShow.close());
-  $("present-prev").addEventListener("click", () => { presentedSlide--; renderPresentation(); });
-  $("present-next").addEventListener("click", () => { presentedSlide++; renderPresentation(); });
+  $("present-prev").addEventListener("click", () => { presentedSlide = visibleSlide(presentedSlide - 1, -1); renderPresentation(); });
+  $("present-next").addEventListener("click", () => { presentedSlide = visibleSlide(presentedSlide + 1, 1); renderPresentation(); });
   slideShow.addEventListener("keydown", (event) => {
     if (event.key === "ArrowLeft") $("present-prev").click();
     if (event.key === "ArrowRight") $("present-next").click();
@@ -222,7 +276,7 @@
     const button = event.currentTarget;
     button.disabled = true;
     try {
-      const slides = deck.slides.map((slide) => ({ title: slide.title, lines: slide.content.split("\n"), theme: slide.theme }));
+      const slides = deck.slides.map((slide) => ({ title: slide.title, lines: slide.content.split("\n"), theme: slide.theme, hidden: slide.hidden }));
       const blob = await window.AdigunPresentation.createBlob(slides);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
