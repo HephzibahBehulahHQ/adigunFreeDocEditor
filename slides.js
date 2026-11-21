@@ -9,7 +9,7 @@
   const animationForm = animationDialog.querySelector("form");
   const transitionDialog = $("slide-transition-dialog");
   const transitionForm = transitionDialog.querySelector("form");
-  const { normalizeTransition, transitionFrames, normalizeObjects } = window.AdigunPresentation;
+  const { normalizeTransition, transitionFrames, normalizeObjects, imageLimit, imageData } = window.AdigunPresentation;
   const effects = {
     fade: [{ opacity: 0 }, { opacity: 1 }],
     rise: [{ opacity: 0, transform: "translateY(24px)" }, { opacity: 1, transform: "translateY(0)" }],
@@ -208,7 +208,13 @@
     layer.replaceChildren(...objects.map((object, index) => {
       const node = document.createElement(editable ? "button" : "div");
       node.className = `slide-object slide-object-${object.kind}`;
-      node.textContent = object.text;
+      if (object.kind === "image") {
+        const image = document.createElement("img");
+        image.src = object.src;
+        image.alt = object.text;
+        image.draggable = false;
+        node.append(image);
+      } else node.textContent = object.text;
       node.style.setProperty("--object-fill", "#" + object.fill);
       placeObject(node, object);
       if (editable) {
@@ -257,7 +263,8 @@
     if (!object) return;
     for (const key of ["text", "x", "y", "width", "height", "rotation"]) objectForm.elements[key].value = object[key];
     objectForm.elements.fill.value = "#" + object.fill;
-    objectForm.elements.fill.disabled = object.kind === "text";
+    objectForm.elements.fill.disabled = ["text", "image"].includes(object.kind);
+    $("slide-object-text-label").textContent = object.kind === "image" ? "Alternative text" : "Text";
     $("slide-object-front").disabled = selectedObject === objects.length - 1;
     $("slide-object-back").disabled = selectedObject === 0;
   }
@@ -282,6 +289,39 @@
       objectForm.elements.text.focus();
     });
   }
+  $("slide-image-open").addEventListener("click", () => $("slide-image-file").click());
+  $("slide-image-file").addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > imageLimit) { status("Choose a PNG or JPEG under 550 KB."); return; }
+    const slide = deck.slides[deck.active];
+    if (slide.objects?.length >= 25) { status("A slide can contain up to 25 objects."); return; }
+    try {
+      const src = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.addEventListener("load", () => resolve(reader.result), { once: true });
+        reader.addEventListener("error", () => reject(reader.error), { once: true });
+        reader.readAsDataURL(file);
+      });
+      if (!imageData(src)) throw new Error("Choose a valid PNG or JPEG.");
+      const image = new Image();
+      image.src = src;
+      await image.decode();
+      if (slide !== deck.slides[deck.active]) { status("Select the same slide before adding the picture."); return; }
+      const objects = slide.objects ??= [];
+      if (objects.length >= 25) { status("A slide can contain up to 25 objects."); return; }
+      const ratio = image.naturalWidth / image.naturalHeight;
+      const width = Math.max(8, Math.min(38, 60 * ratio * 9 / 16));
+      const height = Math.min(60, width * 16 / (9 * ratio));
+      const [object] = normalizeObjects([{ kind: "image", src, width, height, x: 48, y: 29, text: "" }]);
+      objects.push(object);
+      save();
+      selectObject(objects.length - 1);
+      $("slide-image-open").closest("details").open = false;
+      objectForm.elements.text.focus();
+    } catch (error) { status(error.message || "The image could not be opened."); }
+  });
   objectForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const objects = deck.slides[deck.active].objects;
@@ -487,7 +527,7 @@
       deck = { name: empty ? file.name.replace(/\.pptx$/i, "").slice(0, 100) : deck.name, active: existing.length, slides: [...existing, ...slides] };
       save();
       render();
-      status("Slide text and supported speaker notes imported. Images and original formatting are not included.");
+      status("Slide text, supported pictures and speaker notes imported. Advanced formatting may differ.");
     } catch (error) {
       status(error.message || "This PowerPoint file could not be opened.");
     }

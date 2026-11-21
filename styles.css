@@ -520,6 +520,8 @@ a.nav-item{text-decoration:none}
 .slide-object{position:absolute;display:grid;place-items:center;overflow:hidden;padding:5px;border:1px solid transparent;background:var(--object-fill);color:#182035;white-space:pre-wrap;overflow-wrap:anywhere;text-align:center;font-size:clamp(11px,1.3vw,19px)}
 .slide-object-text{background:transparent;color:var(--slide-text,var(--ink))}
 .slide-object-ellipse{border-radius:50%}
+.slide-object-image{display:block;background:transparent;padding:0}
+.slide-object-image img{display:block;width:100%;height:100%;object-fit:fill;pointer-events:none}
 button.slide-object{pointer-events:auto;touch-action:none;cursor:grab}
 button.slide-object[aria-pressed="true"],button.slide-object:focus-visible{outline:2px solid var(--blue)}
 .slide-object-panel{padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}

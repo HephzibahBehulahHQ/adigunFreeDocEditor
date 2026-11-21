@@ -15,17 +15,32 @@
   const markupCompatibility = "http://schemas.openxmlformats.org/markup-compatibility/2006";
   const slideWidth = 12192000;
   const slideHeight = 6858000;
-  const objectKinds = ["text", "rectangle", "ellipse"];
+  const objectKinds = ["text", "rectangle", "ellipse", "image"];
+  const imagePattern = /^data:image\/(png|jpeg);base64,([a-z0-9+/]+={0,2})$/i;
+  const imageLimit = 550 * 1024;
+  function imageData(source) {
+    if (typeof source !== "string" || source.length > Math.ceil(imageLimit * 4 / 3) + 32) return null;
+    const match = imagePattern.exec(source);
+    if (!match) return null;
+    try {
+      const bytes = Uint8Array.from(atob(match[2]), (character) => character.charCodeAt(0));
+      const png = match[1].toLowerCase() === "png";
+      const valid = png ? [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => byte === bytes[index]) :
+        bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+      return valid && bytes.length <= imageLimit ? { bytes, extension: png ? "png" : "jpg" } : null;
+    } catch { return null; }
+  }
 
   function objectDimension(value, minimum, maximum, fallback) {
     return Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, Math.round(value * 10) / 10)) : fallback;
   }
   function normalizeObjects(value) {
     if (!Array.isArray(value)) return [];
-    return value.filter((object) => objectKinds.includes(object?.kind)).slice(0, 25).map((object) => {
+    return value.filter((object) => objectKinds.includes(object?.kind) &&
+      (object.kind !== "image" || typeof object.src === "string" && imagePattern.test(object.src) && object.src.length <= Math.ceil(imageLimit * 4 / 3) + 32)).slice(0, 25).map((object) => {
       const width = objectDimension(object.width, 8, 100, 28);
       const height = objectDimension(object.height, 8, 100, 18);
-      return {
+      const normalized = {
         kind: object.kind,
         x: objectDimension(object.x, 0, 100 - width, Math.min(12, 100 - width)),
         y: objectDimension(object.y, 0, 100 - height, Math.min(65, 100 - height)),
@@ -35,20 +50,30 @@
         text: typeof object.text === "string" ? object.text.slice(0, 500) : "",
         fill: object.kind !== "text" && /^[a-f0-9]{6}$/i.test(object.fill ?? "") ? object.fill.toUpperCase() : "D9D1FC",
       };
+      if (object.kind === "image") normalized.src = object.src;
+      return normalized;
     });
   }
-  function objectXml(object, index, theme) {
+  function objectTransform(object) {
     const unitX = (value) => Math.round(slideWidth * value / 100);
     const unitY = (value) => Math.round(slideHeight * value / 100);
+    return `<a:xfrm rot="${Math.round(object.rotation * 60000)}"><a:off x="${unitX(object.x)}" y="${unitY(object.y)}"/><a:ext cx="${unitX(object.width)}" cy="${unitY(object.height)}"/></a:xfrm>`;
+  }
+  function objectXml(object, index, theme) {
     const kind = object.kind === "ellipse" ? "ellipse" : "rect";
     const fill = object.kind === "text" ? "<a:noFill/>" : `<a:solidFill><a:srgbClr val="${object.fill}"/></a:solidFill>`;
     const textColor = object.kind === "text" ? (themes[theme] || themes.paper).text : themes.paper.text;
     const text = object.text.split(/\r?\n/).map((line) =>
       `<a:p><a:pPr algn="ctr"/><a:r><a:rPr sz="1400"><a:solidFill><a:srgbClr val="${textColor}"/></a:solidFill></a:rPr><a:t xml:space="preserve">${xmlText(line)}</a:t></a:r></a:p>`).join("");
     return `<p:sp><p:nvSpPr><p:cNvPr id="${index + 4}" name="Adigun ${object.kind} ${index + 1}"/><p:cNvSpPr${object.kind === "text" ? ' txBox="1"' : ""}/><p:nvPr/></p:nvSpPr>
-      <p:spPr><a:xfrm rot="${Math.round(object.rotation * 60000)}"><a:off x="${unitX(object.x)}" y="${unitY(object.y)}"/><a:ext cx="${unitX(object.width)}" cy="${unitY(object.height)}"/></a:xfrm>
+      <p:spPr>${objectTransform(object)}
       <a:prstGeom prst="${kind}"><a:avLst/></a:prstGeom>${fill}<a:ln><a:noFill/></a:ln></p:spPr>
       <p:txBody><a:bodyPr anchor="ctr" wrap="square"/><a:lstStyle/>${text}</p:txBody></p:sp>`;
+  }
+
+  function imageXml(object, index, relationshipId) {
+    const description = xmlText(object.text).replace(/"/g, "&quot;");
+    return `<p:pic><p:nvPicPr><p:cNvPr id="${index + 4}" name="Adigun image ${index + 1}" descr="${description}"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${relationshipId}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${objectTransform(object)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
   }
 
   function normalizeTransition(value) {
@@ -92,12 +117,26 @@
     files["ppt/slideLayouts/slideLayout1.xml"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="' + ans + '" xmlns:r="' + rns + '" xmlns:p="' + pns + '" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>';
     files["ppt/_rels/slideLayouts/slideLayout1.xml.rels"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>';
     files["ppt/theme/theme1.xml"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="' + ans + '" name="Adigun"><a:themeElements><a:clrScheme name="Adigun"><a:dk1><a:srgbClr val="17233A"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="26334D"/></a:dk2><a:lt2><a:srgbClr val="F4F6FA"/></a:lt2><a:accent1><a:srgbClr val="4F6BED"/></a:accent1><a:accent2><a:srgbClr val="697386"/></a:accent2><a:accent3><a:srgbClr val="6B8E23"/></a:accent3><a:accent4><a:srgbClr val="C0504D"/></a:accent4><a:accent5><a:srgbClr val="8064A2"/></a:accent5><a:accent6><a:srgbClr val="4BACC6"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fontScheme name="Adigun"><a:majorFont><a:latin typeface="Aptos Display"/></a:majorFont><a:minorFont><a:latin typeface="Aptos"/></a:minorFont></a:fontScheme><a:fmtScheme name="Adigun"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>';
+    const media = new Set();
     for (let i = 0; i < slides.length; i++) {
-      const objects = normalizeObjects(slides[i].objects).map((object, index) => objectXml(object, index, slides[i].theme)).join("");
+      const pictureLinks = [];
+      const objects = normalizeObjects(slides[i].objects).map((object, index) => {
+        if (object.kind !== "image") return objectXml(object, index, slides[i].theme);
+        const image = imageData(object.src);
+        if (!image) throw new Error("A slide image is damaged or unsupported.");
+        const id = "rIdImage" + (index + 1);
+        const name = `slide${i + 1}-image${index + 1}.${image.extension}`;
+        media.add(image.extension);
+        files["ppt/media/" + name] = image.bytes;
+        pictureLinks.push(`<Relationship Id="${id}" Type="${rns}/image" Target="../media/${name}"/>`);
+        return imageXml(object, index, id);
+      }).join("");
       const markup = slideXml(slides[i]).replace("</p:spTree>", objects + "</p:spTree>")
         .replace("</p:sld>", transitionXml(slides[i].transition) + "</p:sld>");
       files["ppt/slides/slide" + (i + 1) + ".xml"] = slides[i].hidden ? markup.replace("<p:sld ", '<p:sld show="0" ') : markup;
       files["ppt/slides/_rels/slide" + (i + 1) + ".xml.rels"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>';
+      const path = "ppt/slides/_rels/slide" + (i + 1) + ".xml.rels";
+      files[path] = files[path].replace("</Relationships>", pictureLinks.join("") + "</Relationships>");
     }
     const overrides = [
       '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>',
@@ -139,7 +178,9 @@
       }
     }
     files["[Content_Types].xml"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' + overrides.join("") + '</Types>';
-    return Object.fromEntries(Object.entries(files).map(([name, value]) => [name, window.fflate.strToU8(value)]));
+    const mediaTypes = [...media].map((extension) => `<Default Extension="${extension}" ContentType="image/${extension === "jpg" ? "jpeg" : extension}"/>`).join("");
+    files["[Content_Types].xml"] = files["[Content_Types].xml"].replace("<Override", mediaTypes + "<Override");
+    return Object.fromEntries(Object.entries(files).map(([name, value]) => [name, typeof value === "string" ? window.fflate.strToU8(value) : value]));
   }
 
   function createBlob(slides) {
@@ -154,7 +195,8 @@
     let total = 0;
     const parts = window.fflate.unzipSync(bytes, {
       filter({ name, originalSize }) {
-        if (!/^ppt\/(?:presentation\.xml|_rels\/presentation\.xml\.rels|slides\/(?:[\w.-]+\.xml|_rels\/[\w.-]+\.xml\.rels)|notesSlides\/[\w.-]+\.xml)$/.test(name)) return false;
+        if (!/^ppt\/(?:presentation\.xml|_rels\/presentation\.xml\.rels|slides\/(?:[\w.-]+\.xml|_rels\/[\w.-]+\.xml\.rels)|notesSlides\/[\w.-]+\.xml|media\/[\w.-]+\.(?:png|jpe?g))$/i.test(name)) return false;
+        if (name.startsWith("ppt/media/") && originalSize > imageLimit) return false;
         total += originalSize;
         if (total > 12 * 1024 * 1024) throw new Error("PowerPoint text parts are too large.");
         return true;
@@ -171,25 +213,54 @@
     const relationships = new Map([...parse("ppt/_rels/presentation.xml.rels").getElementsByTagNameNS("*", "Relationship")]
       .filter((part) => part.getAttribute("Type")?.endsWith("/slide") && part.getAttribute("TargetMode") !== "External")
       .map((part) => [part.getAttribute("Id"), part.getAttribute("Target")]));
-    const definitions = [...parse("ppt/presentation.xml").getElementsByTagNameNS("*", "sldId")];
+    const presentation = parse("ppt/presentation.xml");
+    const definitions = [...presentation.getElementsByTagNameNS("*", "sldId")];
+    const dimensions = presentation.getElementsByTagNameNS("*", "sldSz")[0];
+    const inputWidth = Math.max(1, Number(dimensions?.getAttribute("cx")) || slideWidth);
+    const inputHeight = Math.max(1, Number(dimensions?.getAttribute("cy")) || slideHeight);
     const paragraphs = (shape) => [...shape.getElementsByTagNameNS("*", "p")].map((paragraph) =>
       [...paragraph.getElementsByTagNameNS("*", "t")].map((run) => run.textContent).join("")).join("\n");
-    function authoredObject(shape, name) {
-      const match = /^Adigun (text|rectangle|ellipse) \d+$/.exec(name ?? "");
-      if (!match) return null;
+    function readObjectTransform(shape) {
       const transform = shape.getElementsByTagNameNS("*", "xfrm")[0];
       const origin = transform?.getElementsByTagNameNS("*", "off")[0];
       const extent = transform?.getElementsByTagNameNS("*", "ext")[0];
       return {
-        kind: match[1],
-        x: Number(origin?.getAttribute("x")) * 100 / slideWidth,
-        y: Number(origin?.getAttribute("y")) * 100 / slideHeight,
-        width: Number(extent?.getAttribute("cx")) * 100 / slideWidth,
-        height: Number(extent?.getAttribute("cy")) * 100 / slideHeight,
+        x: Number(origin?.getAttribute("x")) * 100 / inputWidth,
+        y: Number(origin?.getAttribute("y")) * 100 / inputHeight,
+        width: Number(extent?.getAttribute("cx")) * 100 / inputWidth,
+        height: Number(extent?.getAttribute("cy")) * 100 / inputHeight,
         rotation: Number(transform?.getAttribute("rot")) / 60000,
+      };
+    }
+    function authoredObject(shape, name) {
+      const match = /^Adigun (text|rectangle|ellipse) \d+$/.exec(name ?? "");
+      if (!match) return null;
+      return {
+        ...readObjectTransform(shape),
+        kind: match[1],
         fill: shape.getElementsByTagNameNS("*", "srgbClr")[0]?.getAttribute("val"),
         text: paragraphs(shape),
       };
+    }
+    function pictures(slide, path) {
+      const relationPath = path.replace("slides/", "slides/_rels/") + ".rels";
+      if (!Object.hasOwn(parts, relationPath)) return new Map();
+      const images = new Map([...parse(relationPath).getElementsByTagNameNS("*", "Relationship")].filter((part) =>
+        part.getAttribute("Type")?.endsWith("/image") && part.getAttribute("TargetMode") !== "External").map((part) =>
+        [part.getAttribute("Id"), part.getAttribute("Target")]));
+      return new Map([...slide.getElementsByTagNameNS("*", "pic")].flatMap((picture) => {
+        const id = picture.getElementsByTagNameNS("*", "blip")[0]?.getAttributeNS(officeNs, "embed");
+        const match = /^(?:\.\.\/|\/ppt\/)media\/([\w.-]+\.(png|jpe?g))$/i.exec(images.get(id) ?? "");
+        const bytes = match && parts["ppt/media/" + match[1]];
+        if (!bytes) return [];
+        let binary = "";
+        for (let offset = 0; offset < bytes.length; offset += 4096) binary += String.fromCharCode(...bytes.subarray(offset, offset + 4096));
+        const media = match[2].toLowerCase() === "png" ? "png" : "jpeg";
+        const src = `data:image/${media};base64,${btoa(binary)}`;
+        if (!imageData(src)) return [];
+        return [[picture, { ...readObjectTransform(picture), kind: "image", src,
+          text: picture.getElementsByTagNameNS("*", "cNvPr")[0]?.getAttribute("descr") || "" }]];
+      }));
     }
     function slideNotes(path) {
       const relationshipPath = path.replace("slides/", "slides/_rels/") + ".rels";
@@ -211,7 +282,14 @@
       if (!/^ppt\/slides\/[\w.-]+\.xml$/.test(path)) throw new Error("Unsupported PowerPoint slide location.");
       const slide = parse(path);
       const objects = [];
-      const shapes = [...slide.getElementsByTagNameNS("*", "sp")].flatMap((shape) => {
+      const images = pictures(slide, path);
+      const shapes = [...slide.getElementsByTagName("*")].flatMap((shape) => {
+        if (shape.localName === "pic") {
+          const picture = images.get(shape);
+          if (picture) objects.push(picture);
+          return [];
+        }
+        if (shape.localName !== "sp") return [];
         const placeholder = shape.getElementsByTagNameNS("*", "ph")[0]?.getAttribute("type");
         const name = shape.getElementsByTagNameNS("*", "cNvPr")[0]?.getAttribute("name");
         const object = authoredObject(shape, name);
@@ -245,5 +323,5 @@
     });
   }
 
-  window.AdigunPresentation = { createParts, createBlob, importTextSlides, themes, normalizeTransition, transitionFrames, normalizeObjects };
+  window.AdigunPresentation = { createParts, createBlob, importTextSlides, themes, normalizeTransition, transitionFrames, normalizeObjects, imageLimit, imageData };
 })();
