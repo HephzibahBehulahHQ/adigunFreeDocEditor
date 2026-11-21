@@ -43,6 +43,9 @@
         <button type="button" data-slide-theme="violet">Violet</button>
         <button type="button" data-slide-theme="midnight">Midnight</button>
       </div></details>
+      <details name="slide-commands" class="command-menu"><summary>Transitions</summary><div>
+        <button id="slide-transition" type="button">Transition settings</button>
+      </div></details>
       <details name="slide-commands" class="command-menu"><summary>Animations</summary><div>
         <button id="slide-animate" type="button">Animation settings</button>
       </div></details>
@@ -67,6 +70,21 @@
     </div>
     <footer class="sheet-status-bar"><span id="slide-status-index"></span></footer>
   </main>
+  <dialog id="slide-transition-dialog" class="pdf-tool-dialog" aria-labelledby="slide-transition-title">
+    <h2 id="slide-transition-title">Slide transition</h2>
+    <form>
+      <label>Effect <select name="effect"><option value="none">None</option><option value="fade">Fade</option><option value="push">Push left</option></select></label>
+      <label>Duration (seconds) <input name="duration" type="number" min="0.1" max="5" step="0.1" required></label>
+      <label>Advance after (seconds, 0 for manual) <input name="advance" type="number" min="0" max="120" step="0.1" required></label>
+      <label class="pdf-format-option"><input type="checkbox" name="all"> Apply to all slides</label>
+      <div class="transition-preview"><div>Preview slide</div></div>
+      <div class="slides-actions">
+        <button class="button button-outline" type="button" data-preview>Preview</button>
+        <button class="button button-outline" type="submit">Save transition</button>
+        <button class="button button-outline" type="button" data-close>Cancel</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="slide-animation-dialog" class="pdf-tool-dialog" aria-labelledby="slide-animation-title">
     <h2 id="slide-animation-title">Slide animation</h2>
     <form>

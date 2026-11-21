@@ -487,6 +487,8 @@ a.nav-item{text-decoration:none}
 .slide-notes-panel{margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);white-space:pre-wrap}
 .slide-notes-panel summary{cursor:pointer;font-weight:650}
 .slide-notes-panel textarea{display:block;width:100%;margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:5px;font:inherit}
+.transition-preview{overflow:hidden;margin:10px 0;border:1px solid var(--line);border-radius:7px;background:var(--canvas)}
+.transition-preview div{display:grid;place-items:center;min-height:105px;background:var(--purple-soft);color:var(--navy)}
 #slide-list{display:grid;gap:6px;max-height:55vh;overflow:auto;list-style:none;margin:0 0 10px;padding:0}
 #slide-list button{width:100%;min-height:38px;overflow-wrap:anywhere;text-align:left}
 #slide-list button[aria-pressed="true"]{border-color:var(--purple);background:var(--purple-soft)}
