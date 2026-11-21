@@ -372,6 +372,20 @@ function refreshFormula() {
   $("sheet-fill-right").disabled = !selectedRange || selectedRange.firstColumn === selectedRange.lastColumn;
 }
 
+function selectRange(first, last) {
+  const firstRow = Number(first.slice(1)) - 1;
+  const lastRow = Number(last.slice(1)) - 1;
+  const firstColumn = first.charCodeAt(0) - 65;
+  const lastColumn = last.charCodeAt(0) - 65;
+  selectedRange = first === last ? null : {
+    firstRow: Math.min(firstRow, lastRow), lastRow: Math.max(firstRow, lastRow),
+    firstColumn: Math.min(firstColumn, lastColumn), lastColumn: Math.max(firstColumn, lastColumn),
+    label: `${first}:${last}`,
+  };
+  refreshFormula();
+  refreshSelection();
+}
+
 function acceptsValue(sheet, address, value) {
   return !value || !sheet.validation?.[address] || sheet.validation[address].includes(value);
 }
@@ -459,6 +473,15 @@ grid.addEventListener("focusin", (event) => {
   event.target.value = currentSheet().cells[selectedAddress] ?? "";
   refreshFormula();
   refreshSelection();
+});
+grid.addEventListener("mousedown", (event) => {
+  const address = event.target.dataset.cell;
+  if (!address || event.button !== 0 || !event.shiftKey) return;
+  event.preventDefault();
+  const anchor = grid.querySelector(`[data-cell="${selectedAddress}"]`);
+  if (!anchor || anchor.closest("tr").hidden) return;
+  anchor.focus({ preventScroll: true });
+  selectRange(selectedAddress, address);
 });
 grid.addEventListener("focusout", () => {
   editingAddress = undefined;
@@ -725,16 +748,7 @@ $("sheet-selected").addEventListener("keydown", (event) => {
     return;
   }
   field(first).focus();
-  if (first !== last) {
-    const rows = [first, last].map((address) => Number(address.slice(1)) - 1);
-    const columns = [first, last].map((address) => address.charCodeAt(0) - 65);
-    selectedRange = {
-      firstRow: Math.min(...rows), lastRow: Math.max(...rows),
-      firstColumn: Math.min(...columns), lastColumn: Math.max(...columns), label,
-    };
-    refreshFormula();
-    refreshSelection();
-  }
+  selectRange(first, last);
 });
 $("sheet-formula").addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); event.currentTarget.blur(); }
@@ -804,13 +818,19 @@ grid.addEventListener("keydown", (event) => {
     grid.querySelector(`[data-cell="${selectedAddress}"]`)?.focus();
     return;
   }
-  if (event.key !== "Enter" || !address || event.isComposing) return;
+  if (!["Enter", "ArrowUp", "ArrowDown"].includes(event.key) || !address || event.isComposing ||
+      event.altKey || event.ctrlKey || event.metaKey) return;
   event.preventDefault();
-  const direction = event.shiftKey ? -1 : 1;
-  for (let row = Number(address.slice(1)) + direction; row > 0 && row <= currentSheet().rows; row += direction) {
-    const field = grid.querySelector(`[data-cell="${address[0]}${row}"]`);
+  const extend = event.shiftKey && event.key !== "Enter";
+  const edge = extend ? selectedRange?.label.split(":")[1] ?? address : address;
+  const direction = event.key === "ArrowUp" || (event.key === "Enter" && event.shiftKey) ? -1 : 1;
+  for (let row = Number(edge.slice(1)) + direction; row > 0 && row <= currentSheet().rows; row += direction) {
+    const field = grid.querySelector(`[data-cell="${edge[0]}${row}"]`);
     if (field.closest("tr").hidden) continue;
-    field.focus();
+    if (extend) {
+      selectRange(address, field.dataset.cell);
+      field.scrollIntoView({ block: "nearest", inline: "nearest" });
+    } else field.focus();
     break;
   }
 });
