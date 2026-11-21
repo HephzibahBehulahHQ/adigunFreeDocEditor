@@ -1666,6 +1666,8 @@
 
   function setWorkspaceMode(mode) {
     const isDocument = mode === "document";
+    appShell.classList.toggle("editing-document", isDocument);
+    $("#document-command-actions").hidden = !isDocument;
     const isConversion = mode === "conversion";
     const fileToolModes = ["conversion", "merge", "compress", "unzip", "translate"];
     const isFileTool = fileToolModes.includes(mode);
@@ -1700,7 +1702,7 @@
   }
 
   function setActiveNavigationItem(activeItem) {
-    document.querySelectorAll(".nav-item[data-view]").forEach((item) => {
+    document.querySelectorAll("#workspace-home, .nav-item[data-view]").forEach((item) => {
       const current = item === activeItem;
       item.classList.toggle("active", current);
       if (current) item.setAttribute("aria-current", "page");
@@ -1862,6 +1864,7 @@
     renderOpenDocumentTabs();
     activePdfFile = undefined;
     setWorkspaceMode("landing");
+    setActiveNavigationItem($("#workspace-home"));
     setTitle("Workspace");
     $("#stage-title").textContent = "Your workspace";
     $("#file-kind").textContent = storageAvailability === true
@@ -1874,26 +1877,54 @@
     $("#editor-card").classList.remove("pdf-preview");
     $("#editor-card").classList.add("landing");
     editor.hidden = false;
-    editor.innerHTML = '<section class="landing-page"><span class="landing-kicker">ADIGUNFREEDOCEDITOR</span><h2>Your documents.<br>Your workspace.</h2><p>Create a document or open a supported file to get started.</p><div class="landing-actions"><button class="landing-primary" type="button" id="landing-create">Create blank document</button><button class="landing-secondary" type="button" id="landing-open-word">Open Word document</button><button class="landing-secondary" type="button" id="landing-open-pdf">Open PDF</button></div><section class="landing-templates" aria-labelledby="landing-templates-title"><div class="landing-recents-heading"><div><span class="landing-kicker">START WITH A TEMPLATE</span><h3 id="landing-templates-title">A useful first page</h3></div></div><div class="landing-template-grid"><button class="landing-template" type="button" data-template="meeting"><span class="landing-template-icon" aria-hidden="true">▤</span><strong>Meeting notes</strong><small>Agenda, decisions and action items</small></button><button class="landing-template" type="button" data-template="project"><span class="landing-template-icon" aria-hidden="true">◇</span><strong>Project brief</strong><small>Objective, scope and milestones</small></button><button class="landing-template" type="button" data-template="letter"><span class="landing-template-icon" aria-hidden="true">✉</span><strong>Formal letter</strong><small>Recipient, subject and message</small></button><button class="landing-template" type="button" data-template="status"><span class="landing-template-icon" aria-hidden="true">▥</span><strong>Status report</strong><small>Progress, blockers and next steps</small></button><button class="landing-template" type="button" data-template="research"><span class="landing-template-icon" aria-hidden="true">⌕</span><strong>Research notes</strong><small>Questions, sources and findings</small></button><button class="landing-template" type="button" data-template="resume"><span class="landing-template-icon" aria-hidden="true">◉</span><strong>Resume</strong><small>Experience, education and skills</small></button></div></section><button class="landing-dropzone" type="button" id="landing-open-file" aria-label="Choose or drop a Word, PDF, text, Markdown, or HTML file"><span class="landing-dropzone-icon" aria-hidden="true">↥</span><span class="landing-dropzone-copy"><strong>Choose a file or drop it here</strong><small>DOCX · PDF · TXT · Markdown · HTML</small></span></button><section class="landing-recents" id="landing-recents" aria-labelledby="landing-recents-title"><div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div><button class="landing-all" type="button" id="landing-all">View all</button></div><p class="landing-recents-empty">Loading saved documents…</p></section><div class="landing-details"><div><strong>Work stays here</strong><span>Editable document text is saved in this browser. No account or cloud sync is active.</span></div><div><strong>Supported in this build</strong><span>Import Word structure, edit TXT, Markdown and HTML, or view and download PDF</span></div></div></section>';
+    editor.innerHTML = `<section class="landing-page">
+      <header class="landing-home-header">
+        <h2>Documents</h2>
+        <label for="landing-search" class="sr-only">Search saved documents</label>
+        <input id="landing-search" type="search" placeholder="Search saved documents" autocomplete="off" />
+      </header>
+      <div class="landing-actions">
+        <button class="landing-primary" type="button" id="landing-create">＋ New document</button>
+        <button class="landing-secondary" type="button" id="landing-open-word">Open Word document</button>
+        <button class="landing-secondary" type="button" id="landing-open-pdf">Open PDF</button>
+        <button class="landing-secondary" type="button" id="landing-show-templates">Templates</button>
+      </div>
+      <section class="landing-recents" id="landing-recents" aria-labelledby="landing-recents-title">
+        <div class="landing-recents-heading"><h3 id="landing-recents-title">Recent documents</h3><button class="landing-all" type="button" id="landing-all">View all</button></div>
+        <div id="landing-recent-results" aria-live="polite"><p class="landing-recents-empty">Loading saved documents…</p></div>
+      </section>
+      <section class="landing-templates" aria-labelledby="landing-templates-title"><div class="landing-recents-heading"><div><span class="landing-kicker">START WITH A TEMPLATE</span><h3 id="landing-templates-title">A useful first page</h3></div></div><div class="landing-template-grid"><button class="landing-template" type="button" data-template="meeting"><span class="landing-template-icon" aria-hidden="true">▤</span><strong>Meeting notes</strong><small>Agenda, decisions and action items</small></button><button class="landing-template" type="button" data-template="project"><span class="landing-template-icon" aria-hidden="true">◇</span><strong>Project brief</strong><small>Objective, scope and milestones</small></button><button class="landing-template" type="button" data-template="letter"><span class="landing-template-icon" aria-hidden="true">✉</span><strong>Formal letter</strong><small>Recipient, subject and message</small></button><button class="landing-template" type="button" data-template="status"><span class="landing-template-icon" aria-hidden="true">▥</span><strong>Status report</strong><small>Progress, blockers and next steps</small></button><button class="landing-template" type="button" data-template="research"><span class="landing-template-icon" aria-hidden="true">⌕</span><strong>Research notes</strong><small>Questions, sources and findings</small></button><button class="landing-template" type="button" data-template="resume"><span class="landing-template-icon" aria-hidden="true">◉</span><strong>Resume</strong><small>Experience, education and skills</small></button></div></section>
+      <button class="landing-dropzone" type="button" id="landing-open-file" aria-label="Choose or drop a Word, PDF, text, Markdown, or HTML file"><span class="landing-dropzone-icon" aria-hidden="true">↥</span><span class="landing-dropzone-copy"><strong>Choose a file or drop it here</strong><small>DOCX · PDF · TXT · Markdown · HTML</small></span></button>
+    </section>`;
     loadLandingRecentDocuments();
   }
 
   async function loadLandingRecentDocuments() {
-    const container = $("#landing-recents");
-    if (!container) return;
+    const results = $("#landing-recent-results");
+    const search = $("#landing-search");
+    if (!results || !search) return;
     try {
-      const documents = (await getDocuments()).filter((doc) => !doc.deleted).slice(0, 4);
-      if (!documents.length) {
-        container.innerHTML = '<div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div></div><p class="landing-recents-empty">Your saved documents will appear here. Create a document or open a file to get started.</p>';
-        return;
-      }
-      const rows = documents.map((doc) => {
-        const updatedLabel = `Edited ${formatDocumentTimestamp(doc.updatedAt)}`;
-        return `<li><button class="landing-document" type="button" data-open-id="${escapeHTML(doc.id)}"><span class="landing-document-icon" aria-hidden="true">▤</span><span class="landing-document-copy"><strong>${escapeHTML(doc.title || "Untitled document")}</strong><time>${updatedLabel}</time></span><span class="landing-document-open" aria-hidden="true">Open&nbsp;→</span></button></li>`;
-      }).join("");
-      container.innerHTML = `<div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div><button class="landing-all" type="button" id="landing-all">View all</button></div><ul class="landing-document-list">${rows}</ul>`;
+      const documents = (await getDocuments()).filter((doc) => !doc.deleted);
+      if (!results.isConnected) return;
+      const renderResults = () => {
+        const query = search.value.trim().toLocaleLowerCase();
+        const matches = query
+          ? documents.filter((doc) => (doc.title || "Untitled document").toLocaleLowerCase().includes(query))
+          : documents.slice(0, 8);
+        if (!matches.length) {
+          results.innerHTML = `<p class="landing-recents-empty">${query ? "No documents match your search." : "Create a document or open a supported file to get started."}</p>`;
+          return;
+        }
+        const rows = matches.map((doc) => {
+          const updatedLabel = escapeHTML(formatDocumentTimestamp(doc.updatedAt));
+          return `<li><button class="landing-document" type="button" data-open-id="${escapeHTML(doc.id)}"><span class="landing-document-icon" aria-hidden="true">▤</span><strong class="landing-document-name">${escapeHTML(doc.title || "Untitled document")}</strong><time>${updatedLabel}</time><span class="landing-document-open" aria-hidden="true">→</span></button></li>`;
+        }).join("");
+        results.innerHTML = `<ul class="landing-document-list">${rows}</ul>`;
+      };
+      search.addEventListener("input", renderResults);
+      renderResults();
     } catch {
-      container.innerHTML = '<div class="landing-recents-heading"><div><span class="landing-kicker">ON THIS DEVICE</span><h3 id="landing-recents-title">Recent documents</h3></div></div><p class="landing-recents-empty">Saved documents could not be loaded in this browser.</p>';
+      results.innerHTML = '<p class="landing-recents-empty">Saved documents could not be loaded in this browser.</p>';
     }
   }
 
@@ -3577,48 +3608,75 @@
 
   function renderRibbon() {
     ribbon.replaceChildren();
-    for (const group of toolsets[activeTab]) {
+    ribbon.classList.toggle("home-ribbon", activeTab === "home");
+    const [history, type, colors, spacing, emphasis, lists, indents, alignment] = toolsets.home;
+    const groups = activeTab === "home" ? [
+      { label: "History", rows: [history] },
+      { label: "Text", rows: [type, [...emphasis, ...colors]] },
+      { label: "Paragraph", rows: [[...lists, ...indents, ...spacing], alignment] },
+    ] : toolsets[activeTab].map((group) => ({ rows: [group] }));
+    for (const { label, rows } of groups) {
       const section = document.createElement("div");
       section.className = "tool-group";
-      for (const tool of group) {
-        let control;
-        if (tool.select) {
-          control = document.createElement("select");
-          control.className = "tool-select";
-          control.dataset.tool = tool.select;
-          control.setAttribute("aria-label", tool.label);
-          for (const [value, label] of tool.options) {
-            const option = document.createElement("option"); option.value = value; option.textContent = label; control.append(option);
-          }
-          if (tool.select === "paper") control.value = paperSize;
-          if (tool.select === "margins") control.value = pageMargins;
-          control.addEventListener("change", () => {
-            if (tool.select === "font" && control.value) runCommand("fontName", control.value);
-            if (tool.select === "text-color" && control.value) runCommand("foreColor", control.value);
-            if (tool.select === "highlight-color" && control.value) runCommand("hiliteColor", control.value);
-            if (tool.select === "line-spacing") applyParagraphSpacing("line", control.value);
-            if (tool.select === "paragraph-spacing") applyParagraphSpacing("paragraph", control.value);
-            if (tool.select === "block") runCommand("formatBlock", `<${control.value}>`);
-            if (tool.select === "size") runCommand("fontSize", control.value);
-            if (tool.select === "paper") setPaper(control.value);
-            if (tool.select === "margins") setPageMargins(control.value);
-          });
-        } else {
-          control = document.createElement("button");
-          control.type = "button"; control.className = "tool-button"; control.dataset.action = tool.action; control.textContent = tool.action === "orientation" && pageOrientation === "landscape" ? "▭ Landscape" : tool.icon; control.title = tool.title || tool.label; control.setAttribute("aria-label", tool.label);
-          if (tool.shortcut) control.setAttribute("aria-keyshortcuts", tool.shortcut);
-          if (tool.pressed || ["page-numbers", "track-changes"].includes(tool.action)) control.setAttribute("aria-pressed", tool.action === "page-numbers" ? String(pageNumbersEnabled) : tool.action === "track-changes" ? String(trackChangesEnabled) : "false");
-          if (tool.action === "indent-ruler") {
-            control.setAttribute("aria-pressed", String(showIndentRuler));
-            control.setAttribute("aria-controls", "document-ruler");
-          }
-          control.addEventListener("click", () => runTool(tool.action, control));
-        }
-        section.append(control);
+      if (label) {
+        section.setAttribute("role", "group");
+        section.setAttribute("aria-label", label);
+      }
+      for (const group of rows) {
+        const row = document.createElement("div");
+        row.className = "tool-row";
+        renderRibbonRow(group, row);
+        section.append(row);
+      }
+      if (label) {
+        const caption = document.createElement("span");
+        caption.className = "tool-group-caption";
+        caption.textContent = label;
+        caption.setAttribute("aria-hidden", "true");
+        section.append(caption);
       }
       ribbon.append(section);
     }
     updateRibbonSelection();
+  }
+
+  function renderRibbonRow(group, row) {
+    for (const tool of group) {
+      let control;
+      if (tool.select) {
+        control = document.createElement("select");
+        control.className = "tool-select";
+        control.dataset.tool = tool.select;
+        control.setAttribute("aria-label", tool.label);
+        for (const [value, label] of tool.options) {
+          const option = document.createElement("option"); option.value = value; option.textContent = label; control.append(option);
+        }
+        if (tool.select === "paper") control.value = paperSize;
+        if (tool.select === "margins") control.value = pageMargins;
+        control.addEventListener("change", () => {
+          if (tool.select === "font" && control.value) runCommand("fontName", control.value);
+          if (tool.select === "text-color" && control.value) runCommand("foreColor", control.value);
+          if (tool.select === "highlight-color" && control.value) runCommand("hiliteColor", control.value);
+          if (tool.select === "line-spacing") applyParagraphSpacing("line", control.value);
+          if (tool.select === "paragraph-spacing") applyParagraphSpacing("paragraph", control.value);
+          if (tool.select === "block") runCommand("formatBlock", `<${control.value}>`);
+          if (tool.select === "size") runCommand("fontSize", control.value);
+          if (tool.select === "paper") setPaper(control.value);
+          if (tool.select === "margins") setPageMargins(control.value);
+        });
+      } else {
+        control = document.createElement("button");
+        control.type = "button"; control.className = "tool-button"; control.dataset.action = tool.action; control.textContent = tool.action === "orientation" && pageOrientation === "landscape" ? "▭ Landscape" : tool.icon; control.title = tool.title || tool.label; control.setAttribute("aria-label", tool.label);
+        if (tool.shortcut) control.setAttribute("aria-keyshortcuts", tool.shortcut);
+        if (tool.pressed || ["page-numbers", "track-changes"].includes(tool.action)) control.setAttribute("aria-pressed", tool.action === "page-numbers" ? String(pageNumbersEnabled) : tool.action === "track-changes" ? String(trackChangesEnabled) : "false");
+        if (tool.action === "indent-ruler") {
+          control.setAttribute("aria-pressed", String(showIndentRuler));
+          control.setAttribute("aria-controls", "document-ruler");
+        }
+        control.addEventListener("click", () => runTool(tool.action, control));
+      }
+      row.append(control);
+    }
   }
 
   function imageAtSelection(selection = window.getSelection()) {
@@ -5178,6 +5236,7 @@
   }
 
   $("#new-document").addEventListener("click", () => { setMobileMenu(false); createDocument(); });
+  $("#workspace-home").addEventListener("click", () => { setMobileMenu(false); showLanding(); });
   $("#new-document-tab").addEventListener("click", () => createDocument());
   documentTabList.addEventListener("click", (event) => {
     const close = event.target.closest("[data-close-document-tab]");
@@ -5387,6 +5446,7 @@
     const openButton = event.target.closest("[data-open-id]"); if (openButton) openSaved(openButton.dataset.openId);
     if (event.target.closest("#empty-create")) createDocument();
     if (event.target.closest("#landing-create")) createDocument();
+    if (event.target.closest("#landing-show-templates")) $("#template-dialog").showModal();
     const templateButton = event.target.closest("[data-template]");
     if (templateButton && documentTemplates[templateButton.dataset.template]) createDocument(documentTemplates[templateButton.dataset.template]);
     if (event.target.closest("#landing-open-word")) openFilePicker(".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document");
