@@ -86,6 +86,7 @@ jobs:
           node tests/sheet-model.test.mjs
           node tests/presentation-package.test.mjs
           node tests/pdf-pages.test.mjs
+          node tests/ai-relay.test.mjs
 
 
 

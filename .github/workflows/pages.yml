@@ -81,10 +81,11 @@ jobs:
           node tests/sheet-model.test.mjs
           node tests/presentation-package.test.mjs
           node tests/pdf-pages.test.mjs
+          node tests/ai-relay.test.mjs
       - name: Package application
         run: |
           mkdir -p _site/assets/vendor
-          cp index.html styles.css app.js document-model.js editor-runtime.js sheets.html sheets.js sheet-model.js sheet-xlsx.js slides.html slides.js presentation-package.js pdf.html pdf-workspace.js pdf-pages.js CNAME _site/
+          cp index.html styles.css app.js document-model.js editor-runtime.js sheets.html sheets.js sheet-model.js sheet-xlsx.js slides.html slides.js presentation-package.js pdf.html pdf-workspace.js pdf-pages.js ai.html ai-draft.js ai-draft-model.js CNAME _site/
           cp assets/hb-official.jpg _site/assets/
           python scripts/assemble_pdfjs.py
           npm run build:pdf
@@ -114,6 +115,13 @@ jobs:
           pdf.write_text(html)
           pdf_module = Path("_site/pdf-workspace.js")
           pdf_module.write_text(pdf_module.read_text().replace('"./pdf-pages.js"', f'"./pdf-pages.js?v={version}"'))
+          ai = Path("_site/ai.html")
+          html = ai.read_text()
+          for asset in ("styles.css", "ai-draft.js", "presentation-package.js", "assets/vendor/fflate.min.js"):
+              html = html.replace(f'./{asset}"', f'./{asset}?v={version}"')
+          ai.write_text(html)
+          ai_module = Path("_site/ai-draft.js")
+          ai_module.write_text(ai_module.read_text().replace('"./ai-draft-model.js"', f'"./ai-draft-model.js?v={version}"'))
           sheets = Path("_site/sheets.html")
           html = sheets.read_text()
           for asset in ("styles.css", "sheets.js", "assets/vendor/fflate.min.js"):

@@ -32,6 +32,8 @@ Open `http://localhost:4173`. The DOCX converter is vendored locally; the app do
 
 ## Current support
 
+- **AI drafts** previews document and slide drafts and downloads text or editable PowerPoint files after review. It requires a private relay and an explicitly approved prompt.
+
 - Open **PDF** from the sidebar to preview local PDFs and assemble a new PDF from selected pages. Page ranges, file order, and per-source rotation are supported. Interactive forms and signed PDFs are excluded from page export.
 
 - Open **Slides** from the sidebar to edit and present a browser-local, text-based deck. Add, duplicate, reorder, and delete slides, or import slide titles and text from PowerPoint. Download an editable PowerPoint file. Imported images, original styling, and transitions are outside this increment.
@@ -52,6 +54,18 @@ Open `http://localhost:4173`. The DOCX converter is vendored locally; the app do
 - Build a local extractive overview from sentences in the open document. It does not call or imitate an AI model.
 
 PDF editing, conversion pipelines, cloud accounts, sharing and hosted AI are not implemented in this slice and are not presented as available features.
+
+## Configure the private AI relay
+
+Set the following environment variables before running `npm run start:ai` on your computer. The relay binds to loopback and serves `http://127.0.0.1:8787/draft` by default.
+
+- `ADIGUN_AI_UPSTREAM` is the full chat-completions endpoint for your configured model provider.
+- `ADIGUN_AI_MODEL` is the provider’s model identifier.
+- `ADIGUN_AI_PROVIDER_KEY` is the provider credential if required. Keep it in the relay environment.
+- `ADIGUN_AI_ACCESS_TOKEN` is a separate relay token of at least 20 characters. Enter this token in the browser.
+- `ADIGUN_AI_ORIGIN` is the allowed app origin. It defaults to the production site. Set it to your local server origin for local testing.
+
+GitHub Pages serves the browser interface. Start and configure the private relay separately. Open documents and slides are sent only if their text is included in a prompt you approve and submit.
 
 ## Product references
 

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <title>Adigun AI drafts</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="sheets-header">
+    <a href="./index.html">← Documents</a>
+    <h1>Adigun AI drafts</h1>
+  </header>
+  <main class="slides-workspace ai-layout">
+    <form id="ai-draft-form">
+      <label>Draft type<select id="ai-kind"><option value="document">Document</option><option value="slides">Slides</option></select></label>
+      <label>Private relay URL<input id="ai-relay" type="url" value="http://127.0.0.1:8787/draft" required></label>
+      <label>Relay access token<input id="ai-token" type="password" required autocomplete="off" minlength="20" maxlength="200"></label>
+      <label>What should the draft cover?<textarea id="ai-prompt" required maxlength="2000" rows="7"></textarea></label>
+      <label class="ai-consent"><input id="ai-consent" type="checkbox" required>Send this prompt to the configured relay and its model provider.</label>
+      <button id="ai-generate" class="button button-outline" type="submit">Generate draft</button>
+      <p id="ai-status" role="status">Requires a configured private relay.</p>
+    </form>
+    <section class="ai-preview" aria-labelledby="ai-preview-title">
+      <h2 id="ai-preview-title">Draft preview</h2>
+      <div id="ai-result"><p>Generated text will appear here for review.</p></div>
+      <button id="ai-download" class="button button-outline" type="button" hidden>Download draft</button>
+    </section>
+  </main>
+  <script src="./assets/vendor/fflate.min.js" defer></script>
+  <script src="./presentation-package.js" defer></script>
+  <script type="module" src="./ai-draft.js"></script>
+</body>
+</html>
