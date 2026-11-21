@@ -13,6 +13,43 @@
   };
   const powerpoint2010 = "http://schemas.microsoft.com/office/powerpoint/2010/main";
   const markupCompatibility = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+  const slideWidth = 12192000;
+  const slideHeight = 6858000;
+  const objectKinds = ["text", "rectangle", "ellipse"];
+
+  function objectDimension(value, minimum, maximum, fallback) {
+    return Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, Math.round(value * 10) / 10)) : fallback;
+  }
+  function normalizeObjects(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter((object) => objectKinds.includes(object?.kind)).slice(0, 25).map((object) => {
+      const width = objectDimension(object.width, 8, 100, 28);
+      const height = objectDimension(object.height, 8, 100, 18);
+      return {
+        kind: object.kind,
+        x: objectDimension(object.x, 0, 100 - width, Math.min(12, 100 - width)),
+        y: objectDimension(object.y, 0, 100 - height, Math.min(65, 100 - height)),
+        width,
+        height,
+        rotation: objectDimension(object.rotation, -180, 180, 0),
+        text: typeof object.text === "string" ? object.text.slice(0, 500) : "",
+        fill: object.kind !== "text" && /^[a-f0-9]{6}$/i.test(object.fill ?? "") ? object.fill.toUpperCase() : "D9D1FC",
+      };
+    });
+  }
+  function objectXml(object, index, theme) {
+    const unitX = (value) => Math.round(slideWidth * value / 100);
+    const unitY = (value) => Math.round(slideHeight * value / 100);
+    const kind = object.kind === "ellipse" ? "ellipse" : "rect";
+    const fill = object.kind === "text" ? "<a:noFill/>" : `<a:solidFill><a:srgbClr val="${object.fill}"/></a:solidFill>`;
+    const textColor = object.kind === "text" ? (themes[theme] || themes.paper).text : themes.paper.text;
+    const text = object.text.split(/\r?\n/).map((line) =>
+      `<a:p><a:pPr algn="ctr"/><a:r><a:rPr sz="1400"><a:solidFill><a:srgbClr val="${textColor}"/></a:solidFill></a:rPr><a:t xml:space="preserve">${xmlText(line)}</a:t></a:r></a:p>`).join("");
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${index + 4}" name="Adigun ${object.kind} ${index + 1}"/><p:cNvSpPr${object.kind === "text" ? ' txBox="1"' : ""}/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:xfrm rot="${Math.round(object.rotation * 60000)}"><a:off x="${unitX(object.x)}" y="${unitY(object.y)}"/><a:ext cx="${unitX(object.width)}" cy="${unitY(object.height)}"/></a:xfrm>
+      <a:prstGeom prst="${kind}"><a:avLst/></a:prstGeom>${fill}<a:ln><a:noFill/></a:ln></p:spPr>
+      <p:txBody><a:bodyPr anchor="ctr" wrap="square"/><a:lstStyle/>${text}</p:txBody></p:sp>`;
+  }
 
   function normalizeTransition(value) {
     return {
@@ -56,7 +93,9 @@
     files["ppt/_rels/slideLayouts/slideLayout1.xml.rels"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>';
     files["ppt/theme/theme1.xml"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="' + ans + '" name="Adigun"><a:themeElements><a:clrScheme name="Adigun"><a:dk1><a:srgbClr val="17233A"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="26334D"/></a:dk2><a:lt2><a:srgbClr val="F4F6FA"/></a:lt2><a:accent1><a:srgbClr val="4F6BED"/></a:accent1><a:accent2><a:srgbClr val="697386"/></a:accent2><a:accent3><a:srgbClr val="6B8E23"/></a:accent3><a:accent4><a:srgbClr val="C0504D"/></a:accent4><a:accent5><a:srgbClr val="8064A2"/></a:accent5><a:accent6><a:srgbClr val="4BACC6"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fontScheme name="Adigun"><a:majorFont><a:latin typeface="Aptos Display"/></a:majorFont><a:minorFont><a:latin typeface="Aptos"/></a:minorFont></a:fontScheme><a:fmtScheme name="Adigun"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>';
     for (let i = 0; i < slides.length; i++) {
-      const markup = slideXml(slides[i]).replace("</p:sld>", transitionXml(slides[i].transition) + "</p:sld>");
+      const objects = normalizeObjects(slides[i].objects).map((object, index) => objectXml(object, index, slides[i].theme)).join("");
+      const markup = slideXml(slides[i]).replace("</p:spTree>", objects + "</p:spTree>")
+        .replace("</p:sld>", transitionXml(slides[i].transition) + "</p:sld>");
       files["ppt/slides/slide" + (i + 1) + ".xml"] = slides[i].hidden ? markup.replace("<p:sld ", '<p:sld show="0" ') : markup;
       files["ppt/slides/_rels/slide" + (i + 1) + ".xml.rels"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>';
     }
@@ -135,6 +174,23 @@
     const definitions = [...parse("ppt/presentation.xml").getElementsByTagNameNS("*", "sldId")];
     const paragraphs = (shape) => [...shape.getElementsByTagNameNS("*", "p")].map((paragraph) =>
       [...paragraph.getElementsByTagNameNS("*", "t")].map((run) => run.textContent).join("")).join("\n");
+    function authoredObject(shape, name) {
+      const match = /^Adigun (text|rectangle|ellipse) \d+$/.exec(name ?? "");
+      if (!match) return null;
+      const transform = shape.getElementsByTagNameNS("*", "xfrm")[0];
+      const origin = transform?.getElementsByTagNameNS("*", "off")[0];
+      const extent = transform?.getElementsByTagNameNS("*", "ext")[0];
+      return {
+        kind: match[1],
+        x: Number(origin?.getAttribute("x")) * 100 / slideWidth,
+        y: Number(origin?.getAttribute("y")) * 100 / slideHeight,
+        width: Number(extent?.getAttribute("cx")) * 100 / slideWidth,
+        height: Number(extent?.getAttribute("cy")) * 100 / slideHeight,
+        rotation: Number(transform?.getAttribute("rot")) / 60000,
+        fill: shape.getElementsByTagNameNS("*", "srgbClr")[0]?.getAttribute("val"),
+        text: paragraphs(shape),
+      };
+    }
     function slideNotes(path) {
       const relationshipPath = path.replace("slides/", "slides/_rels/") + ".rels";
       if (!Object.hasOwn(parts, relationshipPath)) return "";
@@ -154,16 +210,23 @@
       const path = target.startsWith("/") ? target.slice(1) : "ppt/" + target;
       if (!/^ppt\/slides\/[\w.-]+\.xml$/.test(path)) throw new Error("Unsupported PowerPoint slide location.");
       const slide = parse(path);
-      const shapes = [...slide.getElementsByTagNameNS("*", "sp")].map((shape) => {
+      const objects = [];
+      const shapes = [...slide.getElementsByTagNameNS("*", "sp")].flatMap((shape) => {
         const placeholder = shape.getElementsByTagNameNS("*", "ph")[0]?.getAttribute("type");
         const name = shape.getElementsByTagNameNS("*", "cNvPr")[0]?.getAttribute("name");
-        return { text: paragraphs(shape), isTitle: ["title", "ctrTitle"].includes(placeholder) || name === "Title" };
+        const object = authoredObject(shape, name);
+        if (object) {
+          objects.push(object);
+          return [];
+        }
+        return [{ text: paragraphs(shape), isTitle: ["title", "ctrTitle"].includes(placeholder) || name === "Title" }];
       });
       const titleIndex = shapes.findIndex((shape) => shape.isTitle);
       const title = titleIndex < 0 ? "" : shapes[titleIndex].text;
       const content = shapes.filter((shape, index) => index !== titleIndex && shape.text).map((shape) => shape.text).join("\n");
       if (title.length > 120 || content.length > 1500) throw new Error("A slide exceeds the title or body text limit.");
       const result = { title, content };
+      if (objects.length) result.objects = normalizeObjects(objects);
       const notes = slideNotes(path);
       if (notes.length > 4000) throw new Error("A slide exceeds the 4,000-character notes limit.");
       if (notes) result.notes = notes;
@@ -182,5 +245,5 @@
     });
   }
 
-  window.AdigunPresentation = { createParts, createBlob, importTextSlides, themes, normalizeTransition, transitionFrames };
+  window.AdigunPresentation = { createParts, createBlob, importTextSlides, themes, normalizeTransition, transitionFrames, normalizeObjects };
 })();

@@ -8,7 +8,7 @@
   const animationForm = animationDialog.querySelector("form");
   const transitionDialog = $("slide-transition-dialog");
   const transitionForm = transitionDialog.querySelector("form");
-  const { normalizeTransition, transitionFrames } = window.AdigunPresentation;
+  const { normalizeTransition, transitionFrames, normalizeObjects } = window.AdigunPresentation;
   const effects = {
     fade: [{ opacity: 0 }, { opacity: 1 }],
     rise: [{ opacity: 0, transform: "translateY(24px)" }, { opacity: 1, transform: "translateY(0)" }],
@@ -23,6 +23,7 @@
   let deck = { name: "Untitled presentation", active: 0, slides: [blank()] };
   let presentedSlide = 0;
   let draggedSlide = null;
+  let selectedObject = null;
 
   function normalizeAnimation(animation) {
     const { effect, target, start, duration, delay } = animation || {};
@@ -47,6 +48,7 @@
         hidden: slide?.hidden === true,
         notes: typeof slide?.notes === "string" ? slide.notes.slice(0, 4000) : "",
         transition: normalizeTransition(slide?.transition),
+        objects: normalizeObjects(slide?.objects),
       }));
       const active = Number.isInteger(stored.active) ? Math.max(0, Math.min(stored.active, slides.length - 1)) : 0;
       deck = { name: typeof stored.name === "string" ? stored.name.slice(0, 100) : deck.name, active, slides };
@@ -111,6 +113,7 @@
   }
 
   function render() {
+    selectedObject = null;
     const slide = deck.slides[deck.active];
     $("deck-title").value = deck.name;
     $("slide-title").value = slide.title;
@@ -132,6 +135,7 @@
     $("slide-present-start").disabled = allHidden;
     $("slide-status-index").textContent = `Slide ${deck.active + 1} of ${deck.slides.length}${slide.hidden ? " · Hidden in slideshow" : ""}`;
     renderList();
+    renderObjects();
   }
 
   function applyTheme(paper, theme) {
@@ -170,7 +174,7 @@
   $("slide-content").addEventListener("input", (event) => { deck.slides[deck.active].content = event.target.value; save(); renderList(); });
   $("slide-notes").addEventListener("input", (event) => { deck.slides[deck.active].notes = event.target.value; save(); });
   $("slide-add").addEventListener("click", () => addSlide(blank()));
-  $("slide-duplicate").addEventListener("click", () => addSlide({ ...deck.slides[deck.active] }));
+  $("slide-duplicate").addEventListener("click", () => addSlide(structuredClone(deck.slides[deck.active])));
   $("slide-earlier").addEventListener("click", () => moveSlideTo(deck.active, deck.active - 1));
   $("slide-later").addEventListener("click", () => moveSlideTo(deck.active, deck.active + 1));
   $("slide-hide").addEventListener("click", () => {
@@ -185,6 +189,126 @@
     save();
     render();
     $("slide-title").focus();
+  });
+
+  const objectPanel = $("slide-object-panel");
+  const objectForm = $("slide-object-form");
+  const objectLayer = $("slide-object-layer");
+
+  function placeObject(node, object) {
+    for (const [key, value] of Object.entries({ left: object.x, top: object.y, width: object.width, height: object.height })) {
+      node.style[key] = value + "%";
+    }
+    node.style.transform = `rotate(${object.rotation}deg)`;
+  }
+
+  function drawObjects(layer, objects = [], editable = false) {
+    layer.replaceChildren(...objects.map((object, index) => {
+      const node = document.createElement(editable ? "button" : "div");
+      node.className = `slide-object slide-object-${object.kind}`;
+      node.textContent = object.text;
+      node.style.setProperty("--object-fill", "#" + object.fill);
+      placeObject(node, object);
+      if (editable) {
+        node.type = "button";
+        node.setAttribute("aria-label", `${object.kind === "text" ? "Text box" : object.kind} ${index + 1}${object.text ? ": " + object.text : ""}`);
+        node.setAttribute("aria-pressed", String(index === selectedObject));
+        node.addEventListener("click", () => selectObject(index, true));
+        node.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          const bounds = layer.getBoundingClientRect();
+          const { clientX, clientY } = event;
+          let move = object;
+          node.setPointerCapture(event.pointerId);
+          const pointerMove = (position) => {
+            [move] = normalizeObjects([{
+              ...object,
+              x: object.x + (position.clientX - clientX) * 100 / bounds.width,
+              y: object.y + (position.clientY - clientY) * 100 / bounds.height,
+            }]);
+            placeObject(node, move);
+          };
+          const finish = (position) => {
+            node.removeEventListener("pointermove", pointerMove);
+            node.removeEventListener("pointerup", finish);
+            node.removeEventListener("pointercancel", finish);
+            if (position.type === "pointerup" && move !== object) {
+              objects[index] = move;
+              save();
+              selectObject(index, true);
+            } else placeObject(node, object);
+          };
+          node.addEventListener("pointermove", pointerMove);
+          node.addEventListener("pointerup", finish);
+          node.addEventListener("pointercancel", finish);
+        });
+      }
+      return node;
+    }));
+  }
+
+  function renderObjects() {
+    const objects = deck.slides[deck.active].objects ?? [];
+    const object = objects[selectedObject];
+    objectPanel.hidden = !object;
+    drawObjects(objectLayer, objects, true);
+    if (!object) return;
+    for (const key of ["text", "x", "y", "width", "height", "rotation"]) objectForm.elements[key].value = object[key];
+    objectForm.elements.fill.value = "#" + object.fill;
+    objectForm.elements.fill.disabled = object.kind === "text";
+    $("slide-object-front").disabled = selectedObject === objects.length - 1;
+    $("slide-object-back").disabled = selectedObject === 0;
+  }
+
+  function selectObject(index, focus = false) {
+    selectedObject = index;
+    renderObjects();
+    if (focus) objectLayer.children[index]?.focus();
+  }
+
+  for (const button of document.querySelectorAll("[data-slide-object]")) {
+    button.addEventListener("click", () => {
+      const slide = deck.slides[deck.active];
+      const objects = slide.objects ??= [];
+      if (objects.length >= 25) { status("A slide can contain up to 25 objects."); return; }
+      const kind = button.dataset.slideObject;
+      const [object] = normalizeObjects([{ kind, text: kind === "text" ? "Text box" : "" }]);
+      objects.push(object);
+      save();
+      selectObject(objects.length - 1);
+      button.closest("details").open = false;
+      objectForm.elements.text.focus();
+    });
+  }
+  objectForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const objects = deck.slides[deck.active].objects;
+    const changes = Object.fromEntries(["x", "y", "width", "height", "rotation"].map((key) => [key, objectForm.elements[key].valueAsNumber]));
+    const { fill, text } = objectForm.elements;
+    [objects[selectedObject]] = normalizeObjects([{ ...objects[selectedObject], ...changes, fill: fill.value.slice(1), text: text.value }]);
+    save();
+    renderObjects();
+  });
+  function rearrangeObject(front) {
+    const objects = deck.slides[deck.active].objects;
+    const [object] = objects.splice(selectedObject, 1);
+    if (front) objects.push(object);
+    else objects.unshift(object);
+    save();
+    selectObject(front ? objects.length - 1 : 0, true);
+  }
+  $("slide-object-front").addEventListener("click", () => rearrangeObject(true));
+  $("slide-object-back").addEventListener("click", () => rearrangeObject(false));
+  $("slide-object-delete").addEventListener("click", () => {
+    deck.slides[deck.active].objects.splice(selectedObject, 1);
+    save();
+    selectObject(null);
+    document.querySelector("[data-slide-object]").closest("details").querySelector("summary").focus();
+  });
+  $("slide-object-close").addEventListener("click", () => {
+    const index = selectedObject;
+    selectObject(null);
+    objectLayer.children[index]?.focus();
   });
 
   $("slide-animate").addEventListener("click", () => {
@@ -265,6 +389,7 @@
     const slide = deck.slides[presentedSlide];
     $("present-title").textContent = slide.title;
     $("present-content").textContent = slide.content;
+    drawObjects($("present-object-layer"), slide.objects);
     $("present-notes").textContent = slide.notes || "";
     $("present-notes-toggle").hidden = !slide.notes;
     setPresenterNotes(false);
@@ -325,7 +450,7 @@
     if (file.size > 8 * 1024 * 1024) { status("Choose a PPTX file under 8 MB."); return; }
     try {
       const slides = window.AdigunPresentation.importTextSlides(new Uint8Array(await file.arrayBuffer()));
-      const empty = deck.slides.length === 1 && !deck.slides[0].title && !deck.slides[0].content && !deck.slides[0].notes;
+      const empty = deck.slides.length === 1 && !deck.slides[0].title && !deck.slides[0].content && !deck.slides[0].notes && !deck.slides[0].objects?.length;
       const existing = empty ? [] : deck.slides;
       if (existing.length + slides.length > maxSlides) { status("This import would exceed the 40-slide limit."); return; }
       deck = { name: empty ? file.name.replace(/\.pptx$/i, "").slice(0, 100) : deck.name, active: existing.length, slides: [...existing, ...slides] };
@@ -341,7 +466,7 @@
     const button = event.currentTarget;
     button.disabled = true;
     try {
-      const slides = deck.slides.map((slide) => ({ title: slide.title, lines: slide.content.split("\n"), theme: slide.theme, hidden: slide.hidden, notes: slide.notes, transition: slide.transition }));
+      const slides = deck.slides.map((slide) => ({ title: slide.title, lines: slide.content.split("\n"), theme: slide.theme, hidden: slide.hidden, notes: slide.notes, transition: slide.transition, objects: slide.objects }));
       const blob = await window.AdigunPresentation.createBlob(slides);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
