@@ -105,6 +105,21 @@ export function cellAddress(row, column) {
   return String.fromCharCode(65 + column) + (row + 1);
 }
 
+export function shiftCellFormula(value, rowDelta, columnDelta) {
+  if (!value.startsWith("=")) return value;
+  return value.replace(/(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|[A-Za-z_][\w.]*|"(?:[^"]|"")*"/g, (token) => {
+    const separator = token.lastIndexOf("!") + 1;
+    const match = /^(\$?)([A-Za-z])(\$?)([1-9]\d?|100)$/.exec(token.slice(separator));
+    if (!match) return token;
+    const [, absoluteColumn, letter, absoluteRow, digits] = match;
+    const column = letter.toUpperCase().charCodeAt(0) - 65 + (absoluteColumn ? 0 : columnDelta);
+    const row = Number(digits) - 1 + (absoluteRow ? 0 : rowDelta);
+    if (column < 0 || column >= maxColumns || row < 0 || row >= maxRows) return "#REF!";
+    const address = cellAddress(row, column);
+    return token.slice(0, separator) + absoluteColumn + address[0] + absoluteRow + address.slice(1);
+  });
+}
+
 export function buildPivot(cells, { range, group, measure, aggregate }, valueAt = calculateSheet(cells)) {
   const match = /^([A-Z])([1-9]\d?|100):([A-Z])([1-9]\d?|100)$/.exec(range.toUpperCase().trim());
   if (!match) throw new Error("Enter a source range such as A1:D20, including the header row.");
@@ -189,7 +204,8 @@ export function calculateWorkbook(sheets, active) {
 }
 
 function evaluateFormula(expression, valueAt, numeric) {
-  const tokens = expression.match(/(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|\d+(?:\.\d*)?|\.\d+|[A-Za-z]+|[()+*/,:-]|[^\s]/g) ?? [];
+  const tokens = expression.match(/#REF!|(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|\d+(?:\.\d*)?|\.\d+|[A-Za-z]+|[()+*/,:-]|[^\s]/g) ?? [];
+  if (tokens.includes("#REF!")) throw new Error("#REF!");
   if (tokens.length > 200) throw new Error("Formula is too long.");
   let index = 0;
   const take = (token) => tokens[index] === token && Boolean(++index);
