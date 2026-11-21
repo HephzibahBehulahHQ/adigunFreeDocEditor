@@ -58,6 +58,7 @@
       <details name="sheet-commands" class="command-menu"><summary>Data</summary><div>
         <button type="button" id="sheet-validation">Dropdown validation</button>
         <button type="button" id="sheet-filter">Filter rows</button>
+        <button type="button" id="sheet-sort">Sort records</button>
         <button type="button" id="sheet-filter-clear" disabled>Clear row filter</button>
         <button type="button" id="sheet-find">Find in this sheet</button>
         <button type="button" id="sheet-pivot-refresh" disabled>Refresh PivotTable</button>
@@ -97,6 +98,19 @@
       <span id="sheet-selection-statistics"></span>
     </footer>
   </main>
+  <dialog id="sheet-sort-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-sort-title">
+    <h2 id="sheet-sort-title">Sort records</h2>
+    <form>
+      <label>Full range with headers <input name="range" placeholder="A1:D20" maxlength="9" required></label>
+      <label>Sort by column <input name="column" placeholder="B" maxlength="1" required></label>
+      <label>Order <select name="direction"><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
+      <p role="status"></p>
+      <div class="sheets-actions">
+        <button class="button button-outline" type="submit">Sort data rows</button>
+        <button class="button button-outline" type="button" data-close>Cancel</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="sheet-filter-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-filter-title">
     <h2 id="sheet-filter-title">Filter rows</h2>
     <form>

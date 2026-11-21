@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
-import { buildPivot, calculateSheet, calculateWorkbook, cellAddress, displayCell, parseChartRange, parseCsv, shiftCellFormula, toCsv } from "../sheet-model.js";
+import { buildPivot, calculateSheet, calculateWorkbook, cellAddress, displayCell, parseChartRange, parseCsv, shiftCellFormula, sortSheetRange, toCsv } from "../sheet-model.js";
 import { exportWorkbook, importWorkbook } from "../sheet-xlsx.js";
 
 assert.equal(cellAddress(99, 25), "Z100");
 assert.equal(shiftCellFormula("=SUM(A1:B2)+$A1+A$1+'Q1 data'!$B$2", 2, 1), "=SUM(B3:C4)+$A3+B$1+'Q1 data'!$B$2");
 assert.equal(shiftCellFormula("=Z1", 0, 1), "=#REF!");
 assert.equal(calculateSheet({ A1: "=SUM(#REF!:B2)" })("A1"), "#REF!");
+const unsorted = { rows: 6, columns: 3, cells: { A1: "Rank", B1: "Name", A2: "10", B2: "North", C2: "=A2*2", A3: "2", B3: "West", C3: "=A3*2", B4: "Blank rank" } };
+const sorted = sortSheetRange(unsorted, { range: "A1:C4", column: "A", direction: "asc" }, calculateSheet(unsorted.cells));
+assert.deepEqual(sorted.cells, { A1: "Rank", B1: "Name", A2: "2", B2: "West", C2: "=A2*2", A3: "10", B3: "North", C3: "=A3*2", B4: "Blank rank" });
 const pivotSource = { A1: "Region", B1: "Sales", A2: "North", B2: "4", A3: "South", B3: "3", A4: "North", B4: "=B2+2" };
 const pivotConfig = { range: "A1:B4", group: "A", measure: "B", aggregate: "sum" };
 assert.deepEqual(buildPivot(pivotSource, pivotConfig).cells, { A1: "Region", B1: "SUM of Sales", A2: "North", B2: "10", A3: "South", B3: "3" });

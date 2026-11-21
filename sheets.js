@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, chartValues, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseChartRange, parseCsv, parseSheetFilter, shiftCellFormula, toCsv, validationOptions } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, chartValues, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseChartRange, parseCsv, parseSheetFilter, shiftCellFormula, sortSheetRange, toCsv, validationOptions } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
@@ -356,6 +356,30 @@ $("sheet-validation").addEventListener("click", () => {
 const filterDialog = $("sheet-filter-dialog");
 const filterForm = filterDialog.querySelector("form");
 const filterStatus = filterForm.querySelector("[role=status]");
+const sortDialog = $("sheet-sort-dialog");
+const sortForm = sortDialog.querySelector("form");
+$("sheet-sort").addEventListener("click", () => {
+  const sheet = currentSheet();
+  sortForm.elements.range.value = selectedRange?.label || `A1:${cellAddress(sheet.rows - 1, sheet.columns - 1)}`;
+  sortForm.elements.column.value = selectedAddress[0];
+  sortForm.querySelector("[role=status]").textContent = "";
+  sortDialog.showModal();
+});
+sortDialog.querySelector("[data-close]").addEventListener("click", () => sortDialog.close());
+sortForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const { range, column, direction } = sortForm.elements;
+  try {
+    const sheet = currentSheet();
+    const result = sortSheetRange(sheet, { range: range.value, column: column.value, direction: direction.value }, workbookValues());
+    recordEdit();
+    Object.assign(sheet, result);
+    save();
+    sortDialog.close();
+    refreshValues();
+    refreshFormula();
+  } catch (error) { sortForm.querySelector("[role=status]").textContent = error.message; }
+});
 $("sheet-filter").addEventListener("click", () => {
   const sheet = currentSheet();
   const filter = sheet.filter;
