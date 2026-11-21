@@ -59,7 +59,7 @@ export function calculateSheet(cells) {
     if (computed.has(address)) return computed.get(address);
     if (visiting.has(address)) throw new Error("#CYCLE!");
     const raw = cells[address] ?? "";
-    if (!raw.startsWith("=")) return raw;
+    if (!raw.startsWith("=")) return raw.startsWith("'") ? raw.slice(1) : raw;
     visiting.add(address);
     let value;
     try {
