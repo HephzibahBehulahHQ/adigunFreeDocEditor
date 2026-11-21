@@ -199,8 +199,8 @@
       [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"], ["custom", "Custom"]] }, { label: "Custom margins", action: "custom-margins", icon: "↔ Custom margins" }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }, { label: "Header & footer", action: "page-header-footer", icon: "↕ Header / footer" }, { label: "Page numbers", action: "page-numbers", icon: "＃ Pages" }],
     ],
     references: [
-      [{ label: "Insert or refresh table of contents", action: "contents", icon: "Table of contents" }],
       [{ label: "Document outline", action: "outline", icon: "☷ Outline" }, { label: "Quick overview", action: "quick-overview", icon: "✧ Quick overview" }],
+      [{ label: "Insert or refresh table of contents", action: "contents", icon: "Table of contents" }],
     ],
     review: [
       [{ label: "Track changes", action: "track-changes", icon: "▤ Track changes" }, { label: "Add comment", action: "add-comment", icon: "▧ Comment" }, { label: "Review comments", action: "show-comments", icon: "☷ Comments" }],
