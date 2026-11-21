@@ -758,6 +758,7 @@ $("sheet-autosum").addEventListener("click", () => {
   const column = selectedAddress[0];
   updateCell(selectedAddress, `=SUM(${column}1:${column}${row - 1})`);
 });
+$("sheet-function-help").addEventListener("click", () => $("sheet-function-dialog").showModal());
 $("sheet-gridlines").addEventListener("click", (event) => {
   const hidden = grid.classList.toggle("sheets-no-gridlines");
   event.currentTarget.setAttribute("aria-pressed", String(!hidden));

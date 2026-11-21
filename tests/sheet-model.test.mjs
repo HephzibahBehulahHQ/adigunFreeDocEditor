@@ -48,6 +48,13 @@ assert.equal(valueAt("D1"), 3);
 assert.equal(valueAt("D2"), "#DIV/0!");
 assert.equal(valueAt("E1"), "#CYCLE!");
 assert.equal(valueAt("F1"), "#ERROR!");
+const math = calculateSheet({
+  A1: "-1.005", A2: "label", A3: "0x1", B1: "=ROUND(A1,2)",
+  B2: "=ABS(A1)", B3: "=MOD(-5,3)", B4: "=COUNT(A1:A3,A2,A4,2E-2)",
+  B5: "=ROUND(125,-1)", B6: "=MOD(2,0)", B7: "=ABS(A1:A2)",
+});
+assert.deepEqual(["B1", "B2", "B3", "B4", "B5", "B6", "B7"].map(math),
+  [-1.01, 1.005, 1, 2, 130, "#DIV/0!", "#VALUE!"]);
 const linked = [
   { name: "Totals", cells: { A1: "=SUM('Q1 data'!$A$1:$A$2)", A2: "=missing!A1", A3: "='Q1 data'!B3" } },
   { name: "Q1 data", cells: { A1: "6", A2: "8", B3: "=Totals!A3" } },
