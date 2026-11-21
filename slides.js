@@ -4,8 +4,30 @@
   const maxSlides = 40;
   const blank = () => ({ title: "", content: "" });
   const slideShow = $("slide-show");
+  const animationDialog = $("slide-animation-dialog");
+  const animationForm = animationDialog.querySelector("form");
+  const effects = {
+    fade: [{ opacity: 0 }, { opacity: 1 }],
+    rise: [{ opacity: 0, transform: "translateY(24px)" }, { opacity: 1, transform: "translateY(0)" }],
+    pulse: [{ transform: "scale(1)" }, { transform: "scale(1.04)" }, { transform: "scale(1)" }],
+    exit: [{ opacity: 1 }, { opacity: 0 }],
+    drift: [{ transform: "translateX(0)" }, { transform: "translateX(24px)" }, { transform: "translateX(0)" }],
+  };
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let playing = [];
   let deck = { name: "Untitled presentation", active: 0, slides: [blank()] };
   let presentedSlide = 0;
+
+  function normalizeAnimation(animation) {
+    const { effect, target, start, duration, delay } = animation || {};
+    return {
+      effect: Object.hasOwn(effects, effect) ? effect : "none",
+      target: ["title", "content"].includes(target) ? target : "both",
+      start: start === "manual" ? start : "auto",
+      duration: Number.isFinite(duration) && duration >= 0.1 && duration <= 5 ? duration : 0.6,
+      delay: Number.isFinite(delay) && delay >= 0 && delay <= 10 ? delay : 0,
+    };
+  }
 
   function status(message) { $("slides-save").textContent = message; }
   try {
@@ -15,6 +37,7 @@
         title: typeof slide?.title === "string" ? slide.title.slice(0, 120) : "",
         content: typeof slide?.content === "string" ? slide.content.slice(0, 1500) : "",
         theme: Object.hasOwn(window.AdigunPresentation.themes, slide?.theme) ? slide.theme : "paper",
+        animation: normalizeAnimation(slide?.animation),
       }));
       const active = Number.isInteger(stored.active) ? Math.max(0, Math.min(stored.active, slides.length - 1)) : 0;
       deck = { name: typeof stored.name === "string" ? stored.name.slice(0, 100) : deck.name, active, slides };
@@ -113,7 +136,43 @@
     $("slide-title").focus();
   });
 
+  $("slide-animate").addEventListener("click", () => {
+    const animation = normalizeAnimation(deck.slides[deck.active].animation);
+    for (const [field, value] of Object.entries(animation)) animationForm.elements[field].value = value;
+    animationDialog.showModal();
+  });
+  animationDialog.querySelector("[data-close]").addEventListener("click", () => animationDialog.close());
+  animationForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const { effect, target, start, duration, delay } = animationForm.elements;
+    deck.slides[deck.active].animation = normalizeAnimation({
+      effect: effect.value, target: target.value, start: start.value,
+      duration: duration.valueAsNumber, delay: delay.valueAsNumber,
+    });
+    save();
+    animationDialog.close();
+  });
+
+  function stopAnimation() {
+    for (const animation of playing) animation.cancel();
+    playing = [];
+  }
+
+  function playAnimation() {
+    stopAnimation();
+    const { effect, target, duration, delay } = normalizeAnimation(deck.slides[presentedSlide].animation);
+    if (effect === "none" || reducedMotion.matches) return;
+    const targets = target === "both" ? [$("present-title"), $("present-content")] : [$("present-" + target)];
+    playing = targets.filter((element) => element.textContent).map((element) => element.animate(effects[effect], {
+      duration: duration * 1000,
+      delay: delay * 1000,
+      easing: "ease-in-out",
+      fill: "both",
+    }));
+  }
+
   function renderPresentation() {
+    stopAnimation();
     const slide = deck.slides[presentedSlide];
     $("present-title").textContent = slide.title;
     $("present-content").textContent = slide.content;
@@ -121,8 +180,14 @@
     $("present-count").textContent = `${presentedSlide + 1} / ${deck.slides.length}`;
     $("present-prev").disabled = presentedSlide === 0;
     $("present-next").disabled = presentedSlide >= deck.slides.length - 1;
+    const { effect, start } = normalizeAnimation(slide.animation);
+    $("present-play").hidden = effect === "none" || reducedMotion.matches;
+    if (start === "auto") playAnimation();
   }
-  const presentFrom = (index) => { presentedSlide = index; renderPresentation(); slideShow.showModal(); };
+  const presentFrom = (index) => { presentedSlide = index; slideShow.showModal(); renderPresentation(); };
+  $("present-play").addEventListener("click", playAnimation);
+  slideShow.addEventListener("close", stopAnimation);
+  reducedMotion.addEventListener("change", () => { if (slideShow.open) renderPresentation(); });
   $("slide-present").addEventListener("click", () => presentFrom(deck.active));
   $("slide-present-start").addEventListener("click", () => presentFrom(0));
   $("present-close").addEventListener("click", () => slideShow.close());
