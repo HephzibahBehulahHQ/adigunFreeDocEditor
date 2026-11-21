@@ -47,5 +47,50 @@
     });
   }
 
-  window.AdigunPresentation = { createParts, createBlob };
+  function importTextSlides(bytes, Parser = DOMParser) {
+    const officeNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+    let total = 0;
+    const parts = window.fflate.unzipSync(bytes, {
+      filter({ name, originalSize }) {
+        if (!/^ppt\/(?:presentation\.xml|_rels\/presentation\.xml\.rels|slides\/[\w.-]+\.xml)$/.test(name)) return false;
+        total += originalSize;
+        if (total > 12 * 1024 * 1024) throw new Error("PowerPoint text parts are too large.");
+        return true;
+      },
+    });
+    const parse = (name) => {
+      if (!Object.hasOwn(parts, name)) throw new Error("A PowerPoint part is missing.");
+      const source = window.fflate.strFromU8(parts[name]);
+      if (/<!DOCTYPE|<!ENTITY/i.test(source)) throw new Error("Unsupported PowerPoint XML.");
+      const document = new Parser().parseFromString(source, "application/xml");
+      if (document.getElementsByTagName("parsererror").length) throw new Error("A PowerPoint part is invalid.");
+      return document;
+    };
+    const relationships = new Map([...parse("ppt/_rels/presentation.xml.rels").getElementsByTagNameNS("*", "Relationship")]
+      .filter((part) => part.getAttribute("Type")?.endsWith("/slide") && part.getAttribute("TargetMode") !== "External")
+      .map((part) => [part.getAttribute("Id"), part.getAttribute("Target")]));
+    const definitions = [...parse("ppt/presentation.xml").getElementsByTagNameNS("*", "sldId")];
+    if (!definitions.length || definitions.length > 40) throw new Error("Open a presentation with 1–40 slides.");
+    return definitions.map((definition) => {
+      const id = definition.getAttributeNS(officeNs, "id") ||
+        [...definition.attributes].find((attribute) => attribute.namespaceURI && attribute.localName === "id")?.value;
+      const target = relationships.get(id) || "";
+      const path = target.startsWith("/") ? target.slice(1) : "ppt/" + target;
+      if (!/^ppt\/slides\/[\w.-]+\.xml$/.test(path)) throw new Error("Unsupported PowerPoint slide location.");
+      const shapes = [...parse(path).getElementsByTagNameNS("*", "sp")].map((shape) => {
+        const paragraphs = [...shape.getElementsByTagNameNS("*", "p")].map((paragraph) =>
+          [...paragraph.getElementsByTagNameNS("*", "t")].map((run) => run.textContent).join(""));
+        const placeholder = shape.getElementsByTagNameNS("*", "ph")[0]?.getAttribute("type");
+        const name = shape.getElementsByTagNameNS("*", "cNvPr")[0]?.getAttribute("name");
+        return { text: paragraphs.join("\n"), isTitle: ["title", "ctrTitle"].includes(placeholder) || name === "Title" };
+      });
+      const titleIndex = shapes.findIndex((shape) => shape.isTitle);
+      const title = titleIndex < 0 ? "" : shapes[titleIndex].text;
+      const content = shapes.filter((shape, index) => index !== titleIndex && shape.text).map((shape) => shape.text).join("\n");
+      if (title.length > 120 || content.length > 1500) throw new Error("A slide exceeds the title or body text limit.");
+      return { title, content };
+    });
+  }
+
+  window.AdigunPresentation = { createParts, createBlob, importTextSlides };
 })();

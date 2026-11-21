@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
+import { JSDOM } from "jsdom";
 
 const window = {};
 const context = vm.createContext({ window, Uint8Array, Uint16Array, Uint32Array, Int32Array, TextEncoder, TextDecoder });
@@ -16,4 +17,11 @@ assert.match(window.fflate.strFromU8(parts["ppt/presentation.xml"]), /r:id="rId1
 assert.match(window.fflate.strFromU8(parts["ppt/slides/slide1.xml"]), /First &lt;slide&gt;.*A &amp; B.*Second line/);
 assert.match(window.fflate.strFromU8(parts["ppt/slides/slide2.xml"]), /name="Content".*<a:p>/);
 assert.throws(() => window.AdigunPresentation.createParts(Array(81).fill({ title: "", lines: [] })), /limited to 80/);
+const dom = new JSDOM();
+try {
+  const slides = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(parts), dom.window.DOMParser);
+  assert.deepEqual(JSON.parse(JSON.stringify(slides)), [{ title: "First <slide>", content: "A & B\nSecond line" }, { title: "Blank", content: "" }]);
+} finally {
+  dom.window.close();
+}
 console.log("Presentation package preserves slide order and text, including blank slides.");
