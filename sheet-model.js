@@ -55,7 +55,7 @@ export function cellAddress(row, column) {
   return String.fromCharCode(65 + column) + (row + 1);
 }
 
-export function buildPivot(cells, { range, group, measure, aggregate }) {
+export function buildPivot(cells, { range, group, measure, aggregate }, valueAt = calculateSheet(cells)) {
   const match = /^([A-Z])([1-9]\d?|100):([A-Z])([1-9]\d?|100)$/.exec(range.toUpperCase().trim());
   if (!match) throw new Error("Enter a source range such as A1:D20, including the header row.");
   const [, left, first, right, last] = match;
@@ -65,7 +65,6 @@ export function buildPivot(cells, { range, group, measure, aggregate }) {
   if (+first >= +last || !inRange(groupColumn) || !inRange(valueColumn) || !["sum", "count", "average"].includes(aggregate)) {
     throw new Error("Choose a header row, data rows, and columns within the source range.");
   }
-  const valueAt = calculateSheet(cells);
   const groups = new Map();
   for (let row = +first + 1; row <= +last; row++) {
     const label = valueAt(groupColumn + row);
@@ -95,44 +94,62 @@ export function buildPivot(cells, { range, group, measure, aggregate }) {
 }
 
 export function calculateSheet(cells) {
+  return calculateWorkbook([{ cells }], 0);
+}
+
+export function calculateWorkbook(sheets, active) {
   const computed = new Map();
   const visiting = new Set();
+  const names = new Map();
+  for (const [index, sheet] of sheets.entries()) {
+    const name = (sheet.name || `Sheet ${index + 1}`).toUpperCase();
+    if (!names.has(name)) names.set(name, index);
+  }
   const numeric = (value) => {
     if (value === "") return 0;
     if (typeof value === "number") return value;
-    if (/^#(?:CYCLE|ERROR|VALUE|DIV\/0)!$/.test(value)) throw new Error(value);
+    if (/^#(?:CYCLE|ERROR|VALUE|REF|DIV\/0)!$/.test(value)) throw new Error(value);
     if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())) throw new Error("#VALUE!");
     const number = Number(value);
     if (!Number.isFinite(number)) throw new Error("#VALUE!");
     return number;
   };
-  const valueAt = (address) => {
-    if (computed.has(address)) return computed.get(address);
-    if (visiting.has(address)) throw new Error("#CYCLE!");
-    const raw = cells[address] ?? "";
+  const valueAt = (sheetIndex, address) => {
+    if (sheetIndex === undefined) throw new Error("#REF!");
+    const key = `${sheetIndex}:${address}`;
+    if (computed.has(key)) return computed.get(key);
+    if (visiting.has(key)) throw new Error("#CYCLE!");
+    const raw = sheets[sheetIndex].cells[address] ?? "";
     if (!raw.startsWith("=")) return raw.startsWith("'") ? raw.slice(1) : raw;
-    visiting.add(address);
+    visiting.add(key);
     let value;
     try {
-      value = evaluateFormula(raw.slice(1), valueAt, numeric);
+      value = evaluateFormula(raw.slice(1), (cell, sheet) =>
+        valueAt(sheet === undefined ? sheetIndex : names.get(sheet.toUpperCase()), cell), numeric);
       if (!Number.isFinite(value)) value = "#DIV/0!";
     } catch (error) {
-      value = /^#(?:CYCLE|VALUE|DIV\/0)!$/.test(error.message) ? error.message : "#ERROR!";
+      value = /^#(?:CYCLE|VALUE|REF|DIV\/0)!$/.test(error.message) ? error.message : "#ERROR!";
     } finally {
-      visiting.delete(address);
+      visiting.delete(key);
     }
-    computed.set(address, value);
+    computed.set(key, value);
     return value;
   };
-  return valueAt;
+  return (address) => valueAt(active, address);
 }
 
 function evaluateFormula(expression, valueAt, numeric) {
-  const tokens = expression.toUpperCase().match(/\d+(?:\.\d*)?|\.\d+|[A-Z]+\d*|[()+*/,:-]|[^\s]/g) ?? [];
+  const tokens = expression.match(/(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|\d+(?:\.\d*)?|\.\d+|[A-Za-z]+|[()+*/,:-]|[^\s]/g) ?? [];
   if (tokens.length > 200) throw new Error("Formula is too long.");
   let index = 0;
   const take = (token) => tokens[index] === token && Boolean(++index);
-  const addressPattern = /^[A-Z](?:[1-9]\d?|100)$/;
+  function reference(token = "") {
+    const separator = token.lastIndexOf("!");
+    const address = token.slice(separator + 1).replaceAll("$", "").toUpperCase();
+    if (!/^[A-Z](?:[1-9]\d?|100)$/.test(address)) return null;
+    const sheet = separator < 0 ? undefined : token.slice(0, separator).replace(/^'|'$/g, "").replaceAll("''", "'");
+    return { address, sheet };
+  }
   function term() {
     if (take("-")) return -term();
     if (take("+")) return term();
@@ -141,20 +158,23 @@ function evaluateFormula(expression, valueAt, numeric) {
       if (!take(")")) throw new Error("Unclosed parenthesis.");
       return value;
     }
-    const token = tokens[index++];
-    if (addressPattern.test(token)) return numeric(valueAt(token));
+    const token = tokens[index++]?.toUpperCase();
+    const cell = reference(token);
+    if (cell) return numeric(valueAt(cell.address, cell.sheet));
     if (/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(token)) return Number(token);
     if (!["SUM", "AVERAGE", "MIN", "MAX"].includes(token) || !take("(")) throw new Error("Unknown formula.");
     const values = [];
     do {
-      if (addressPattern.test(tokens[index]) && tokens[index + 1] === ":") {
-        const first = tokens[index];
-        const last = tokens[index + 2];
-        if (!addressPattern.test(last)) throw new Error("Invalid range.");
+      const start = reference(tokens[index]);
+      if (start && tokens[index + 1] === ":") {
+        const end = reference(tokens[index + 2]);
+        if (!end || (end.sheet && end.sheet.toUpperCase() !== start.sheet?.toUpperCase())) throw new Error("Invalid range.");
+        const { address: first, sheet } = start;
+        const last = end.address;
         index += 3;
         for (let row = Math.min(+first.slice(1), +last.slice(1)); row <= Math.max(+first.slice(1), +last.slice(1)); row++) {
           for (let column = Math.min(first.charCodeAt(0), last.charCodeAt(0)); column <= Math.max(first.charCodeAt(0), last.charCodeAt(0)); column++) {
-            const value = valueAt(String.fromCharCode(column) + row);
+            const value = valueAt(String.fromCharCode(column) + row, sheet);
             if (value !== "") values.push(numeric(value));
           }
         }
@@ -190,12 +210,11 @@ function evaluateFormula(expression, valueAt, numeric) {
   return value;
 }
 
-export function toCsv(cells) {
+export function toCsv(cells, valueAt = calculateSheet(cells)) {
   const addresses = Object.keys(cells);
   if (!addresses.length) return "";
   const rows = Math.max(...addresses.map((address) => +address.slice(1)));
   const columns = Math.max(...addresses.map((address) => address.charCodeAt(0) - 64));
-  const valueAt = calculateSheet(cells);
   return Array.from({ length: rows }, (_, row) => Array.from({ length: columns }, (_, column) => {
     const value = valueAt(cellAddress(row, column));
     const text = typeof value === "string" && /^\s*[=+@-]/.test(value) && !/^[+-]?\d+(?:\.\d+)?$/.test(value.trim()) ? "'" + value : String(value);

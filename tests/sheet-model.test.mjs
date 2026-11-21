@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
-import { buildPivot, calculateSheet, cellAddress, displayCell, parseCsv, toCsv } from "../sheet-model.js";
+import { buildPivot, calculateSheet, calculateWorkbook, cellAddress, displayCell, parseCsv, toCsv } from "../sheet-model.js";
 import { exportWorkbook, importWorkbook } from "../sheet-xlsx.js";
 
 assert.equal(cellAddress(99, 25), "Z100");
@@ -34,6 +34,13 @@ assert.equal(valueAt("D1"), 3);
 assert.equal(valueAt("D2"), "#DIV/0!");
 assert.equal(valueAt("E1"), "#CYCLE!");
 assert.equal(valueAt("F1"), "#ERROR!");
+const linked = [
+  { name: "Totals", cells: { A1: "=SUM('Q1 data'!$A$1:$A$2)", A2: "=missing!A1", A3: "='Q1 data'!B3" } },
+  { name: "Q1 data", cells: { A1: "6", A2: "8", B3: "=Totals!A3" } },
+];
+assert.equal(calculateWorkbook(linked, 0)("A1"), 14);
+assert.equal(calculateWorkbook(linked, 0)("A2"), "#REF!");
+assert.equal(calculateWorkbook(linked, 0)("A3"), "#CYCLE!");
 assert.deepEqual(parseCsv(toCsv({ A1: "2", B1: "=A1*3", A2: 'a,"b"', B2: "@external" })), [["2", "6"], ['a,"b"', "'@external"]]);
 console.log("Sheets calculations, CSV quoting, and input limits passed.");
 
@@ -47,6 +54,9 @@ try {
   const imported = importWorkbook(bytes, zip, dom.window.DOMParser);
   assert.deepEqual(imported.map(({ name, cells, formats }) => ({ name, cells, formats })), sheets);
   assert.equal(calculateSheet(imported[0].cells)("A3"), 30);
+  const reopened = importWorkbook(exportWorkbook(linked, zip), zip, dom.window.DOMParser);
+  assert.equal(reopened[0].cells.A1, linked[0].cells.A1);
+  assert.equal(calculateWorkbook(reopened, 0)("A1"), 14);
   const parts = zip.unzipSync(bytes);
   assert.match(zip.strFromU8(parts["xl/worksheets/sheet1.xml"]), /<f>SUM\(A1:A2\)<\/f><v>30<\/v>/);
   parts["xl/worksheets/sheet2.xml"] = zip.strToU8(zip.strFromU8(parts["xl/worksheets/sheet2.xml"]).replace('r="A1"', 'r="AA1"'));
