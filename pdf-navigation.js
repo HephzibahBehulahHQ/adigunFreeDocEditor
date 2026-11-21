@@ -42,12 +42,13 @@ export function bindPdfNavigation(sources, preview) {
     try {
       const page = await view.document.getPage(index + 1);
       if (rendering !== job) return;
-      const original = page.getViewport({ scale: 1 });
+      const rotation = (page.rotate + (view.rotation ?? 0)) % 360;
+      const original = page.getViewport({ scale: 1, rotation });
       const widthScale = Math.max(0.15, (scroll.clientWidth - 28) / original.width);
       const heightScale = Math.max(0.15, (scroll.clientHeight - 28) / original.height);
       const scale = zoom.value === "fit" ? Math.min(widthScale, heightScale) :
         zoom.value === "width" ? widthScale : Number(zoom.value);
-      const viewport = page.getViewport({ scale });
+      const viewport = page.getViewport({ scale, rotation });
       const pageSurface = document.createElement("div");
       pageSurface.className = "pdf-reader-page";
       pageSurface.style.width = viewport.width + "px";
@@ -191,6 +192,12 @@ export function bindPdfNavigation(sources, preview) {
   source.addEventListener("change", () => void load());
   $("pdf-reader-prev").addEventListener("click", () => showPage(session.index - 1));
   $("pdf-reader-next").addEventListener("click", () => showPage(session.index + 1));
+  $("pdf-reader-rotate").addEventListener("click", () => {
+    if (!session?.document) return;
+    session.rotation = ((session.rotation ?? 0) + 90) % 360;
+    scroll.scrollTo(0, 0);
+    void drawPage(session);
+  });
   zoom.addEventListener("change", () => { if (session?.document) void drawPage(session); });
   new ResizeObserver(() => {
     if (!reader.hidden && session?.document && ["fit", "width"].includes(zoom.value)) void drawPage(session);
