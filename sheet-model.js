@@ -307,6 +307,8 @@ export function calculateSheet(cells) {
   return calculateWorkbook([{ cells }], 0);
 }
 
+const numericLiteral = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
+
 export function calculateWorkbook(sheets, active) {
   const computed = new Map();
   const visiting = new Set();
@@ -319,7 +321,7 @@ export function calculateWorkbook(sheets, active) {
     if (value === "") return 0;
     if (typeof value === "number") return value;
     if (/^#(?:CYCLE|ERROR|VALUE|REF|DIV\/0)!$/.test(value)) throw new Error(value);
-    if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())) throw new Error("#VALUE!");
+    if (!numericLiteral.test(value.trim())) throw new Error("#VALUE!");
     const number = Number(value);
     if (!Number.isFinite(number)) throw new Error("#VALUE!");
     return number;
@@ -349,8 +351,8 @@ export function calculateWorkbook(sheets, active) {
 }
 
 function evaluateFormula(expression, valueAt, numeric) {
-  const tokens = expression.match(/#REF!|(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|\d+(?:\.\d*)?|\.\d+|[A-Za-z]+|[()+*/,:-]|[^\s]/g) ?? [];
-  if (tokens.includes("#REF!")) throw new Error("#REF!");
+  const tokens = expression.match(/#REF!|(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|[A-Za-z]+|[()+*/,:-]|[^\s]/gi) ?? [];
+  if (tokens.some((token) => token.toUpperCase() === "#REF!")) throw new Error("#REF!");
   if (tokens.length > 200) throw new Error("Formula is too long.");
   let index = 0;
   const take = (token) => tokens[index] === token && Boolean(++index);
@@ -372,12 +374,14 @@ function evaluateFormula(expression, valueAt, numeric) {
     const token = tokens[index++]?.toUpperCase();
     const cell = reference(token);
     if (cell) return numeric(valueAt(cell.address, cell.sheet));
-    if (/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(token)) return Number(token);
-    if (!["SUM", "AVERAGE", "MIN", "MAX"].includes(token) || !take("(")) throw new Error("Unknown formula.");
+    if (/^(?:\d+(?:\.\d*)?|\.\d+)(?:E[+-]?\d+)?$/.test(token)) return Number(token);
+    if (!["SUM", "AVERAGE", "MIN", "MAX", "COUNT", "ABS", "ROUND", "MOD"].includes(token) || !take("(")) throw new Error("Unknown formula.");
+    const scalar = ["ABS", "ROUND", "MOD"].includes(token);
     const values = [];
     do {
       const start = reference(tokens[index]);
       if (start && tokens[index + 1] === ":") {
+        if (scalar) throw new Error("#VALUE!");
         const end = reference(tokens[index + 2]);
         if (!end || (end.sheet && end.sheet.toUpperCase() !== start.sheet?.toUpperCase())) throw new Error("Invalid range.");
         const { address: first, sheet } = start;
@@ -386,12 +390,36 @@ function evaluateFormula(expression, valueAt, numeric) {
         for (let row = Math.min(+first.slice(1), +last.slice(1)); row <= Math.max(+first.slice(1), +last.slice(1)); row++) {
           for (let column = Math.min(first.charCodeAt(0), last.charCodeAt(0)); column <= Math.max(first.charCodeAt(0), last.charCodeAt(0)); column++) {
             const value = valueAt(String.fromCharCode(column) + row, sheet);
-            if (value !== "") values.push(numeric(value));
+            if (value === "") continue;
+            if (token === "COUNT" && (!numericLiteral.test(String(value).trim()) || !Number.isFinite(Number(value)))) continue;
+            values.push(numeric(value));
           }
         }
+      } else if (token === "COUNT" && start && [",", ")"].includes(tokens[index + 1])) {
+        index++;
+        const value = valueAt(start.address, start.sheet);
+        if (numericLiteral.test(String(value).trim()) && Number.isFinite(Number(value))) values.push(numeric(value));
       } else values.push(sum());
     } while (take(","));
     if (!take(")")) throw new Error("Unclosed function.");
+    if (token === "COUNT") return values.length;
+    if (token === "ABS" && values.length === 1) return Math.abs(values[0]);
+    if (token === "MOD" && values.length === 2) {
+      const [number, divisor] = values;
+      return number - divisor * Math.floor(number / divisor);
+    }
+    if (token === "ROUND" && values.length === 2) {
+      const [number, places] = values;
+      const digits = Math.trunc(places);
+      if (digits > 308) return number;
+      if (digits < -308) return 0;
+      const [coefficient, exponent = 0] = Math.abs(number).toString().split("e");
+      const scaled = Number(`${coefficient}e${Number(exponent) + digits}`);
+      if (!Number.isFinite(scaled)) return number;
+      const [rounded, roundedExponent = 0] = Math.round(scaled).toString().split("e");
+      return Math.sign(number) * Number(`${rounded}e${Number(roundedExponent) - digits}`);
+    }
+    if (scalar) throw new Error("#VALUE!");
     if (token === "MIN") return values.length ? Math.min(...values) : 0;
     if (token === "MAX") return values.length ? Math.max(...values) : 0;
     const total = values.reduce((result, value) => result + value, 0);
