@@ -18,6 +18,9 @@ assert.deepEqual(parseCsv('name,value\r\n"one, two","a ""quote"""\r\n"line\nbrea
   ["name", "value"], ["one, two", 'a "quote"'], ["line\nbreak", "5"],
 ]);
 assert.throws(() => parseCsv('"never closed'), /unclosed/);
+assert.deepEqual(parseCsv('name\t"one, two"\r\n"line\nbreak"\t"with\ttab"', "\t"), [
+  ["name", "one, two"], ["line\nbreak", "with\ttab"],
+]);
 assert.throws(() => parseCsv("x,".repeat(26) + "x"), /column/);
 assert.throws(() => parseCsv("x\n".repeat(101)), /row/);
 
