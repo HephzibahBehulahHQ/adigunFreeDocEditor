@@ -16,18 +16,34 @@ export function parsePages(input, count) {
   return [...selected];
 }
 
-export async function buildPdf(sources, { PDFDocument, degrees, StandardFonts, rgb }, { numberPages = false, footer = "" } = {}) {
+export function sourcePages({ document, selection, plan }) {
+  const count = document.getPageCount();
+  if (!plan) return parsePages(selection, count).map((index) => ({ index, rotation: 0 }));
+  if (!plan.length || plan.length > 200 || !plan.every(({ index, rotation }) =>
+    Number.isInteger(index) && index >= 0 && index < count && [0, 90, 180, 270].includes(rotation))) {
+    throw new Error("Arrange between 1 and 200 valid source pages.");
+  }
+  return plan;
+}
+
+export async function buildPdf(sources, { PDFDocument, PDFName, degrees, StandardFonts, rgb }, { numberPages = false, footer = "" } = {}) {
   if (!sources.length) throw new Error("Add a PDF before exporting.");
   const output = await PDFDocument.create();
-  for (const { document, selection, rotation } of sources) {
-    if (document.getForm().getFields().length) {
+  for (const source of sources) {
+    const { document, rotation = 0 } = source;
+    if (document.catalog.has(PDFName.of("Perms")) || document.catalog.getAcroForm()?.dict.has(PDFName.of("XFA")) ||
+      document.getForm().getFields().length) {
       throw new Error("Remove interactive or signed forms before using page export.");
     }
-    const indices = parsePages(selection, document.getPageCount());
-    if (output.getPageCount() + indices.length > 200) throw new Error("Select at most 200 pages in total.");
-    const pages = await output.copyPages(document, indices);
-    for (const page of pages) {
-      if (rotation) page.setRotation(degrees((page.getRotation().angle + rotation + 360) % 360));
+    const plan = sourcePages(source);
+    if (output.getPageCount() + plan.length > 200) throw new Error("Select at most 200 pages in total.");
+    const indices = [...new Set(plan.map((entry) => entry.index))];
+    const copied = await output.copyPages(document, indices);
+    const available = new Map(indices.map((index, offset) => [index, copied[offset]]));
+    for (const { index, rotation: extra } of plan) {
+      const page = available.get(index) || (await output.copyPages(document, [index]))[0];
+      available.delete(index);
+      if (rotation || extra) page.setRotation(degrees((page.getRotation().angle + rotation + extra + 360) % 360));
       output.addPage(page);
     }
   }

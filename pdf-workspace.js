@@ -4,6 +4,7 @@ import { bindPdfRedaction } from "./pdf-redact.js";
 import { bindPdfForms } from "./pdf-forms.js";
 import { bindPdfNavigation } from "./pdf-navigation.js";
 import { bindPdfComments } from "./pdf-comments.js";
+import { bindPdfOrganizer } from "./pdf-organize.js";
 
 const $ = (id) => document.getElementById(id);
 const sources = [];
@@ -12,6 +13,7 @@ bindPdfRedaction(sources);
 bindPdfForms(sources, showPreview);
 const closeNavigation = bindPdfNavigation(sources, showPreview);
 bindPdfComments(sources, showPreview);
+bindPdfOrganizer(sources, () => { render(); status("Page arrangement applied to the output."); });
 const preview = $("pdf-preview");
 let previewUrl;
 let busy = false;
@@ -44,6 +46,7 @@ function button(label, handler, disabled = false) {
 
 function render() {
   closeNavigation();
+  $("pdf-organize").disabled = busy || sources.length === 0;
   $("pdf-navigation-toggle").disabled = busy || sources.length === 0;
   $("pdf-comments-open").disabled = busy || sources.length === 0;
   $("pdf-form-open").disabled = busy || sources.length === 0;
@@ -57,14 +60,15 @@ function render() {
     const item = document.createElement("li");
     item.className = "pdf-source";
     const title = document.createElement("strong");
-    title.textContent = source.file.name + " · " + source.document.getPageCount() + " pages";
+    title.textContent = source.file.name + " · " + source.document.getPageCount() + " pages" +
+      (source.plan ? ` · ${source.plan.length} arranged for export` : "");
     const pages = document.createElement("label");
     pages.textContent = "Pages";
     const field = document.createElement("input");
     field.value = source.selection;
     field.placeholder = "All pages";
     field.maxLength = 800;
-    field.disabled = busy;
+    field.disabled = busy || Boolean(source.plan);
     field.addEventListener("input", () => { source.selection = field.value; });
     pages.append(field);
     const rotations = document.createElement("label");
@@ -125,7 +129,7 @@ $("pdf-files").addEventListener("change", async (event) => {
 });
 
 $("pdf-reset-pages").addEventListener("click", () => {
-  for (const source of sources) { source.selection = ""; source.rotation = 0; }
+  for (const source of sources) { source.selection = ""; source.rotation = 0; source.plan = undefined; }
   render();
   status("All source pages and original rotations restored.");
 });

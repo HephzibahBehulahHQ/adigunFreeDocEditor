@@ -28,8 +28,9 @@
         <a href="./index.html#convert">Convert a file</a>
       </div></details>
       <details name="pdf-commands" class="command-menu"><summary>Organize Pages</summary><div>
+        <button id="pdf-organize" type="button" disabled>Arrange individual pages</button>
         <button id="pdf-preview-output" type="button" disabled>Preview selected pages</button>
-        <button id="pdf-reset-pages" type="button" disabled>Reset page ranges and rotation</button>
+        <button id="pdf-reset-pages" type="button" disabled>Reset page arrangement and rotation</button>
       </div></details>
       <details name="pdf-commands" class="command-menu"><summary>Format</summary><div>
         <label class="pdf-format-option"><input id="pdf-page-numbers" type="checkbox"> Number output pages</label>
@@ -82,6 +83,18 @@
       </div>
     </div>
   </main>
+  <dialog id="pdf-organize-dialog" class="pdf-tool-dialog pdf-redact-dialog" aria-labelledby="pdf-organize-title">
+    <h2 id="pdf-organize-title">Arrange PDF pages</h2>
+    <label>Source PDF <select></select></label>
+    <p role="status"></p>
+    <ol class="pdf-page-arrangement"></ol>
+    <div class="slides-actions">
+      <button class="button button-outline" type="button" data-apply>Apply arrangement</button>
+      <button class="button button-outline" type="button" data-undo>Undo last change</button>
+      <button class="button button-outline" type="button" data-extract>Download selected extract</button>
+      <button class="button button-outline" type="button" data-close>Cancel</button>
+    </div>
+  </dialog>
   <dialog id="pdf-comments-dialog" class="pdf-tool-dialog pdf-redact-dialog" aria-labelledby="pdf-comments-title">
     <h2 id="pdf-comments-title">PDF sticky notes</h2>
     <form>

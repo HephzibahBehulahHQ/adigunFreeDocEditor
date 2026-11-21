@@ -17,6 +17,11 @@ const output = await pdf.PDFDocument.load(await buildPdf([
 ], pdf));
 assert.deepEqual(output.getPages().map((page) => [page.getWidth(), page.getRotation().angle]), [[300, 180], [200, 90], [500, 0]]);
 assert.equal(first.getPages()[1].getRotation().angle, 90);
+const arranged = await pdf.PDFDocument.load(await buildPdf([{
+  document: first, selection: "", rotation: 0,
+  plan: [{ index: 1, rotation: 90 }, { index: 0, rotation: 270 }, { index: 1, rotation: 0 }],
+}], pdf));
+assert.deepEqual(arranged.getPages().map((page) => [page.getWidth(), page.getRotation().angle]), [[300, 180], [200, 270], [300, 90]]);
 const form = second.getForm();
 form.createTextField("name");
 await assert.rejects(buildPdf([{ document: second, selection: "", rotation: 0 }], pdf), /interactive or signed/);
