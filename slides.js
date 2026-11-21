@@ -6,6 +6,9 @@
   const slideShow = $("slide-show");
   const animationDialog = $("slide-animation-dialog");
   const animationForm = animationDialog.querySelector("form");
+  const transitionDialog = $("slide-transition-dialog");
+  const transitionForm = transitionDialog.querySelector("form");
+  const { normalizeTransition, transitionFrames } = window.AdigunPresentation;
   const effects = {
     fade: [{ opacity: 0 }, { opacity: 1 }],
     rise: [{ opacity: 0, transform: "translateY(24px)" }, { opacity: 1, transform: "translateY(0)" }],
@@ -15,6 +18,8 @@
   };
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   let playing = [];
+  let transitioning;
+  let advanceTimer;
   let deck = { name: "Untitled presentation", active: 0, slides: [blank()] };
   let presentedSlide = 0;
   let draggedSlide = null;
@@ -41,6 +46,7 @@
         animation: normalizeAnimation(slide?.animation),
         hidden: slide?.hidden === true,
         notes: typeof slide?.notes === "string" ? slide.notes.slice(0, 4000) : "",
+        transition: normalizeTransition(slide?.transition),
       }));
       const active = Number.isInteger(stored.active) ? Math.max(0, Math.min(stored.active, slides.length - 1)) : 0;
       deck = { name: typeof stored.name === "string" ? stored.name.slice(0, 100) : deck.name, active, slides };
@@ -198,6 +204,42 @@
     animationDialog.close();
   });
 
+  function editedTransition() {
+    const { effect, duration, advance } = transitionForm.elements;
+    return normalizeTransition({
+      effect: effect.value,
+      duration: Math.round(duration.valueAsNumber * 1000),
+      advance: Math.round(advance.valueAsNumber * 1000),
+    });
+  }
+  function playTransition(node, config) {
+    node.getAnimations().forEach((animation) => animation.cancel());
+    if (!reducedMotion.matches && transitionFrames[config.effect]) {
+      return node.animate(transitionFrames[config.effect], { duration: config.duration, easing: "ease-out" });
+    }
+  }
+  $("slide-transition").addEventListener("click", () => {
+    const { effect, duration, advance, all } = transitionForm.elements;
+    const config = normalizeTransition(deck.slides[deck.active].transition);
+    effect.value = config.effect;
+    duration.value = config.duration / 1000;
+    advance.value = config.advance / 1000;
+    all.checked = false;
+    transitionDialog.showModal();
+  });
+  transitionDialog.querySelector("[data-preview]").addEventListener("click", () => {
+    if (transitionForm.reportValidity()) playTransition(transitionDialog.querySelector(".transition-preview div"), editedTransition());
+  });
+  transitionDialog.querySelector("[data-close]").addEventListener("click", () => transitionDialog.close());
+  transitionForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const config = editedTransition();
+    const slides = transitionForm.elements.all.checked ? deck.slides : [deck.slides[deck.active]];
+    for (const slide of slides) slide.transition = config;
+    save();
+    transitionDialog.close();
+  });
+
   function stopAnimation() {
     for (const animation of playing) animation.cancel();
     playing = [];
@@ -218,6 +260,8 @@
 
   function renderPresentation() {
     stopAnimation();
+    window.clearTimeout(advanceTimer);
+    transitioning?.cancel();
     const slide = deck.slides[presentedSlide];
     $("present-title").textContent = slide.title;
     $("present-content").textContent = slide.content;
@@ -228,6 +272,11 @@
     $("present-count").textContent = `${presentedSlide + 1} / ${deck.slides.length}`;
     $("present-prev").disabled = visibleSlide(presentedSlide - 1, -1) < 0;
     $("present-next").disabled = visibleSlide(presentedSlide + 1, 1) < 0;
+    const config = normalizeTransition(slide.transition);
+    transitioning = playTransition($("present-title").closest(".slides-paper"), config);
+    if (config.advance && !$("present-next").disabled) {
+      advanceTimer = window.setTimeout(() => $("present-next").click(), config.advance);
+    }
     const { effect, start } = normalizeAnimation(slide.animation);
     $("present-play").hidden = effect === "none" || reducedMotion.matches;
     if (start === "auto") playAnimation();
@@ -252,7 +301,11 @@
     $("present-notes-toggle").textContent = open ? "Hide speaker notes" : "Show speaker notes";
   }
   $("present-notes-toggle").addEventListener("click", () => setPresenterNotes($("present-notes").hidden));
-  slideShow.addEventListener("close", stopAnimation);
+  slideShow.addEventListener("close", () => {
+    stopAnimation();
+    window.clearTimeout(advanceTimer);
+    transitioning?.cancel();
+  });
   reducedMotion.addEventListener("change", () => { if (slideShow.open) renderPresentation(); });
   $("slide-present").addEventListener("click", () => presentFrom(deck.active));
   $("slide-present-start").addEventListener("click", () => presentFrom(0));
@@ -288,7 +341,7 @@
     const button = event.currentTarget;
     button.disabled = true;
     try {
-      const slides = deck.slides.map((slide) => ({ title: slide.title, lines: slide.content.split("\n"), theme: slide.theme, hidden: slide.hidden, notes: slide.notes }));
+      const slides = deck.slides.map((slide) => ({ title: slide.title, lines: slide.content.split("\n"), theme: slide.theme, hidden: slide.hidden, notes: slide.notes, transition: slide.transition }));
       const blob = await window.AdigunPresentation.createBlob(slides);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");

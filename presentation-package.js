@@ -7,6 +7,31 @@
   }
 
   const themes = Object.freeze({ paper: Object.freeze({ background: "FFFFFF", text: "182035" }), violet: Object.freeze({ background: "EEE7FC", text: "30204B" }), midnight: Object.freeze({ background: "17213A", text: "F3F5F9" }) });
+  const transitionFrames = {
+    fade: [{ opacity: 0 }, { opacity: 1 }],
+    push: [{ transform: "translateX(14%)", opacity: 0.45 }, { transform: "translateX(0)", opacity: 1 }],
+  };
+  const powerpoint2010 = "http://schemas.microsoft.com/office/powerpoint/2010/main";
+  const markupCompatibility = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+
+  function normalizeTransition(value) {
+    return {
+      effect: Object.hasOwn(transitionFrames, value?.effect) ? value.effect : "none",
+      duration: Number.isInteger(value?.duration) && value.duration >= 100 && value.duration <= 5000 ? value.duration : 600,
+      advance: Number.isInteger(value?.advance) && value.advance >= 100 && value.advance <= 120000 ? value.advance : 0,
+    };
+  }
+
+  function transitionXml(value) {
+    const { effect, duration, advance } = normalizeTransition(value);
+    if (effect === "none" && !advance) return "";
+    const speed = duration < 500 ? "fast" : duration > 900 ? "slow" : "med";
+    const options = ` spd="${speed}" advClick="1"${advance ? ` advTm="${advance}"` : ""}`;
+    const effectXml = effect === "fade" ? "<p:fade/>" : effect === "push" ? '<p:push dir="l"/>' : "";
+    const element = (extra = "") => `<p:transition${options}${extra}>${effectXml}</p:transition>`;
+    if (effect === "none") return element();
+    return `<mc:AlternateContent xmlns:mc="${markupCompatibility}" xmlns:p14="${powerpoint2010}"><mc:Choice Requires="p14">${element(` p14:dur="${duration}"`)}</mc:Choice><mc:Fallback>${element()}</mc:Fallback></mc:AlternateContent>`;
+  }
 
   function createParts(slides) {
     if (slides.length > 80) throw new Error("PowerPoint output is limited to 80 slides.");
@@ -31,7 +56,7 @@
     files["ppt/_rels/slideLayouts/slideLayout1.xml.rels"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>';
     files["ppt/theme/theme1.xml"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="' + ans + '" name="Adigun"><a:themeElements><a:clrScheme name="Adigun"><a:dk1><a:srgbClr val="17233A"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="26334D"/></a:dk2><a:lt2><a:srgbClr val="F4F6FA"/></a:lt2><a:accent1><a:srgbClr val="4F6BED"/></a:accent1><a:accent2><a:srgbClr val="697386"/></a:accent2><a:accent3><a:srgbClr val="6B8E23"/></a:accent3><a:accent4><a:srgbClr val="C0504D"/></a:accent4><a:accent5><a:srgbClr val="8064A2"/></a:accent5><a:accent6><a:srgbClr val="4BACC6"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fontScheme name="Adigun"><a:majorFont><a:latin typeface="Aptos Display"/></a:majorFont><a:minorFont><a:latin typeface="Aptos"/></a:minorFont></a:fontScheme><a:fmtScheme name="Adigun"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>';
     for (let i = 0; i < slides.length; i++) {
-      const markup = slideXml(slides[i]);
+      const markup = slideXml(slides[i]).replace("</p:sld>", transitionXml(slides[i].transition) + "</p:sld>");
       files["ppt/slides/slide" + (i + 1) + ".xml"] = slides[i].hidden ? markup.replace("<p:sld ", '<p:sld show="0" ') : markup;
       files["ppt/slides/_rels/slide" + (i + 1) + ".xml.rels"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>';
     }
@@ -143,9 +168,19 @@
       if (notes.length > 4000) throw new Error("A slide exceeds the 4,000-character notes limit.");
       if (notes) result.notes = notes;
       if (["0", "false"].includes(slide.documentElement.getAttribute("show"))) result.hidden = true;
+      const transition = slide.getElementsByTagNameNS(slide.documentElement.namespaceURI, "transition")[0];
+      if (transition) {
+        const effect = [...transition.children].find((node) => Object.hasOwn(transitionFrames, node.localName))?.localName;
+        const speed = transition.getAttribute("spd");
+        result.transition = normalizeTransition({
+          effect,
+          duration: Number(transition.getAttributeNS(powerpoint2010, "dur")) || ({ fast: 300, slow: 1200 }[speed] || 600),
+          advance: Number(transition.getAttribute("advTm")),
+        });
+      }
       return result;
     });
   }
 
-  window.AdigunPresentation = { createParts, createBlob, importTextSlides, themes };
+  window.AdigunPresentation = { createParts, createBlob, importTextSlides, themes, normalizeTransition, transitionFrames };
 })();
