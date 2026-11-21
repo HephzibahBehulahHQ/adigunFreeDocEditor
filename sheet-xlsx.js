@@ -15,7 +15,7 @@ function xml(value) {
     .replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
 }
 
-function makeWorksheet(cells, formats = {}, valueAt) {
+function makeWorksheet({ cells, formats = {}, freezeFirstRow }, valueAt) {
   const rows = new Map();
   for (const address of new Set([...Object.keys(cells), ...Object.keys(formats)])) {
     const raw = cells[address] ?? "";
@@ -37,7 +37,10 @@ function makeWorksheet(cells, formats = {}, valueAt) {
   }
   const data = [...rows].sort(([a], [b]) => a - b).map(([row, cellsInRow]) =>
     `<row r="${row}">${cellsInRow.sort((a, b) => a.address.localeCompare(b.address)).map((cell) => cell.markup).join("")}</row>`).join("");
-  return `<worksheet xmlns="${mainNs}"><sheetData>${data}</sheetData></worksheet>`;
+  const views = freezeFirstRow
+    ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>'
+    : "";
+  return `<worksheet xmlns="${mainNs}">${views}<sheetData>${data}</sheetData></worksheet>`;
 }
 
 export function exportWorkbook(sheets, zip) {
@@ -58,7 +61,7 @@ export function exportWorkbook(sheets, zip) {
     workbookSheets.push(`<sheet name="${xml(name)}" sheetId="${id}" r:id="rId${id}"/>`);
     rels.push(`<Relationship Id="rId${id}" Type="${officeNs}/worksheet" Target="${target}"/>`);
     overrides.push(`<Override PartName="/xl/${target}" ContentType="${worksheetType}"/>`);
-    files["xl/" + target] = makeWorksheet(sheet.cells, sheet.formats, calculateWorkbook(sheets, index));
+    files["xl/" + target] = makeWorksheet(sheet, calculateWorkbook(sheets, index));
   }
   if (sheets.some((sheet) => Object.keys(sheet.formats ?? {}).length)) {
     rels.push(`<Relationship Id="rIdStyles" Type="${officeNs}/styles" Target="styles.xml"/>`);
@@ -66,7 +69,8 @@ export function exportWorkbook(sheets, zip) {
     const formats = styleNames.map((name) => `<xf numFmtId="${numberFormats[name]}" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>`).join("");
     files["xl/styles.xml"] = `<styleSheet xmlns="${mainNs}"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${styleNames.length}">${formats}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
   }
-  files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}"><sheets>${workbookSheets.join("")}</sheets></workbook>`;
+  const workbookViews = sheets.some((sheet) => sheet.freezeFirstRow) ? "<bookViews><workbookView/></bookViews>" : "";
+  files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}">${workbookViews}<sheets>${workbookSheets.join("")}</sheets></workbook>`;
   files["xl/_rels/workbook.xml.rels"] = `<Relationships xmlns="${packageNs}">${rels.join("")}</Relationships>`;
   files["_rels/.rels"] = `<Relationships xmlns="${packageNs}"><Relationship Id="rId1" Type="${officeNs}/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
   files["[Content_Types].xml"] = `<Types xmlns="${contentNs}"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="${workbookType}"/>${overrides.join("")}</Types>`;
@@ -111,7 +115,11 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const formats = {};
     let rows = 20;
     let columns = 8;
-    for (const node of parse(path).getElementsByTagNameNS("*", "c")) {
+    const worksheet = parse(path);
+    const pane = worksheet.getElementsByTagNameNS(mainNs, "pane")[0];
+    const freezeFirstRow = pane?.getAttribute("state") === "frozen" && pane.getAttribute("ySplit") === "1" &&
+      !Number(pane.getAttribute("xSplit"));
+    for (const node of worksheet.getElementsByTagNameNS("*", "c")) {
       const address = node.getAttribute("r");
       const formula = node.getElementsByTagNameNS("*", "f")[0]?.textContent;
       const value = node.getElementsByTagNameNS("*", "v")[0]?.textContent;
@@ -134,6 +142,6 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       rows = Math.max(rows, Number(address.slice(1)));
       columns = Math.max(columns, address.charCodeAt(0) - 64);
     }
-    return { name: definition.getAttribute("name") || "", rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats };
+    return { name: definition.getAttribute("name") || "", rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, freezeFirstRow };
   });
 }

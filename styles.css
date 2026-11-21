@@ -521,8 +521,10 @@ a.nav-item{text-decoration:none}
 .sheets-grid table{border-spacing:0;table-layout:fixed;width:max-content;min-width:100%}
 .sheets-grid :is(td,th){padding:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
 .sheets-grid th,.sheets-grid thead td{padding:5px 10px;background:var(--canvas);color:var(--muted);font-size:11px}
-.sheets-grid thead{position:sticky;top:0;z-index:2}
+.sheets-grid thead{position:sticky;top:0;z-index:3}
 .sheets-grid tbody th{position:sticky;left:0;z-index:1}
+.sheets-grid .sheet-freeze-row tbody tr:first-child :is(td,th){position:sticky;top:var(--sheet-heading-height);z-index:1;background:var(--panel);border-bottom-color:var(--muted)}
+.sheets-grid .sheet-freeze-row tbody tr:first-child th{z-index:2;background:var(--canvas)}
 .sheets-grid input{display:block;width:100%;min-width:104px;min-height:30px;border:0;padding:4px 8px;background:transparent;color:var(--ink)}
 .sheets-grid input:focus{outline:2px solid var(--blue);outline-offset:-2px;background:var(--purple-soft)}
 .sheets-tab-bar{margin-top:10px}

@@ -50,10 +50,12 @@ const zip = zipContext.fflate;
 const dom = new JSDOM();
 try {
   const sheets = [{ name: "Sales & costs", cells: { A1: "10", A2: "20", A3: "=SUM(A1:A2)", B1: "001", B2: "'=literal" }, formats: { A3: "number", C1: "percent" } }, { name: "Notes", cells: { A1: 'Quotes and <symbols> "work"' }, formats: {} }];
-  const bytes = exportWorkbook(sheets, zip);
+  const bytes = exportWorkbook([{ ...sheets[0], freezeFirstRow: true }, sheets[1]], zip);
   const imported = importWorkbook(bytes, zip, dom.window.DOMParser);
   assert.deepEqual(imported.map(({ name, cells, formats }) => ({ name, cells, formats })), sheets);
   assert.equal(calculateSheet(imported[0].cells)("A3"), 30);
+  assert.equal(imported[0].freezeFirstRow, true);
+  assert.equal(imported[1].freezeFirstRow, false);
   const reopened = importWorkbook(exportWorkbook(linked, zip), zip, dom.window.DOMParser);
   assert.equal(reopened[0].cells.A1, linked[0].cells.A1);
   assert.equal(calculateWorkbook(reopened, 0)("A1"), 14);
