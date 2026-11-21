@@ -1,4 +1,4 @@
-import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, numberFormats, parseSheetFilter, validationOptions } from "./sheet-model.js";
+import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizePrintSettings, numberFormats, parseSheetFilter, validationOptions } from "./sheet-model.js";
 import { readWorksheetChart, writeWorksheetChart } from "./sheet-chart-xlsx.js";
 
 const mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -54,7 +54,7 @@ function createStyleBook() {
   return { indexFor, markup, hasCellStyles: () => cellFormats.length > 1 };
 }
 
-function makeWorksheet({ cells, formats = {}, styles = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart, conditionalRule }, valueAt, styleBook) {
+function makeWorksheet({ cells, formats = {}, styles = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart, conditionalRule, print }, valueAt, styleBook) {
   const rows = new Map();
   for (const address of new Set([...Object.keys(cells), ...Object.keys(formats), ...Object.keys(styles)])) {
     const raw = cells[address] ?? "";
@@ -99,7 +99,12 @@ function makeWorksheet({ cells, formats = {}, styles = {}, freezeFirstRow, valid
   const conditional = condition
     ? `<conditionalFormatting sqref="${condition.range}"><cfRule type="cellIs" dxfId="${conditionNames.indexOf(condition.color)}" priority="1" operator="${condition.operator}"><formula>${condition.threshold}</formula></cfRule></conditionalFormatting>`
     : "";
-  return `<worksheet xmlns="${mainNs}"${relationship}>${views}<sheetData>${data}</sheetData>${filterMarkup}${conditional}${validations}${drawing}</worksheet>`;
+  const settings = normalizePrintSettings(print);
+  const pageOptions = print
+    ? `<printOptions gridLines="${settings.grid ? 1 : 0}"/><pageMargins left="0.472" right="0.472" top="0.472" bottom="0.472" header="0.25" footer="0.25"/><pageSetup paperSize="${settings.paper === "letter" ? 1 : 9}" orientation="${settings.orientation}" fitToWidth="1" fitToHeight="0"/>`
+    : "";
+  const pageProperties = print ? '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' : "";
+  return `<worksheet xmlns="${mainNs}"${relationship}>${pageProperties}${views}<sheetData>${data}</sheetData>${filterMarkup}${conditional}${validations}${pageOptions}${drawing}</worksheet>`;
 }
 
 function readFilter(worksheet) {
@@ -145,6 +150,7 @@ export function exportWorkbook(sheets, zip) {
   const rels = [];
   const overrides = [];
   const names = new Set();
+  const printNames = [];
   const styleBook = createStyleBook();
   for (const [index, sheet] of sheets.entries()) {
     const id = index + 1;
@@ -156,6 +162,20 @@ export function exportWorkbook(sheets, zip) {
     }
     names.add(name.toLowerCase());
     workbookSheets.push(`<sheet name="${xml(name)}" sheetId="${id}"${sheet.hidden ? ' state="hidden"' : ""} r:id="rId${id}"/>`);
+    if (sheet.print) {
+      const settings = normalizePrintSettings(sheet.print);
+      const prefix = "'" + name.replaceAll("'", "''") + "'!";
+      const addName = (key, reference) => printNames.push(`<definedName name="_xlnm.${key}" localSheetId="${index}">${xml(prefix + reference)}</definedName>`);
+      if (settings.range) {
+        const [start, end = start] = settings.range.split(":");
+        const absolute = (address) => "$" + address[0] + "$" + address.slice(1);
+        addName("Print_Area", absolute(start) + ":" + absolute(end));
+      }
+      if (settings.repeat) {
+        const row = settings.range.split(":")[0].slice(1) || "1";
+        addName("Print_Titles", `$${row}:$${row}`);
+      }
+    }
     rels.push(`<Relationship Id="rId${id}" Type="${officeNs}/worksheet" Target="${target}"/>`);
     overrides.push(`<Override PartName="/xl/${target}" ContentType="${worksheetType}"/>`);
     const valueAt = calculateWorkbook(sheets, index);
@@ -171,7 +191,8 @@ export function exportWorkbook(sheets, zip) {
   const workbookViews = sheets.some((sheet) => sheet.freezeFirstRow || sheet.hidden)
     ? `<bookViews><workbookView activeTab="${Math.max(0, sheets.findIndex((sheet) => !sheet.hidden))}"/></bookViews>`
     : "";
-  files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}">${workbookViews}<sheets>${workbookSheets.join("")}</sheets></workbook>`;
+  const definedNames = printNames.length ? `<definedNames>${printNames.join("")}</definedNames>` : "";
+  files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}">${workbookViews}<sheets>${workbookSheets.join("")}</sheets>${definedNames}</workbook>`;
   files["xl/_rels/workbook.xml.rels"] = `<Relationships xmlns="${packageNs}">${rels.join("")}</Relationships>`;
   files["_rels/.rels"] = `<Relationships xmlns="${packageNs}"><Relationship Id="rId1" Type="${officeNs}/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
   files["[Content_Types].xml"] = `<Types xmlns="${contentNs}"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="${workbookType}"/>${overrides.join("")}</Types>`;
@@ -232,9 +253,12 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const color = dxf.getElementsByTagNameNS(mainNs, "fgColor")[0]?.getAttribute("rgb")?.toUpperCase();
     return conditionNames.find((name) => "FF" + conditionalColors[name] === color);
   });
-  const definitions = [...parse("xl/workbook.xml").getElementsByTagNameNS("*", "sheet")];
+  const workbook = parse("xl/workbook.xml");
+  const definitions = [...workbook.getElementsByTagNameNS("*", "sheet")];
+  const printNames = [...workbook.getElementsByTagNameNS(mainNs, "definedName")].filter((item) =>
+    ["_xlnm.Print_Area", "_xlnm.Print_Titles"].includes(item.getAttribute("name")) && /^\d+$/.test(item.getAttribute("localSheetId") ?? ""));
   if (!definitions.length || definitions.length > 12) throw new Error("A workbook must contain between 1 and 12 sheets.");
-  return definitions.map((definition) => {
+  return definitions.map((definition, index) => {
     const relationship = [...definition.attributes].find((attribute) => attribute.localName === "id" && attribute.namespaceURI);
     const target = relationships.get(relationship?.value) || "";
     const path = target.startsWith("/") ? target.slice(1) : "xl/" + target;
@@ -245,6 +269,18 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     let rows = 20;
     let columns = 8;
     const worksheet = parse(path);
+    const namedPrint = (key) => printNames.find((item) =>
+      item.getAttribute("name") === "_xlnm." + key && Number(item.getAttribute("localSheetId")) === index)?.textContent.split("!").at(-1).replaceAll("$", "");
+    const setup = worksheet.getElementsByTagNameNS(mainNs, "pageSetup")[0];
+    const options = worksheet.getElementsByTagNameNS(mainNs, "printOptions")[0];
+    const printedRange = namedPrint("Print_Area");
+    const titles = namedPrint("Print_Titles");
+    const printedFirstRow = printedRange?.match(/^[A-Z]([1-9]\d*)/)?.[1] ?? "1";
+    const print = setup || options || printedRange || titles ? normalizePrintSettings({
+      range: printedRange, paper: setup?.getAttribute("paperSize") === "1" ? "letter" : "a4",
+      orientation: setup?.getAttribute("orientation"), grid: ["1", "true"].includes(options?.getAttribute("gridLines")),
+      repeat: titles === printedFirstRow + ":" + printedFirstRow,
+    }) : undefined;
     const name = definition.getAttribute("name") || "";
     const chart = readWorksheetChart(files, parse, worksheet, path, name);
     const validation = readValidation(worksheet);
@@ -292,7 +328,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       rows = Math.max(rows, Number(address.slice(1)));
       columns = Math.max(columns, address.charCodeAt(0) - 64);
     }
-    for (const rule of [filter, conditionalRule].filter(Boolean)) {
+    for (const rule of [filter, conditionalRule, print?.range && print].filter(Boolean)) {
       const end = rule.range.split(":").at(-1);
       rows = Math.max(rows, Number(end.slice(1)));
       columns = Math.max(columns, end.charCodeAt(0) - 64);
@@ -302,6 +338,6 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       columns = Math.max(columns, chart.values.charCodeAt(0) - 64);
     }
     const hidden = ["hidden", "veryHidden"].includes(definition.getAttribute("state"));
-    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles, freezeFirstRow, validation, filter, chart, hidden, conditionalRule };
+    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print };
   });
 }

@@ -26,10 +26,12 @@
       <details name="sheet-commands" class="command-menu"><summary>File</summary><div>
         <button id="workbook-new" type="button">New workbook</button>
         <button id="sheet-open" type="button">Open CSV</button>
+        <button id="sheet-open-preview" type="button">Import CSV with preview</button>
         <button id="workbook-open" type="button">Open Excel</button>
         <button id="workbook-export" type="button">Download Excel</button>
         <button id="workbook-save" type="button">Save on this device</button>
-        <button id="sheet-export" type="button">Download CSV</button>
+        <button id="workbook-print" type="button">Print sheet / PDF</button>
+        <button id="sheet-export" type="button">Download CSV (values only)</button>
       </div></details>
       <details name="sheet-commands" class="command-menu" open><summary>Home</summary><div>
         <button id="sheet-copy" type="button">Copy selection</button>
@@ -55,6 +57,9 @@
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Formulas</summary><div>
         <button type="button" id="sheet-autosum">Sum cells above</button>
+      </div></details>
+      <details name="sheet-commands" class="command-menu"><summary>Page Layout</summary><div>
+        <button id="sheet-print-settings" type="button">Print setup</button>
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>View</summary><div>
         <button type="button" id="sheet-gridlines" aria-pressed="true">Show gridlines</button>
@@ -118,6 +123,35 @@
       <span id="sheet-selection-statistics"></span>
     </footer>
   </main>
+  <div id="sheet-print-layout" class="sheet-print-layout"></div>
+  <dialog id="sheet-csv-dialog" class="pdf-tool-dialog pdf-redact-dialog" aria-labelledby="sheet-csv-title">
+    <h2 id="sheet-csv-title">Preview CSV import</h2>
+    <form>
+      <label>Separator <select name="delimiter"><option value=",">Comma</option><option value=";">Semicolon</option><option value="tab">Tab</option><option value="|">Pipe</option></select></label>
+      <p role="status"></p>
+      <div class="sheet-csv-preview" tabindex="0" aria-label="Preview of the first records"><table></table></div>
+      <div class="sheets-actions">
+        <button class="button button-outline" type="submit">Import as new sheet</button>
+        <button class="button button-outline" type="button" data-close>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="sheet-print-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-print-title">
+    <h2 id="sheet-print-title">Print setup</h2>
+    <form>
+      <label>Print area <input name="range" maxlength="9" placeholder="Cells with content"></label>
+      <label>Paper <select name="paper"><option value="a4">A4</option><option value="letter">US Letter</option></select></label>
+      <label>Orientation <select name="orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
+      <label><input name="grid" type="checkbox"> Print gridlines</label>
+      <label><input name="repeat" type="checkbox"> Repeat the first row</label>
+      <p role="status"></p>
+      <div class="sheets-actions">
+        <button class="button button-outline" type="submit">Save setup</button>
+        <button class="button button-outline" type="submit" data-preview>Open print preview</button>
+        <button class="button button-outline" type="button" data-close>Cancel</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="sheet-style-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-style-title">
     <h2 id="sheet-style-title">Cell appearance</h2>
     <form>

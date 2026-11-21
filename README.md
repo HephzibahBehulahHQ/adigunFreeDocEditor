@@ -25,6 +25,8 @@ Build the bundled editor runtime and start the local server:
 npm ci
 npm run build:editor
 npm run build:pdf
+npm run build:ocr
+python scripts/assemble_pdfjs.py
 python -m http.server 4173
 ```
 
@@ -34,11 +36,11 @@ Open `http://localhost:4173`. The DOCX converter is vendored locally; the app do
 
 - **AI drafts** previews document and slide drafts and downloads text or editable PowerPoint files after review. It requires a private relay and an explicitly approved prompt.
 
-- Open **PDF** from the sidebar to preview local PDFs and assemble a new PDF from selected pages. Page ranges, file order, and per-source rotation are supported. Interactive forms and signed PDFs are excluded from page export.
+- Open **PDF** to navigate pages and bookmarks, search and select PDF text, add page markup, and arrange or extract pages. Fill supported AcroForm fields, place text or a visible typed signature, and save a new copy. OCR produces editable English text. Permanent redaction produces a separate flattened, image-only PDF. Signed files and XFA forms require a compatible external application.
 
-- Open **Slides** from the sidebar to edit and present a browser-local, text-based deck. Add, duplicate, reorder, and delete slides, or import slide titles and text from PowerPoint. Download an editable PowerPoint file. Imported images, original styling, and transitions are outside this increment.
+- Open **Slides** to edit thumbnails, titles, speaker notes, text boxes, basic shapes, and supported PNG or JPEG pictures. Hide, reorder, and duplicate slides. Native PPTX round-trips cover supported slide objects, notes, and transitions. Object animations play in the browser slideshow. Print visible slides to save a PDF.
 
-- Open **Sheets** from the sidebar to edit a browser-local workbook with up to 12 sheets, 100 rows, and 26 columns per sheet. Use arithmetic, cell references, and SUM, AVERAGE, MIN, and MAX. Import CSV into a new sheet and export the active sheet’s calculated values as CSV. Open Excel .xlsx workbooks for cell values and supported formulas, and export the workbook as .xlsx. Excel formatting, charts, macros, and cross-sheet formulas are outside this increment.
+- Open **Sheets** to work with up to 12 sheets, 100 rows and 26 columns per sheet. Edit ranges, apply styles and validation, calculate cross-sheet references, sort and filter records, freeze headers, refresh PivotTables, and build range-backed bar charts. Supported styles, validation, conditional rules, charts and print settings round-trip through XLSX. Preview CSV columns before importing. CSV exports contain calculated values from one sheet. PivotTable results export as cells.
 
 - Start from six on-device templates for meeting notes, project briefs, formal letters, status reports, research notes, and resumes, or create a blank document. Template content opens in the editable workspace and stays in this browser.
 - Create and edit text with headings, emphasis, lists, alignment, links, tables, local PNG/JPEG/GIF images (up to 8 MB each) and browser spellcheck.
@@ -49,11 +51,12 @@ Open `http://localhost:4173`. The DOCX converter is vendored locally; the app do
 - Set default paper size, orientation and margins for newly created documents in Settings.
 - New and migrated documents are stored as versioned, allow-listed JSON trees; HTML and Word export serialize from that model.
 - Import TXT, Markdown and HTML as editable text.
+- Insert or refresh a contents list from document headings, edit native Word footnotes, and use the document-only print preview to save a PDF.
 - View a PDF using the browser's PDF viewer and download the original PDF.
 - Export the current editable document as HTML.
 - Build a local extractive overview from sentences in the open document. It does not call or imitate an AI model.
 
-PDF editing, conversion pipelines, cloud accounts, sharing and hosted AI are not implemented in this slice and are not presented as available features.
+Browser-local saving keeps editable Docs, Sheets and Slides on the device. Download PDF copies and exported office files to retain them outside the current workspace. Format support varies by operation.
 
 ## Configure the private AI relay
 
