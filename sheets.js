@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, displayCell, maxCellLength, maxColumns, maxRows, numberFormats, parseCsv, toCsv, validationOptions } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseCsv, parseSheetFilter, toCsv, validationOptions } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
@@ -26,6 +26,7 @@ try {
       formats: Object.fromEntries(Object.entries(item?.formats ?? {}).filter(([key, value]) =>
         validAddress.test(key) && Object.hasOwn(numberFormats, value))),
       freezeFirstRow: item?.freezeFirstRow === true,
+      filter: parseSheetFilter(item?.filter),
       validation: Object.fromEntries(Object.entries(item?.validation ?? {})
         .filter(([address, options]) => validAddress.test(address) && validationOptions(options).length)),
       pivot: item?.pivot && Number.isInteger(item.pivot.source) &&
@@ -122,6 +123,11 @@ function refreshValues() {
   for (const field of grid.querySelectorAll("input")) {
     if (document.activeElement !== field) field.value = displayCell(valueAt(field.dataset.cell), sheet.formats?.[field.dataset.cell]);
   }
+  const hidden = hiddenFilterRows(sheet.filter, valueAt);
+  for (const [index, row] of [...grid.tBodies[0].rows].entries()) {
+    row.hidden = hidden.has(index + 1) && !row.contains(document.activeElement);
+  }
+  $("sheet-filter-clear").disabled = !sheet.filter;
   refreshSelection(valueAt);
 }
 
@@ -270,6 +276,42 @@ $("sheet-validation").addEventListener("click", () => {
   validationStatus.textContent = "";
   validationDialog.showModal();
 });
+
+const filterDialog = $("sheet-filter-dialog");
+const filterForm = filterDialog.querySelector("form");
+const filterStatus = filterForm.querySelector("[role=status]");
+$("sheet-filter").addEventListener("click", () => {
+  const sheet = currentSheet();
+  const filter = sheet.filter;
+  filterForm.elements.range.value = filter?.range || selectedRange?.label || `A1:${cellAddress(sheet.rows - 1, sheet.columns - 1)}`;
+  filterForm.elements.column.value = filter?.column || selectedAddress[0];
+  filterForm.elements.value.value = filter?.value ?? "";
+  filterStatus.textContent = "";
+  filterDialog.showModal();
+});
+filterDialog.querySelector("[data-close]").addEventListener("click", () => filterDialog.close());
+filterForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const { range, column, value } = filterForm.elements;
+  const filter = parseSheetFilter({ range: range.value, column: column.value, value: value.value });
+  const end = filter?.range.split(":")[1];
+  const sheet = currentSheet();
+  if (!end || Number(end.slice(1)) > sheet.rows || end.charCodeAt(0) - 64 > sheet.columns) {
+    filterStatus.textContent = "Choose a header row, data rows and a filter column within this sheet.";
+    return;
+  }
+  recordEdit();
+  sheet.filter = filter;
+  save();
+  filterDialog.close();
+  refreshValues();
+});
+$("sheet-filter-clear").addEventListener("click", () => {
+  recordEdit();
+  currentSheet().filter = null;
+  save();
+  refreshValues();
+});
 validationDialog.querySelector("[data-close]").addEventListener("click", () => validationDialog.close());
 validationForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -333,7 +375,7 @@ $("sheet-selected").addEventListener("keydown", (event) => {
   const label = name.value.trim().toUpperCase();
   const [first, last = first, extra] = label.split(":");
   const field = (address) => validAddress.test(address) && grid.querySelector(`[data-cell="${address}"]`);
-  if (!field(first) || !field(last) || extra !== undefined) {
+  if (!field(first) || !field(last) || extra !== undefined || field(first).closest("tr").hidden) {
     status("Enter a cell or range within this sheet, such as B2 or B2:F12.");
     return;
   }
@@ -418,8 +460,13 @@ grid.addEventListener("keydown", (event) => {
   }
   if (event.key !== "Enter" || !address || event.isComposing) return;
   event.preventDefault();
-  const row = Number(address.slice(1)) + (event.shiftKey ? -1 : 1);
-  grid.querySelector(`[data-cell="${address[0]}${row}"]`)?.focus();
+  const direction = event.shiftKey ? -1 : 1;
+  for (let row = Number(address.slice(1)) + direction; row > 0 && row <= currentSheet().rows; row += direction) {
+    const field = grid.querySelector(`[data-cell="${address[0]}${row}"]`);
+    if (field.closest("tr").hidden) continue;
+    field.focus();
+    break;
+  }
 });
 $("sheet-add").addEventListener("click", () => {
   recordEdit();

@@ -1,4 +1,4 @@
-import { calculateWorkbook, cellAddress, maxCellLength, maxColumns, maxRows, numberFormats, validationOptions } from "./sheet-model.js";
+import { calculateWorkbook, cellAddress, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseSheetFilter, validationOptions } from "./sheet-model.js";
 
 const mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const officeNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -15,7 +15,7 @@ function xml(value) {
     .replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
 }
 
-function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {} }, valueAt) {
+function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {}, filter }, valueAt) {
   const rows = new Map();
   for (const address of new Set([...Object.keys(cells), ...Object.keys(formats)])) {
     const raw = cells[address] ?? "";
@@ -35,8 +35,10 @@ function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {} },
     if (style > 0) markup = markup.replace("<c ", `<c s="${style}" `);
     rows.get(row).push({ address, markup });
   }
+  const hidden = hiddenFilterRows(filter, valueAt);
+  for (const row of hidden) if (!rows.has(row)) rows.set(row, []);
   const data = [...rows].sort(([a], [b]) => a - b).map(([row, cellsInRow]) =>
-    `<row r="${row}">${cellsInRow.sort((a, b) => a.address.localeCompare(b.address)).map((cell) => cell.markup).join("")}</row>`).join("");
+    `<row r="${row}"${hidden.has(row) ? ' hidden="1"' : ""}>${cellsInRow.sort((a, b) => a.address.localeCompare(b.address)).map((cell) => cell.markup).join("")}</row>`).join("");
   const views = freezeFirstRow
     ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>'
     : "";
@@ -49,7 +51,23 @@ function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {} },
   const rules = [...lists].map(([list, addresses]) =>
     `<dataValidation type="list" allowBlank="1" showErrorMessage="1" sqref="${addresses.join(" ")}"><formula1>"${xml(list)}"</formula1></dataValidation>`).join("");
   const validations = rules ? `<dataValidations count="${lists.size}">${rules}</dataValidations>` : "";
-  return `<worksheet xmlns="${mainNs}">${views}<sheetData>${data}</sheetData>${validations}</worksheet>`;
+  const filterMarkup = filter
+    ? `<autoFilter ref="${filter.range}"><filterColumn colId="${filter.column.charCodeAt(0) - filter.range.charCodeAt(0)}"><filters><filter val="${xml(filter.value)}"/></filters></filterColumn></autoFilter>`
+    : "";
+  return `<worksheet xmlns="${mainNs}">${views}<sheetData>${data}</sheetData>${filterMarkup}${validations}</worksheet>`;
+}
+
+function readFilter(worksheet) {
+  const autoFilter = worksheet.getElementsByTagNameNS(mainNs, "autoFilter")[0];
+  if (!autoFilter || autoFilter.children.length !== 1) return null;
+  const range = autoFilter.getAttribute("ref") ?? "";
+  const filterColumn = autoFilter.firstElementChild;
+  const offset = filterColumn.getAttribute("colId") ?? "";
+  const filters = filterColumn.firstElementChild;
+  if (!/^\d{1,2}$/.test(offset) || filters?.localName !== "filters" || filters.children.length !== 1 ||
+    filters.firstElementChild.localName !== "filter" || filters.hasAttribute("blank")) return null;
+  const column = String.fromCharCode(range.charCodeAt(0) + Number(offset));
+  return parseSheetFilter({ range, column, value: filters.firstElementChild.getAttribute("val") });
 }
 
 function readValidation(worksheet) {
@@ -150,6 +168,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     let columns = 8;
     const worksheet = parse(path);
     const validation = readValidation(worksheet);
+    const filter = readFilter(worksheet);
     const pane = worksheet.getElementsByTagNameNS(mainNs, "pane")[0];
     const freezeFirstRow = pane?.getAttribute("state") === "frozen" && pane.getAttribute("ySplit") === "1" &&
       !Number(pane.getAttribute("xSplit"));
@@ -180,6 +199,11 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       rows = Math.max(rows, Number(address.slice(1)));
       columns = Math.max(columns, address.charCodeAt(0) - 64);
     }
-    return { name: definition.getAttribute("name") || "", rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, freezeFirstRow, validation };
+    if (filter) {
+      const end = filter.range.split(":")[1];
+      rows = Math.max(rows, Number(end.slice(1)));
+      columns = Math.max(columns, end.charCodeAt(0) - 64);
+    }
+    return { name: definition.getAttribute("name") || "", rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, freezeFirstRow, validation, filter };
   });
 }
