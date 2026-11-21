@@ -108,6 +108,11 @@ const factory = new Function("Node", "editor", "title", "atob", "$", "pageNumber
 const { makeWordPackage, makeStoredZip, setPageNumbers, setHeaderFooter } = factory(Node, root, () => "Image export QA", atob, () => page, true, "Project & scope", "Confidential");
 const result = makeWordPackage(root);
 assert.deepEqual(result.unsupported, []);
+const footnote = exportElement("SPAN", [], { "data-footnote-text": "Check A & B" });
+const notePackage = makeWordPackage(exportElement("DIV", [paragraph(footnote)])).files;
+assert.match(notePackage["word/document.xml"], /<w:footnoteReference w:id="1"\/>/);
+assert.match(notePackage["word/footnotes.xml"], /Check A &amp; B/);
+assert.match(notePackage["word/_rels/document.xml.rels"], /relationships\/footnotes" Target="footnotes.xml"/);
 const headingDocumentXml = result.files["word/document.xml"];
 const headingStylesXml = result.files["word/styles.xml"];
 for (const level of [4, 5, 6]) {

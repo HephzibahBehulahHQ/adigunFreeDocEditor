@@ -202,6 +202,7 @@
     references: [
       [{ label: "Document outline", action: "outline", icon: "☷ Outline" }, { label: "Quick overview", action: "quick-overview", icon: "✧ Quick overview" }],
       [{ label: "Insert or refresh table of contents", action: "contents", icon: "Table of contents" }],
+      [{ label: "Insert footnote", action: "footnote", icon: "Footnote" }],
     ],
     review: [
       [{ label: "Track changes", action: "track-changes", icon: "▤ Track changes" }, { label: "Add comment", action: "add-comment", icon: "▧ Comment" }, { label: "Review comments", action: "show-comments", icon: "☷ Comments" }],
@@ -333,6 +334,14 @@
     $("#insight-reading").textContent = isEditableDocument ? (words < 180 ? "<1 min" : `${Math.ceil(words / 180)} min`) : "—";
  
     renderOutline();
+    const footnotes = $("#print-footnotes");
+    const notes = isEditableDocument ? [...editor.querySelectorAll("[data-footnote-text]")] : [];
+    footnotes.hidden = !notes.length;
+    footnotes.querySelector("ol").replaceChildren(...notes.map((marker) => {
+      const note = document.createElement("li");
+      note.textContent = marker.dataset.footnoteText;
+      return note;
+    }));
   }
 
   function editorOutlineHeadings() {
@@ -3298,6 +3307,35 @@
     }
   }
 
+  function recoverWordFootnotes(source) {
+    const parsed = new DOMParser().parseFromString(source, "text/html");
+    const notes = new Map([...parsed.querySelectorAll('li[id^="footnote-"]')].map((item) => [item.id, item]));
+    const used = new Set();
+    for (const anchor of parsed.querySelectorAll('sup a[href^="#footnote-"]')) {
+      const id = anchor.getAttribute("href").slice(1);
+      const note = notes.get(id);
+      if (!note) continue;
+      const copy = note.cloneNode(true);
+      for (const backlink of copy.querySelectorAll('a[href^="#footnote-ref-"]')) backlink.remove();
+      const text = [...copy.children].map((paragraph) => paragraph.textContent.trim()).filter(Boolean).join("\n") || copy.textContent.trim();
+      if (!text) continue;
+      const marker = parsed.createElement("span");
+      marker.setAttribute("data-footnote-text", text.slice(0, 2000));
+      let reference = anchor.parentElement;
+      while (reference.parentElement?.tagName === "SUP" && reference.parentElement.childNodes.length === 1) {
+        reference = reference.parentElement;
+      }
+      reference.replaceWith(marker);
+      used.add(note);
+    }
+    for (const note of used) {
+      const list = note.parentElement;
+      note.remove();
+      if (!list.children.length) list.remove();
+    }
+    return parsed.body.innerHTML;
+  }
+
   function sanitizeDocxHtml(source) {
     const allowedTags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "em", "i", "u", "s", "strike", "del", "ul", "ol", "li", "a", "br", "hr", "blockquote", "pre", "code", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "img"]);
     const parsed = new DOMParser().parseFromString(`<main>${source}</main>`, "text/html");
@@ -3320,8 +3358,10 @@
         }
         return image;
       }
-      if (!allowedTags.has(tag)) { removed++; const fragment = document.createDocumentFragment(); for (const child of [...node.childNodes]) { const safeChild = copy(child); if (safeChild) fragment.append(safeChild); } return fragment; }
+      const footnote = tag === "span" && node.getAttribute("data-footnote-text");
+      if (!allowedTags.has(tag) && !footnote) { removed++; const fragment = document.createDocumentFragment(); for (const child of [...node.childNodes]) { const safeChild = copy(child); if (safeChild) fragment.append(safeChild); } return fragment; }
       const element = document.createElement(tag);
+      if (footnote) element.setAttribute("data-footnote-text", footnote.trim().slice(0, 2000));
       if (tag === "hr" && (node.getAttribute("data-page-break") === "true" || node.classList.contains("adigun-imported-page-break"))) {
         element.setAttribute("data-page-break", "true");
       }
@@ -3490,7 +3530,7 @@
         const converted = await window.mammoth.convertToHtml({ arrayBuffer }, {
           styleMap: ["br[type='page'] => hr.adigun-imported-page-break:fresh"],
         });
-        const sanitized = sanitizeDocxHtml(converted.value);
+        const sanitized = sanitizeDocxHtml(recoverWordFootnotes(converted.value));
         const revisionMapping = mapDocxRevisionsToHtml(sanitized.html, revisionCounts?.paragraphs);
         const commentTargetText = new DOMParser().parseFromString("<main>" + revisionMapping.html + "</main>", "text/html").querySelector("main")?.textContent || "";
         const importedCommentData = await readDocxReviewComments(arrayBuffer, archiveEntry, commentTargetText);
@@ -4166,6 +4206,62 @@
     notify("Table of contents refreshed.");
   }
 
+  const footnoteDialog = $("#footnote-dialog");
+  const footnoteForm = footnoteDialog.querySelector("form");
+  let footnotePosition;
+  let footnoteEditor;
+
+  function openFootnote(marker) {
+    if (!liveEditor) return;
+    footnoteEditor = liveEditor;
+    footnotePosition = undefined;
+    if (marker) {
+      const position = liveEditor.view.posAtDOM(marker, 0);
+      footnotePosition = [position, position - 1].find((index) => index >= 0 &&
+        liveEditor.state.doc.nodeAt(index)?.type.name === "footnote");
+      if (footnotePosition === undefined) return;
+    }
+    footnoteForm.elements.text.value = marker?.dataset.footnoteText ?? "";
+    $("#footnote-remove").hidden = !marker;
+    footnoteDialog.showModal();
+  }
+
+  for (const eventName of ["click", "keydown"]) editorContainer.addEventListener(eventName, (event) => {
+    const marker = event.target.closest?.("[data-footnote-text]");
+    if (!marker || (event.type === "keydown" && !["Enter", " "].includes(event.key))) return;
+    event.preventDefault();
+    openFootnote(marker);
+  });
+  $("#footnote-cancel").addEventListener("click", () => footnoteDialog.close());
+  function finishFootnote() {
+    footnoteDialog.close();
+    countWords();
+    saveDocument();
+  }
+  $("#footnote-remove").addEventListener("click", () => {
+    if (liveEditor !== footnoteEditor || footnotePosition === undefined) return;
+    const { doc, tr } = liveEditor.state;
+    const note = doc.nodeAt(footnotePosition);
+    if (note?.type.name !== "footnote") return;
+    liveEditor.view.dispatch(tr.delete(footnotePosition, footnotePosition + note.nodeSize));
+    finishFootnote();
+  });
+  footnoteForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const text = footnoteForm.elements.text.value.trim();
+    if (!text || !liveEditor || liveEditor !== footnoteEditor) return;
+    if (footnotePosition === undefined) {
+      const inserted = liveEditor.chain().focus().insertContentAt(liveEditor.state.selection.to, { type: "footnote", attrs: { text } }).run();
+      if (!inserted) return;
+    } else {
+      const { doc, tr } = liveEditor.state;
+      const note = doc.nodeAt(footnotePosition);
+      if (note?.type.name !== "footnote") return;
+      liveEditor.view.dispatch(tr.setNodeMarkup(footnotePosition, undefined, { text }));
+    }
+    finishFootnote();
+  });
+
   function insertTableRow(position) {
     const activeCell = selectedTableCell();
     if (!activeCell) { notify("Place the cursor in a table cell first."); return; }
@@ -4463,6 +4559,7 @@
         break;
       case "outline": $("#toggle-outline").click(); break;
       case "contents": updateTableOfContents(); break;
+      case "footnote": openFootnote(); break;
       case "quick-overview": toggleAssistant(true); buildOverview(); break;
       case "track-changes":
         trackChangesEnabled = !trackChangesEnabled;
@@ -4696,6 +4793,7 @@
   function makeWordPackage(source = editor, pageLayout = null, comments = []) {
     const exportLayout = pageLayout || { paper: $("#editor-card").classList.contains("paper-letter") ? "letter" : "a4", orientation: $("#editor-card").classList.contains("landscape") ? "landscape" : "portrait", margins: $("#editor-card").classList.contains("margin-narrow") ? "narrow" : $("#editor-card").classList.contains("margin-wide") ? "wide" : "normal", pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText };
     const relationships = [];
+    const footnotes = [];
     const hyperlinkIds = new Map();
     const imageIds = new Map();
     const images = [];
@@ -4788,6 +4886,11 @@
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return "";
       const tag = node.tagName.toLowerCase();
+      const footnote = tag === "span" && node.getAttribute("data-footnote-text");
+      if (footnote) {
+        const id = footnotes.push(footnote);
+        return `<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="${id}"/></w:r>`;
+      }
       if (tag === "br") return "<w:r><w:br/></w:r>";
       if (tag === "img") {
         const src = node.getAttribute("src") || "";
@@ -5105,11 +5208,20 @@
     if (hasFooter) relationships.push(`<Relationship Id="${footerRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`);
     if (commentsRelationshipId) relationships.push(`<Relationship Id="${commentsRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/>`);
     if (commentsExtendedRelationshipId) relationships.push(`<Relationship Id="${commentsExtendedRelationshipId}" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="commentsExtended.xml"/>`);
+    if (footnotes.length) relationships.push('<Relationship Id="rIdFootnotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>');
     const documentRelationships = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>${relationships.join("")}</Relationships>`;
     const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const coreProperties = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${wordXmlText(title())}</dc:title><dc:creator>adigunFreeDocEditor</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
     const appProperties = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>adigunFreeDocEditor</Application></Properties>';
     const files = { "[Content_Types].xml": contentTypes, "_rels/.rels": rootRelationships, "word/document.xml": documentXml, "word/styles.xml": stylesXml, "word/numbering.xml": numberingXml, "word/_rels/document.xml.rels": documentRelationships, "docProps/core.xml": coreProperties, "docProps/app.xml": appProperties };
+    if (footnotes.length) {
+      files["[Content_Types].xml"] = contentTypes.replace("</Types>", '<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/></Types>');
+      const entries = footnotes.map((note, index) => {
+        const lines = note.split(/\r?\n/).map((line) => `<w:t xml:space="preserve">${wordXmlText(line)}</w:t>`).join("<w:br/>");
+        return `<w:footnote w:id="${index + 1}"><w:p><w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> </w:t>${lines}</w:r></w:p></w:footnote>`;
+      });
+      files["word/footnotes.xml"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>' + entries.join("") + "</w:footnotes>";
+    }
     if (exportedComments.length) {
       files["word/comments.xml"] = commentsXml;
       files["word/commentsExtended.xml"] = commentsExtendedXml;
