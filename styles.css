@@ -432,6 +432,7 @@ a.nav-item{text-decoration:none}
 .slides-workspace{max-width:1450px;margin:auto;padding:16px clamp(12px,3vw,36px)}
 .slides-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .slides-actions button{min-height:38px}
+.slides-actions a{text-decoration:none;min-height:38px}
 .slides-actions button:disabled{opacity:.5;cursor:not-allowed}
 .slides-actions input{
   min-width:0;min-height:38px;padding:6px 10px;border:1px solid var(--line);
@@ -463,6 +464,19 @@ a.nav-item{text-decoration:none}
   .slides-paper{min-height:220px}
   .slides-actions button,#slide-list button{min-height:44px}
 }
+.ai-layout{display:grid;grid-template-columns:minmax(280px,430px) minmax(0,1fr);gap:20px;align-items:start}
+.ai-layout :is(form,.ai-preview){padding:16px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+.ai-layout form{display:grid;gap:10px}
+.ai-layout label{display:grid;gap:5px;font-size:12px;font-weight:650}
+.ai-layout :is(input:not([type="checkbox"]),textarea,select){
+  width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;
+  background:var(--panel);color:var(--ink);font:inherit;
+}
+.ai-layout label.ai-consent{grid-template-columns:auto 1fr;align-items:start;font-weight:400}
+.ai-layout [role="status"]{margin:0;color:var(--muted)}
+.ai-preview h2{margin:0;font-size:16px}
+#ai-result p{white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:700px){.ai-layout{grid-template-columns:minmax(0,1fr)}}
 .sheets-workspace{padding:16px clamp(12px,3vw,36px)}
 .sheets-actions,.sheets-tab-bar,.sheets-tab-bar [role="group"]{display:flex;flex-wrap:wrap;gap:8px}
 .sheets-actions button,.sheets-tab-bar button{min-height:36px}
