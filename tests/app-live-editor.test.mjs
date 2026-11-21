@@ -109,6 +109,20 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(window.__testEditor.getText().trim(), "New word");
 
+  window.__testEditor.commands.setContent('<p data-line-spacing="1.5"><strong>Source</strong></p><p><em>Target</em></p>');
+  const painter = window.document.querySelector('[data-action="format-painter"]');
+  window.__testEditor.commands.setTextSelection({ from: 1, to: 7 });
+  painter.click();
+  assert.equal(painter.getAttribute("aria-pressed"), "true", "format painter remembers formatting");
+  window.__testEditor.commands.setTextSelection({ from: 9, to: 15 });
+  painter.click();
+  assert.equal(painter.getAttribute("aria-pressed"), "false", "format painter finishes after one application");
+  const paintedTarget = liveRoot.querySelectorAll("p")[1];
+  assert.equal(paintedTarget.textContent, "Target");
+  assert.equal(paintedTarget.querySelector("strong").textContent, "Target");
+  assert.equal(paintedTarget.querySelector("em"), null);
+  assert.equal(paintedTarget.getAttribute("data-line-spacing"), "1.5");
+
   window.__testEditor.commands.setContent("<h1>Chapter</h1><h6>Footnote</h6>");
   const outlineToggle = window.document.querySelector("#toggle-outline");
   assert.equal(outlineToggle.getAttribute("aria-expanded"), "false");

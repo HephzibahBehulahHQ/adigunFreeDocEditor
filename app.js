@@ -39,6 +39,7 @@
   let toastTimer;
   let zoom = 100;
   let showIndentRuler = false;
+  let formatPainter;
   let pdfUrl;
   let activePdfFile;
   let pageOrientation = "portrait";
@@ -1668,6 +1669,7 @@
 
   function setWorkspaceMode(mode) {
     const isDocument = mode === "document";
+    formatPainter = undefined;
     appShell.classList.toggle("editing-document", isDocument);
     $("#document-command-actions").hidden = !isDocument;
     const isConversion = mode === "conversion";
@@ -3623,7 +3625,7 @@
     ribbon.classList.toggle("home-ribbon", activeTab === "home");
     const [type, colors, spacing, emphasis, lists, indents, alignment] = toolsets.home;
     const groups = activeTab === "home" ? [
-      { label: "Clipboard", rows: [[{ label: "Paste text", action: "clipboard-paste", icon: "▣ Paste", shortcut: "Control+V Meta+V" }], [{ label: "Cut selection", action: "clipboard-cut", icon: "✂ Cut", shortcut: "Control+X Meta+X" }, { label: "Copy selection", action: "clipboard-copy", icon: "▤ Copy", shortcut: "Control+C Meta+C" }]] },
+      { label: "Clipboard", rows: [[{ label: "Paste text", action: "clipboard-paste", icon: "▣ Paste", shortcut: "Control+V Meta+V" }, { label: "Format Painter", action: "format-painter", icon: "Format Painter" }], [{ label: "Cut selection", action: "clipboard-cut", icon: "✂ Cut", shortcut: "Control+X Meta+X" }, { label: "Copy selection", action: "clipboard-copy", icon: "▤ Copy", shortcut: "Control+C Meta+C" }]] },
       { label: "Text", rows: [type.filter((tool) => tool.select !== "block"), [...emphasis, ...colors]] },
       { label: "Paragraph", rows: [[...lists, ...indents], [...alignment, ...spacing]] },
       { label: "Styles", rows: [
@@ -3694,7 +3696,7 @@
           control.setAttribute("aria-pressed", "false");
           control.addEventListener("pointerdown", (event) => event.preventDefault());
         }
-        if (tool.action.startsWith("clipboard-")) control.addEventListener("pointerdown", (event) => event.preventDefault());
+        if (tool.action.startsWith("clipboard-") || tool.action === "format-painter") control.addEventListener("pointerdown", (event) => event.preventDefault());
         if (tool.pressed || ["page-numbers", "track-changes"].includes(tool.action)) control.setAttribute("aria-pressed", tool.action === "page-numbers" ? String(pageNumbersEnabled) : tool.action === "track-changes" ? String(trackChangesEnabled) : "false");
         if (tool.action === "indent-ruler") {
           control.setAttribute("aria-pressed", String(showIndentRuler));
@@ -3734,6 +3736,11 @@
 
   function updateRibbonSelection() {
     updateHistoryAvailability();
+    const painterButton = ribbon.querySelector('[data-action="format-painter"]');
+    if (painterButton) {
+      painterButton.disabled = !liveEditor;
+      painterButton.setAttribute("aria-pressed", String(Boolean(formatPainter)));
+    }
     for (const button of ribbon.querySelectorAll('[data-action="clipboard-cut"], [data-action="clipboard-copy"]')) {
       button.disabled = !liveEditor || liveEditor.state.selection.empty;
     }
@@ -4365,10 +4372,50 @@
     }
   }
 
+  function paintFormatting() {
+    if (!liveEditor || activeWorkspaceMode !== "document") return;
+    const { view } = liveEditor;
+    const { state } = view;
+    const { from, to, $from, empty } = state.selection;
+    const allowedMarks = new Set(["bold", "italic", "underline", "strike", "textStyle"]);
+    const allowedBlock = (node) => ["paragraph", "heading"].includes(node.type.name);
+    const paragraphKeys = ["textAlign", "indentLevel", "lineSpacing", "paragraphSpacing"];
+    if (!formatPainter) {
+      if (!allowedBlock($from.parent)) { notify("Place the cursor in formatted text first."); return; }
+      let marks;
+      if (!empty) state.doc.nodesBetween(from, to, (node) => {
+        if (node.isText && !marks) marks = node.marks;
+      });
+      formatPainter = {
+        marks: (marks || state.storedMarks || $from.marks()).filter((mark) => allowedMarks.has(mark.type.name)),
+        paragraph: Object.fromEntries(paragraphKeys.map((key) => [key, $from.parent.attrs[key]])),
+      };
+      updateRibbonSelection();
+      notify("Formatting copied. Select the destination text, then click Format Painter again.");
+      return;
+    }
+    if (empty) { notify("Select the destination text to apply the copied formatting."); return; }
+    const transaction = state.tr;
+    for (const mark of allowedMarks) transaction.removeMark(from, to, state.schema.marks[mark]);
+    for (const mark of formatPainter.marks) transaction.addMark(from, to, mark);
+    state.doc.nodesBetween(from, to, (node, position) => {
+      if (!allowedBlock(node)) return;
+      if (paragraphKeys.some((key) => node.attrs[key] !== formatPainter.paragraph[key])) {
+        transaction.setNodeMarkup(position, undefined, { ...node.attrs, ...formatPainter.paragraph });
+      }
+    });
+    formatPainter = undefined;
+    view.focus();
+    view.dispatch(transaction);
+    updateRibbonSelection();
+    notify("Formatting applied.");
+  }
+
   function runTool(action, button) {
     switch (action) {
       case "style-preset": runCommand("formatBlock", `<${button.dataset.stylePreset}>`); break;
       case "clipboard-copy": case "clipboard-cut": case "clipboard-paste": void runClipboardAction(action); break;
+      case "format-painter": paintFormatting(); break;
       case "page-numbers": setPageNumbers(!pageNumbersEnabled, button); break;
       case "indent-ruler":
         showIndentRuler = !showIndentRuler;
@@ -6112,6 +6159,10 @@
       setMobileMenu(false);
       $("#mobile-menu").focus();
       return;
+    }
+    if (event.key === "Escape" && formatPainter) {
+      formatPainter = undefined;
+      updateRibbonSelection();
     }
     const mod = event.ctrlKey || event.metaKey;
     if (!mod || event.altKey) return;
