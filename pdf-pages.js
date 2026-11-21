@@ -26,25 +26,54 @@ export function sourcePages({ document, selection, plan }) {
   return plan;
 }
 
-export async function buildPdf(sources, { PDFDocument, PDFName, degrees, StandardFonts, rgb }, { numberPages = false, footer = "" } = {}) {
+export async function buildPdf(sources, { PDFDocument, PDFName, PDFSignature, degrees, StandardFonts, rgb }, { numberPages = false, footer = "" } = {}) {
   if (!sources.length) throw new Error("Add a PDF before exporting.");
-  const output = await PDFDocument.create();
-  for (const source of sources) {
-    const { document, rotation = 0 } = source;
-    if (document.catalog.has(PDFName.of("Perms")) || document.catalog.getAcroForm()?.dict.has(PDFName.of("XFA")) ||
-      document.getForm().getFields().length) {
-      throw new Error("Remove interactive or signed forms before using page export.");
+  function protectedDocument(document) {
+    return document.catalog.has(PDFName.of("Perms")) || document.catalog.getAcroForm()?.dict.has(PDFName.of("XFA"));
+  }
+  function rotatePage(page, rotation, extra) {
+    if (rotation || extra) page.setRotation(degrees((page.getRotation().angle + rotation + extra + 360) % 360));
+  }
+  let output;
+  const [first] = sources;
+  if (sources.length === 1 && first.file && !protectedDocument(first.document)) {
+    const fields = first.document.getForm().getFields();
+    if (fields.length) {
+      const plan = sourcePages(first);
+      const count = first.document.getPageCount();
+      const fullOrder = plan.length === count && new Set(plan.map((entry) => entry.index)).size === count;
+      if (fields.some((field) => field instanceof PDFSignature)) throw new Error("Signed PDF pages require a compatible signing application.");
+      if (!fullOrder) {
+        throw new Error("Keep each original page exactly once to reorder or rotate this form. Download individual pages from a flattened copy.");
+      }
+      output = await PDFDocument.load(await first.file.arrayBuffer(), { updateMetadata: false });
+      const pages = output.getPages();
+      for (let index = count - 1; index >= 0; index--) output.removePage(index);
+      for (const { index, rotation } of plan) {
+        const page = pages[index];
+        rotatePage(page, first.rotation ?? 0, rotation);
+        output.addPage(page);
+      }
     }
-    const plan = sourcePages(source);
-    if (output.getPageCount() + plan.length > 200) throw new Error("Select at most 200 pages in total.");
-    const indices = [...new Set(plan.map((entry) => entry.index))];
-    const copied = await output.copyPages(document, indices);
-    const available = new Map(indices.map((index, offset) => [index, copied[offset]]));
-    for (const { index, rotation: extra } of plan) {
-      const page = available.get(index) || (await output.copyPages(document, [index]))[0];
-      available.delete(index);
-      if (rotation || extra) page.setRotation(degrees((page.getRotation().angle + rotation + extra + 360) % 360));
-      output.addPage(page);
+  }
+  if (!output) {
+    output = await PDFDocument.create();
+    for (const source of sources) {
+      const { document, rotation = 0 } = source;
+      if (protectedDocument(document) || document.getForm().getFields().length) {
+        throw new Error("Remove interactive or signed forms before using page export.");
+      }
+      const plan = sourcePages(source);
+      if (output.getPageCount() + plan.length > 200) throw new Error("Select at most 200 pages in total.");
+      const indices = [...new Set(plan.map((entry) => entry.index))];
+      const copied = await output.copyPages(document, indices);
+      const available = new Map(indices.map((index, offset) => [index, copied[offset]]));
+      for (const { index, rotation: extra } of plan) {
+        const page = available.get(index) || (await output.copyPages(document, [index]))[0];
+        available.delete(index);
+        rotatePage(page, rotation, extra);
+        output.addPage(page);
+      }
     }
   }
   if (numberPages || footer) {
@@ -66,5 +95,15 @@ export async function buildPdf(sources, { PDFDocument, PDFName, degrees, Standar
       page.drawText(text, { x: box.x + x, y: box.y + y, font, size, color: rgb(.18, .22, .29), rotate: degrees(rotation) });
     }
   }
-  return output.save();
+  return output.save({ updateFieldAppearances: false });
+}
+
+export async function flattenPdfForm(source, { PDFDocument, PDFName, PDFSignature }) {
+  const output = await PDFDocument.load(await source.file.arrayBuffer(), { updateMetadata: false });
+  if (output.catalog.has(PDFName.of("Perms")) || output.catalog.getAcroForm()?.dict.has(PDFName.of("XFA")) ||
+    output.getForm().getFields().some((field) => field instanceof PDFSignature)) {
+    throw new Error("Choose an unsigned PDF without XFA fields to flatten form fields.");
+  }
+  output.getForm().flatten({ updateFieldAppearances: false });
+  return output;
 }

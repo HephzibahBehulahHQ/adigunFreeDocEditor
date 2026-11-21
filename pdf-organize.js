@@ -1,4 +1,4 @@
-import { buildPdf, sourcePages } from "./pdf-pages.js";
+import { buildPdf, flattenPdfForm, sourcePages } from "./pdf-pages.js";
 
 export function bindPdfOrganizer(sources, onSave) {
   const dialog = document.querySelector("#pdf-organize-dialog");
@@ -9,6 +9,7 @@ export function bindPdfOrganizer(sources, onSave) {
   const undo = dialog.querySelector("[data-undo]");
   const download = dialog.querySelector("[data-extract]");
   const close = dialog.querySelector("[data-close]");
+  const flatten = dialog.querySelector("[data-flatten]");
   let plan = [];
   let history = [];
   let activeSource;
@@ -27,6 +28,7 @@ export function bindPdfOrganizer(sources, onSave) {
     undo.disabled = busy || !history.length;
     download.disabled = busy || !plan.some((entry) => entry.selected);
     close.disabled = sourcePicker.disabled = busy;
+    flatten.disabled = busy;
   }
 
   function render() {
@@ -73,6 +75,7 @@ export function bindPdfOrganizer(sources, onSave) {
     activeSource = sourcePicker.value;
     history = [];
     plan = [];
+    flatten.checked = false;
     try {
       plan = sourcePages(sources[activeSource]).map((entry) => ({ ...entry, selected: false }));
       notice.textContent = "Arrange the output pages or select pages for a separate extract.";
@@ -105,7 +108,9 @@ export function bindPdfOrganizer(sources, onSave) {
     render();
     try {
       const item = sources[activeSource];
-      const bytes = await buildPdf([{ ...item, plan: plan.filter((entry) => entry.selected) }], window.PDFLib);
+      const lib = window.PDFLib;
+      const document = flatten.checked ? await flattenPdfForm(item, lib) : item.document;
+      const bytes = await buildPdf([{ ...item, document, plan: plan.filter((entry) => entry.selected) }], lib);
       const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
       const link = document.createElement("a");
       link.href = url;
