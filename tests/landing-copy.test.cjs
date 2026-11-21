@@ -10,14 +10,12 @@ const catalogStart = app.indexOf("const documentTemplates = {");
 const catalogEnd = app.indexOf("  async function createDocument(template)", catalogStart);
 assert.ok(catalogStart >= 0 && catalogEnd > catalogStart, "template catalog is present");
 const catalog = app.slice(catalogStart, catalogEnd);
-const landingStart = app.indexOf('class="landing-template-grid"');
-const landingEnd = app.indexOf('class="landing-dropzone"', landingStart);
-const landing = app.slice(landingStart, landingEnd);
+assert.match(app, /id="landing-show-templates"/, "Home opens the template library from a single action");
+assert.match(app, /id="landing-open-file"/, "Home opens supported documents through one picker");
 const dialog = index.slice(index.indexOf('id="template-dialog"'));
 const templateIds = ["meeting", "project", "letter", "status", "research", "resume"];
 for (const id of templateIds) {
   assert.ok(catalog.includes("    " + id + ": {"), id + " template has editable content");
-  assert.ok(landing.includes('data-template="' + id + '"'), id + " appears on the first-use screen");
   assert.ok(dialog.includes('data-template="' + id + '"'), id + " appears in the Templates dialog");
 }
 process.stdout.write("Landing copy tests passed: entry screen uses concise, user-facing wording.\\n");

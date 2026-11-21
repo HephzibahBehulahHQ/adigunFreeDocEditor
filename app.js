@@ -173,10 +173,9 @@
 
   const toolsets = {
     home: [
-      [{ label: "Undo", action: "undo", icon: "↶" }, { label: "Redo", action: "redo", icon: "↷" }],
       [{ label: "Font family", select: "font", options: [["", "Font"], ...supportedFontFamilies.map((family) => [family, family])] }, { label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Heading 1"], ["h2", "Heading 2"], ["h3", "Heading 3"], ["h4", "Heading 4"], ["h5", "Heading 5"], ["h6", "Heading 6"]] }, { label: "Font size", select: "size", options: [["11pt", "11"], ["14pt", "14"], ["18pt", "18"], ["24pt", "24"]] }],
       [{ label: "Text color", select: "text-color", options: [["", "Text color"], ...textColorOptions] }, { label: "Highlight color", select: "highlight-color", options: [["", "Highlight"], ...highlightColorOptions] }],
-      [{ label: "Line spacing", select: "line-spacing", options: [["", "Default"], ["1", "Single"], ["1.15", "1.15"], ["1.5", "1.5"], ["2", "Double"]] }, { label: "Paragraph spacing after", select: "paragraph-spacing", options: [["", "Default"], ["0", "None"], ["6", "Compact"], ["12", "Relaxed"]] }],
+      [{ label: "Line spacing", select: "line-spacing", options: [["", "Line spacing"], ["1", "Single"], ["1.15", "1.15 lines"], ["1.5", "1.5 lines"], ["2", "Double"]] }, { label: "Paragraph spacing after", select: "paragraph-spacing", options: [["", "After paragraph"], ["0", "0 pt after"], ["6", "6 pt after"], ["12", "12 pt after"]] }],
       [{ label: "Bold", action: "bold", icon: "B", pressed: true }, { label: "Italic", action: "italic", icon: "I", pressed: true }, { label: "Underline", action: "underline", icon: "U", pressed: true }, { label: "Strikethrough", action: "strikeThrough", icon: "S̶ Strike", pressed: true }, { label: "Clear character formatting", action: "removeFormat", icon: "T× Clear" }],
       [{ label: "Bulleted list", action: "insertUnorderedList", icon: "• List", pressed: true }, { label: "Numbered list", action: "insertOrderedList", icon: "1. List", pressed: true }],
       [{ label: "Decrease indent", action: "outdent", icon: "⇤ Outdent" }, { label: "Increase indent", action: "indent", icon: "⇥ Indent" }],
@@ -1197,8 +1196,7 @@
     panel.hidden = !open;
     $("#editor-layout").classList.toggle("has-review", open);
     if (open) {
-      $("#document-outline").classList.remove("mobile-open");
-      $("#toggle-outline").setAttribute("aria-expanded", "false");
+      showOutlinePanel(false);
       renderReviewComments();
     }
   }
@@ -1206,10 +1204,13 @@
   function showOutlinePanel(open) {
     const panel = $("#document-outline");
     if (!panel) return;
+    $("#editor-layout").classList.toggle("has-outline", open);
+    panel.classList.toggle("visible", open);
     panel.classList.toggle("mobile-open", open);
     if (open) {
       showReviewPanel(false);
       if (window.matchMedia("(max-width: 1050px)").matches) toggleAssistant(false);
+      renderOutline();
     }
     $("#toggle-outline").setAttribute("aria-expanded", String(open));
   }
@@ -1539,8 +1540,9 @@
   }
 
   function saveDocument(force = false, immediate = false) {
+    if (activeDocumentKind !== "document" || activeWorkspaceMode !== "document") return false;
     clearTimeout(saveTimer);
-    const tabRevision = activeDocumentKind === "document" ? markActiveDocumentTabDirty() : undefined;
+    const tabRevision = markActiveDocumentTabDirty();
     if (!autosave && !force) { setSaveStatus("Autosave off"); return false; }
     if (!database) { setSaveStatus("Local save unavailable"); return false; }
     setSaveStatus("Saving…", true);
@@ -1681,9 +1683,8 @@
     if (liveEditor) liveEditor.setEditable(isDocument);
     editor.contentEditable = String(isDocument);
     titleInput.readOnly = !isDocument;
-    $("#editor-layout").classList.toggle("has-outline", isDocument);
+    showOutlinePanel(false);
     if (!isDocument) { $("#review-comments").hidden = true; $("#editor-layout").classList.remove("has-review"); }
-    $("#document-outline").classList.toggle("visible", isDocument);
     if (!isDocument) { $("#document-outline").classList.remove("mobile-open"); $("#review-comments").hidden = true; $("#editor-layout").classList.remove("has-review"); }
     $("#toggle-outline").hidden = !isDocument;
     $("#toggle-outline").setAttribute("aria-expanded", "false");
@@ -1885,16 +1886,25 @@
       </header>
       <div class="landing-actions">
         <button class="landing-primary" type="button" id="landing-create">＋ New document</button>
-        <button class="landing-secondary" type="button" id="landing-open-word">Open Word document</button>
-        <button class="landing-secondary" type="button" id="landing-open-pdf">Open PDF</button>
-        <button class="landing-secondary" type="button" id="landing-show-templates">Templates</button>
+        <button class="landing-secondary" type="button" id="landing-open-file">↥ Open file</button>
+        <button class="landing-secondary" type="button" id="landing-show-templates">▤ Templates</button>
       </div>
-      <section class="landing-recents" id="landing-recents" aria-labelledby="landing-recents-title">
-        <div class="landing-recents-heading"><h3 id="landing-recents-title">Recent documents</h3><button class="landing-all" type="button" id="landing-all">View all</button></div>
-        <div id="landing-recent-results" aria-live="polite"><p class="landing-recents-empty">Loading saved documents…</p></div>
-      </section>
-      <section class="landing-templates" aria-labelledby="landing-templates-title"><div class="landing-recents-heading"><div><span class="landing-kicker">START WITH A TEMPLATE</span><h3 id="landing-templates-title">A useful first page</h3></div></div><div class="landing-template-grid"><button class="landing-template" type="button" data-template="meeting"><span class="landing-template-icon" aria-hidden="true">▤</span><strong>Meeting notes</strong><small>Agenda, decisions and action items</small></button><button class="landing-template" type="button" data-template="project"><span class="landing-template-icon" aria-hidden="true">◇</span><strong>Project brief</strong><small>Objective, scope and milestones</small></button><button class="landing-template" type="button" data-template="letter"><span class="landing-template-icon" aria-hidden="true">✉</span><strong>Formal letter</strong><small>Recipient, subject and message</small></button><button class="landing-template" type="button" data-template="status"><span class="landing-template-icon" aria-hidden="true">▥</span><strong>Status report</strong><small>Progress, blockers and next steps</small></button><button class="landing-template" type="button" data-template="research"><span class="landing-template-icon" aria-hidden="true">⌕</span><strong>Research notes</strong><small>Questions, sources and findings</small></button><button class="landing-template" type="button" data-template="resume"><span class="landing-template-icon" aria-hidden="true">◉</span><strong>Resume</strong><small>Experience, education and skills</small></button></div></section>
-      <button class="landing-dropzone" type="button" id="landing-open-file" aria-label="Choose or drop a Word, PDF, text, Markdown, or HTML file"><span class="landing-dropzone-icon" aria-hidden="true">↥</span><span class="landing-dropzone-copy"><strong>Choose a file or drop it here</strong><small>DOCX · PDF · TXT · Markdown · HTML</small></span></button>
+      <div class="landing-home-body">
+        <section class="landing-recents" id="landing-recents" aria-labelledby="landing-recents-title">
+          <div class="landing-recents-heading"><h3 id="landing-recents-title">Recent documents</h3><button class="landing-all" type="button" id="landing-all">View all</button></div>
+          <div id="landing-recent-results" aria-live="polite"><p class="landing-recents-empty">Loading saved documents…</p></div>
+        </section>
+        <aside class="landing-file-tools" aria-labelledby="landing-file-tools-title">
+          <h3 id="landing-file-tools-title">File tools</h3>
+          <button type="button" data-home-tool="convert"><strong>Convert</strong><span>Change a file’s format</span></button>
+          <button type="button" data-home-tool="merge"><strong>Merge</strong><span>Combine documents into one Word file</span></button>
+          <button type="button" data-home-tool="compress"><strong>Compress</strong><span>Create a ZIP archive</span></button>
+        </aside>
+      </div>
+      <button class="landing-dropzone" type="button" data-home-picker aria-label="Choose or drop a Word, PDF, text, Markdown, or HTML file">
+        <span class="landing-dropzone-icon" aria-hidden="true">↥</span>
+        <span class="landing-dropzone-copy"><strong>Drop a file here</strong><small>DOCX · PDF · TXT · Markdown · HTML</small></span>
+      </button>
     </section>`;
     loadLandingRecentDocuments();
   }
@@ -1919,7 +1929,7 @@
           const updatedLabel = escapeHTML(formatDocumentTimestamp(doc.updatedAt));
           return `<li><button class="landing-document" type="button" data-open-id="${escapeHTML(doc.id)}"><span class="landing-document-icon" aria-hidden="true">▤</span><strong class="landing-document-name">${escapeHTML(doc.title || "Untitled document")}</strong><time>${updatedLabel}</time><span class="landing-document-open" aria-hidden="true">→</span></button></li>`;
         }).join("");
-        results.innerHTML = `<ul class="landing-document-list">${rows}</ul>`;
+        results.innerHTML = `<div class="landing-file-columns" aria-hidden="true"><span>Document name</span><span>Last modified</span></div><ul class="landing-document-list">${rows}</ul>`;
       };
       search.addEventListener("input", renderResults);
       renderResults();
@@ -2041,6 +2051,8 @@
     const mode = view === "convert" ? "conversion" : view;
     const tool = fileToolTitles[mode];
     if (!tool) return;
+    if (activeDocumentKind === "document") saveDocument(true, true);
+    activeDocumentKind = "none";
     setWorkspaceMode(mode);
     $("#editor-card").classList.remove("landing", "pdf-preview");
     $("#stage-title").textContent = tool.title;
@@ -3609,11 +3621,11 @@
   function renderRibbon() {
     ribbon.replaceChildren();
     ribbon.classList.toggle("home-ribbon", activeTab === "home");
-    const [history, type, colors, spacing, emphasis, lists, indents, alignment] = toolsets.home;
+    const [type, colors, spacing, emphasis, lists, indents, alignment] = toolsets.home;
     const groups = activeTab === "home" ? [
-      { label: "History", rows: [history] },
       { label: "Text", rows: [type, [...emphasis, ...colors]] },
-      { label: "Paragraph", rows: [[...lists, ...indents, ...spacing], alignment] },
+      { label: "Paragraph", rows: [[...lists, ...indents], [...alignment, ...spacing]] },
+      { label: "Editing", rows: [[{ label: "Find and replace", action: "find", icon: "⌕ Find & replace" }], [{ label: "Fit to page width", action: "zoom-fit", icon: "↔ Fit width" }]] },
     ] : toolsets[activeTab].map((group) => ({ rows: [group] }));
     for (const { label, rows } of groups) {
       const section = document.createElement("div");
@@ -3701,8 +3713,8 @@
   function updateHistoryAvailability() {
     const canUndo = liveEditor ? liveEditor.can().undo() : typeof document.queryCommandEnabled === "function" && document.queryCommandEnabled("undo");
     const canRedo = liveEditor ? liveEditor.can().redo() : typeof document.queryCommandEnabled === "function" && document.queryCommandEnabled("redo");
-    for (const button of [$("#undo"), ribbon.querySelector('.tool-button[data-action="undo"]')]) if (button) button.disabled = !canUndo;
-    for (const button of [$("#redo"), ribbon.querySelector('.tool-button[data-action="redo"]')]) if (button) button.disabled = !canRedo;
+    $("#undo").disabled = !canUndo;
+    $("#redo").disabled = !canRedo;
   }
 
   function updateRibbonSelection() {
@@ -5034,8 +5046,7 @@
   function toggleAssistant(open = assistant.classList.contains("hidden")) {
     if (open && window.matchMedia("(max-width: 1050px)").matches) {
       showReviewPanel(false);
-      $("#document-outline").classList.remove("mobile-open");
-      $("#toggle-outline").setAttribute("aria-expanded", "false");
+      showOutlinePanel(false);
     }
     assistant.classList.toggle("hidden", !open);
     assistant.setAttribute("aria-hidden", String(!open));
@@ -5326,6 +5337,7 @@
   }, true);
   editor.addEventListener("input", (event) => {
     if (event.target?.id === "document-list-search") { filterSavedDocumentList(event.target.value); return; }
+    if (activeWorkspaceMode !== "document") return;
     countWords();
     clearTimeout(reviewHighlightTimer);
     reviewHighlightTimer = setTimeout(() => { updateReviewHighlights(); renderTrackedChanges(); }, 350);
@@ -5449,9 +5461,9 @@
     if (event.target.closest("#landing-show-templates")) $("#template-dialog").showModal();
     const templateButton = event.target.closest("[data-template]");
     if (templateButton && documentTemplates[templateButton.dataset.template]) createDocument(documentTemplates[templateButton.dataset.template]);
-    if (event.target.closest("#landing-open-word")) openFilePicker(".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-    if (event.target.closest("#landing-open-pdf")) openFilePicker(".pdf,application/pdf");
-    if (event.target.closest("#landing-open-file")) openFilePicker();
+    if (event.target.closest("#landing-open-file, [data-home-picker]")) openFilePicker();
+    const homeTool = event.target.closest("[data-home-tool]");
+    if (homeTool) document.querySelector(`.nav-item[data-view="${homeTool.dataset.homeTool}"]`)?.click();
     if (event.target.closest("#landing-all")) document.querySelector('[data-view="recent"]')?.click();
     const trashButton = event.target.closest("[data-trash-id]"); if (trashButton) markDeleted(trashButton.dataset.trashId, true);
     const restoreButton = event.target.closest("[data-restore-id]"); if (restoreButton) markDeleted(restoreButton.dataset.restoreId, false);

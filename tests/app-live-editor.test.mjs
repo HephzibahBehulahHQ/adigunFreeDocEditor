@@ -28,12 +28,14 @@ Object.defineProperty(window.HTMLElement.prototype, "innerText", {
 window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
 window.HTMLDialogElement.prototype.close = function () { this.open = false; };
 const savedDocuments = [];
+let visibleDocuments = [];
 window.__savedDocuments = savedDocuments;
 window.indexedDB = {
   open() {
     const request = { result: null };
     const objectStore = {
-      getAll() { const result = { result: [] }; queueMicrotask(() => result.onsuccess?.()); return result; },
+      getAll() { const result = { result: [...visibleDocuments] }; queueMicrotask(() => result.onsuccess?.()); return result; },
+      get(id) { const result = { result: savedDocuments.findLast((doc) => doc.id === id) }; queueMicrotask(() => result.onsuccess?.()); return result; },
       put(documentRecord) { savedDocuments.push(documentRecord); },
     };
     request.result = {
@@ -78,9 +80,13 @@ try {
   assert.equal(window.document.querySelector("#redo").disabled, true, "Redo is disabled when the new document has no redo history");
 
   window.__testEditor.commands.setContent("<h1>Chapter</h1><h6>Footnote</h6>");
+  const outlineToggle = window.document.querySelector("#toggle-outline");
+  assert.equal(outlineToggle.getAttribute("aria-expanded"), "false");
+  outlineToggle.click();
   const outlineItems = [...window.document.querySelectorAll("#outline-list .outline-item")];
   assert.deepEqual(outlineItems.map((item) => item.textContent), ["Chapter", "Footnote"], "the document outline renders real heading text");
   assert.deepEqual(outlineItems.map((item) => item.getAttribute("aria-label")), ["Heading 1: Chapter", "Heading 6: Footnote"], "assistive technology can distinguish heading levels in the outline");
+  outlineToggle.click();
   window.__testEditor.commands.setContent("<p>Live text</p>");
   window.__testEditor.commands.setTextSelection({ from: 1, to: 10 });
   const blockStyle = window.document.querySelector('#ribbon-tools [data-tool="block"]');
@@ -97,7 +103,8 @@ try {
   assert.match(window.__testEditor.getHTML(), /<strong>Live text<\/strong>/, "the Home ribbon applies formatting through a live editor transaction");
   assert.equal(window.document.querySelector('#ribbon-tools [data-action="bold"]').getAttribute("aria-pressed"), "true", "the Home ribbon shows bold as active for the live selection");
   assert.equal(window.document.querySelector("#undo").disabled, false, "Undo enables after a live editor transaction");
-  assert.equal(window.document.querySelector('#ribbon-tools [data-action="undo"]').disabled, false, "ribbon Undo enables after a live editor transaction");
+  assert.equal(window.document.querySelector('#ribbon-tools [data-action="undo"]'), null, "Undo is available from the quick actions without a duplicate ribbon button");
+  assert.ok(window.document.querySelector('#ribbon-tools [data-action="find"]'), "Find and replace is available directly on the Home ribbon");
 
   const fontSize = window.document.querySelector('#ribbon-tools [data-tool="size"]');
   fontSize.value = "14pt";
@@ -435,6 +442,29 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(host.querySelector(".ProseMirror"), null, "leaving the document view destroys the live editor");
   assert.ok(host.querySelector(".empty-state"), "the document host returns to the document-list surface");
+
+  window.document.querySelector("#new-document").click();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  window.__testEditor.commands.setContent("<p>Keep this document.</p>");
+  const titleField = window.document.querySelector("#document-title");
+  titleField.value = "Home search regression";
+  window.document.querySelector("#workspace-home").click();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const savedBeforeSearch = savedDocuments.at(-1);
+  assert.equal(savedBeforeSearch.title, "Home search regression");
+  visibleDocuments = [savedBeforeSearch];
+  window.document.querySelector("#workspace-home").click();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const savesBeforeSearch = savedDocuments.length;
+  const homeSearch = window.document.querySelector("#landing-search");
+  homeSearch.value = "regression";
+  homeSearch.dispatchEvent(new window.Event("input", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 360));
+  assert.equal(savedDocuments.length, savesBeforeSearch, "searching Home must never write to the document store");
+  window.document.querySelector(".landing-document").click();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(titleField.value, savedBeforeSearch.title, "the recent file opens under its saved title");
+  assert.equal(host.querySelector(".ProseMirror").textContent, "Keep this document.", "the recent file retains its saved content");
 } finally {
   dom.window.close();
 }
