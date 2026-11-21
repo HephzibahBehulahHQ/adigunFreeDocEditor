@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseCsv, parseSheetFilter, toCsv, validationOptions } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, chartValues, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, numberFormats, parseChartRange, parseCsv, parseSheetFilter, toCsv, validationOptions } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
@@ -27,6 +27,7 @@ try {
         validAddress.test(key) && Object.hasOwn(numberFormats, value))),
       freezeFirstRow: item?.freezeFirstRow === true,
       filter: parseSheetFilter(item?.filter),
+      chart: parseChartRange(item?.chart?.range),
       validation: Object.fromEntries(Object.entries(item?.validation ?? {})
         .filter(([address, options]) => validAddress.test(address) && validationOptions(options).length)),
       pivot: item?.pivot && Number.isInteger(item.pivot.source) &&
@@ -129,7 +130,81 @@ function refreshValues() {
   }
   $("sheet-filter-clear").disabled = !sheet.filter;
   refreshSelection(valueAt);
+  refreshChart(valueAt);
 }
+
+const chartPanel = $("sheet-chart-panel");
+const chartForm = $("sheet-chart-form");
+
+function refreshChart(valueAt) {
+  const chart = currentSheet().chart;
+  const hasCharts = workbook.sheets.some((sheet) => sheet.chart);
+  $("workbook-export").textContent = hasCharts ? "Download Excel (chart data only)" : "Download Excel";
+  $("sheet-chart-remove").disabled = !chart;
+  if (chartPanel.hidden) return;
+  const values = chart ? chartValues(chart, valueAt) : [];
+  const measure = chart && (valueAt(chart.values + chart.first) || chart.values);
+  $("sheet-chart-title").textContent = measure ? `Bar chart · ${measure}` : "Bar chart";
+  $("sheet-chart-message").textContent = !chart ? "Choose a label column and a numeric column." :
+    values.length ? "" : "This range contains no numeric values.";
+  const magnitude = Math.max(1, ...values.map(({ value }) => Math.abs(value)));
+  const negative = values.some(({ value }) => value < 0);
+  const baseline = negative ? 50 : 0;
+  $("sheet-chart-values").replaceChildren(...values.map(({ label, value }) => {
+    const row = document.createElement("li");
+    const name = document.createElement("span");
+    const number = document.createElement("span");
+    const track = document.createElement("div");
+    const bar = document.createElement("div");
+    name.textContent = label;
+    number.textContent = new Intl.NumberFormat().format(value);
+    track.className = "sheet-chart-track";
+    track.setAttribute("aria-hidden", "true");
+    bar.className = value < 0 ? "sheet-chart-bar negative" : "sheet-chart-bar";
+    const width = Math.abs(value / magnitude) * (negative ? 50 : 100);
+    bar.style.left = (value < 0 ? baseline - width : baseline) + "%";
+    bar.style.width = width + "%";
+    track.append(bar);
+    row.append(name, number, track);
+    return row;
+  }));
+}
+
+function showChartPanel(open) {
+  chartPanel.hidden = !open;
+  $("sheet-chart-open").setAttribute("aria-expanded", String(open));
+  if (open) {
+    chartForm.elements.range.value = currentSheet().chart?.range || selectedRange?.label || "";
+    refreshChart(workbookValues());
+    chartForm.elements.range.focus();
+  }
+}
+
+$("sheet-chart-open").addEventListener("click", () => showChartPanel(true));
+$("sheet-chart-close").addEventListener("click", () => {
+  showChartPanel(false);
+  $("sheet-chart-open").focus();
+});
+chartForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const chart = parseChartRange(chartForm.elements.range.value);
+  const sheet = currentSheet();
+  if (!chart || chart.last > sheet.rows || chart.values.charCodeAt(0) - 64 > sheet.columns) {
+    $("sheet-chart-message").textContent = "Choose two adjacent columns and at least one data row below the headers.";
+    return;
+  }
+  recordEdit();
+  sheet.chart = chart;
+  save();
+  refreshChart(workbookValues());
+});
+$("sheet-chart-remove").addEventListener("click", () => {
+  recordEdit();
+  currentSheet().chart = null;
+  chartForm.elements.range.value = "";
+  save();
+  refreshChart(workbookValues());
+});
 
 function selectionAddresses() {
   if (!selectedRange) return [selectedAddress];
@@ -191,6 +266,7 @@ function updateCell(address, value, mergeTyping = false) {
 
 function render() {
   const sheet = currentSheet();
+  chartForm.elements.range.value = sheet.chart?.range ?? "";
   selectedRange = null;
   $("sheet-pivot-refresh").disabled = !sheet.pivot;
   if (Number(selectedAddress.slice(1)) > sheet.rows || selectedAddress.charCodeAt(0) - 64 > sheet.columns) selectedAddress = "A1";

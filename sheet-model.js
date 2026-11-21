@@ -32,6 +32,26 @@ export function hiddenFilterRows(filter, valueAt) {
   return hidden;
 }
 
+export function parseChartRange(range = "") {
+  if (typeof range !== "string") return null;
+  const match = /^([A-Z])([1-9]\d?|100):([A-Z])([1-9]\d?|100)$/.exec(range.toUpperCase().trim());
+  if (!match) return null;
+  const [, labels, first, values, last] = match;
+  if (values.charCodeAt(0) - labels.charCodeAt(0) !== 1 || Number(last) <= Number(first)) return null;
+  return { range: match[0], labels, values, first: Number(first), last: Number(last) };
+}
+
+export function chartValues(chart, valueAt) {
+  const values = [];
+  for (let row = chart.first + 1; row <= chart.last; row++) {
+    const raw = String(valueAt(chart.values + row)).trim();
+    if (!raw || !Number.isFinite(Number(raw))) continue;
+    const label = String(valueAt(chart.labels + row)).trim();
+    values.push({ label: label || `Row ${row}`, value: Number(raw) });
+  }
+  return values;
+}
+
 export function displayCell(value, format, locale) {
   if (!Object.hasOwn(numberFormats, format) || format === "general") return value;
   const numeric = typeof value === "number" || (typeof value === "string" && /^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(value.trim()));
