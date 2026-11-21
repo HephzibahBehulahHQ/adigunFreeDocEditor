@@ -2,5 +2,6 @@ node_modules/
 editor-runtime.js
 assets/vendor/pdf-lib.min.js
 assets/vendor/PDF-LIB-LICENSE.md
+assets/vendor/ocr/
 
 
