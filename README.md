@@ -31,6 +31,8 @@ Open `http://localhost:4173`. The DOCX converter is vendored locally; the app do
 
 ## Current support
 
+- Open **Slides** from the sidebar to edit and present a browser-local, text-based deck. Add, duplicate, reorder, and delete slides, then download an editable PowerPoint file. PowerPoint import, image editing, and transitions are outside this increment.
+
 - Open **Sheets** from the sidebar to edit a browser-local workbook with up to 12 sheets, 100 rows, and 26 columns per sheet. Use arithmetic, cell references, and SUM, AVERAGE, MIN, and MAX. Import CSV into a new sheet and export the active sheet’s calculated values as CSV. Open Excel .xlsx workbooks for cell values and supported formulas, and export the workbook as .xlsx. Excel formatting, charts, macros, and cross-sheet formulas are outside this increment.
 
 - Start from six on-device templates for meeting notes, project briefs, formal letters, status reports, research notes, and resumes, or create a blank document. Template content opens in the editable workspace and stays in this browser.

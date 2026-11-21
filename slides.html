@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <title>Adigun Slides</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="slides-page">
+  <header class="sheets-header">
+    <a href="./index.html">← Documents</a>
+    <h1>Adigun Slides</h1>
+    <span id="slides-save" role="status">Stored on this device</span>
+  </header>
+  <main class="slides-workspace">
+    <div class="slides-actions" aria-label="Presentation actions">
+      <label for="deck-title" class="sr-only">Presentation name</label>
+      <input id="deck-title" maxlength="100" placeholder="Presentation name">
+      <button id="slide-add" class="button button-outline" type="button">＋ Slide</button>
+      <button id="slide-duplicate" class="button button-outline" type="button">Duplicate</button>
+      <button id="slide-present" class="button button-outline" type="button">Present</button>
+      <button id="slide-export" class="button button-outline" type="button">Download PowerPoint</button>
+    </div>
+    <div class="slides-layout">
+      <aside class="slides-sidebar" aria-label="Slides">
+        <ol id="slide-list"></ol>
+        <div class="slides-actions" aria-label="Slide order">
+          <button id="slide-earlier" class="button button-outline" type="button">Move earlier</button>
+          <button id="slide-later" class="button button-outline" type="button">Move later</button>
+          <button id="slide-remove" class="button button-outline" type="button">Delete slide</button>
+        </div>
+      </aside>
+      <section class="slides-paper" aria-label="Current slide">
+        <label for="slide-title" class="sr-only">Slide title</label>
+        <input id="slide-title" maxlength="120" placeholder="Slide title">
+        <label for="slide-content" class="sr-only">Slide text</label>
+        <textarea id="slide-content" maxlength="1500" placeholder="Add slide text"></textarea>
+      </section>
+    </div>
+  </main>
+  <dialog id="slide-show" class="slide-show" aria-label="Present slides">
+    <section class="slides-paper">
+      <h2 id="present-title"></h2>
+      <div id="present-content"></div>
+    </section>
+    <div class="slides-actions">
+      <button id="present-prev" class="button button-outline" type="button">Previous</button>
+      <output id="present-count"></output>
+      <button id="present-next" class="button button-outline" type="button">Next</button>
+      <button id="present-close" class="button button-outline" type="button">Close</button>
+    </div>
+  </dialog>
+  <script src="./assets/vendor/fflate.min.js" defer></script>
+  <script src="./presentation-package.js" defer></script>
+  <script src="./slides.js" defer></script>
+</body>
+</html>

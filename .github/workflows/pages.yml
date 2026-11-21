@@ -79,10 +79,11 @@ jobs:
           node tests/file-picker-labels.test.cjs
           node tests/assistant-panel-state.test.cjs
           node tests/sheet-model.test.mjs
+          node tests/presentation-package.test.mjs
       - name: Package application
         run: |
           mkdir -p _site/assets/vendor
-          cp index.html styles.css app.js document-model.js editor-runtime.js sheets.html sheets.js sheet-model.js sheet-xlsx.js CNAME _site/
+          cp index.html styles.css app.js document-model.js editor-runtime.js sheets.html sheets.js sheet-model.js sheet-xlsx.js slides.html slides.js presentation-package.js CNAME _site/
           cp assets/hb-official.jpg _site/assets/
           python scripts/assemble_pdfjs.py
           cp assets/vendor/mammoth.browser.min.js assets/vendor/MAMMOTH-LICENSE assets/vendor/fflate.min.js assets/vendor/FFLATE-LICENSE assets/vendor/pdf.min.js assets/vendor/pdf.worker.min.js assets/vendor/PDFJS-LICENSE _site/assets/vendor/
@@ -95,9 +96,14 @@ jobs:
           index = Path("_site/index.html")
           html = index.read_text()
           version = os.environ["GITHUB_SHA"]
-          for asset in ("styles.css", "document-model.js", "editor-runtime.js", "app.js", "assets/vendor/fflate.min.js", "assets/vendor/pdf.min.js", "assets/vendor/pdf.worker.min.js"):
+          for asset in ("styles.css", "document-model.js", "editor-runtime.js", "presentation-package.js", "app.js", "assets/vendor/fflate.min.js", "assets/vendor/pdf.min.js", "assets/vendor/pdf.worker.min.js"):
               html = html.replace(f'./{asset}"', f'./{asset}?v={version}"')
           index.write_text(html)
+          slides = Path("_site/slides.html")
+          html = slides.read_text()
+          for asset in ("styles.css", "slides.js", "presentation-package.js", "assets/vendor/fflate.min.js"):
+              html = html.replace(f'./{asset}"', f'./{asset}?v={version}"')
+          slides.write_text(html)
           sheets = Path("_site/sheets.html")
           html = sheets.read_text()
           for asset in ("styles.css", "sheets.js", "assets/vendor/fflate.min.js"):
