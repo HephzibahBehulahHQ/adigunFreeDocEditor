@@ -57,7 +57,7 @@
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Formulas</summary><div>
         <button type="button" id="sheet-autosum">Sum cells above</button>
-        <button type="button" id="sheet-function-help">Function examples</button>
+        <button type="button" id="sheet-function-help">Find a function</button>
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Page Layout</summary><div>
         <button id="sheet-print-settings" type="button">Print setup</button>
@@ -141,21 +141,25 @@
   </dialog>
   <dialog id="sheet-function-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-function-title">
     <form method="dialog">
-      <h2 id="sheet-function-title">Function examples</h2>
-      <dl>
-        <dt><code>=SUM(A1:A5)</code></dt><dd>Add values in a range.</dd>
-        <dt><code>=AVERAGE(A1:A5)</code></dt><dd>Find the mean.</dd>
-        <dt><code>=MIN(A1:A5)</code> and <code>=MAX(A1:A5)</code></dt><dd>Find the lowest and highest values.</dd>
-        <dt><code>=COUNT(A1:A5)</code></dt><dd>Count numeric values.</dd>
-        <dt><code>=ABS(A1)</code></dt><dd>Return the absolute value.</dd>
-        <dt><code>=ROUND(A1,2)</code></dt><dd>Round to two decimal places.</dd>
-        <dt><code>=MOD(A1,3)</code></dt><dd>Find the remainder after division by three.</dd>
-        <dt><code>=A1&amp;" "&amp;B1</code></dt><dd>Join two cell values with a space.</dd>
-        <dt><code>=LEN(A1)</code></dt><dd>Count the characters in a value.</dd>
-        <dt><code>=UPPER(A1)</code> and <code>=LOWER(A1)</code></dt><dd>Change the letter case.</dd>
-        <dt><code>=TRIM(A1)</code></dt><dd>Remove leading, trailing and repeated spaces.</dd>
+      <h2 id="sheet-function-title">Find a function</h2>
+      <label>Search functions <input type="search" id="sheet-function-query" maxlength="80" autocomplete="off" autofocus></label>
+      <dl id="sheet-function-examples">
+        <div><dt><code>=SUM(A1:A5)</code></dt><dd>Add values in a range.</dd></div>
+        <div><dt><code>=AVERAGE(A1:A5)</code></dt><dd>Find the mean.</dd></div>
+        <div><dt><code>=MIN(A1:A5)</code></dt><dd>Find the lowest value.</dd></div>
+        <div><dt><code>=MAX(A1:A5)</code></dt><dd>Find the highest value.</dd></div>
+        <div><dt><code>=COUNT(A1:A5)</code></dt><dd>Count numeric values.</dd></div>
+        <div><dt><code>=ABS(A1)</code></dt><dd>Return the absolute value.</dd></div>
+        <div><dt><code>=ROUND(A1,2)</code></dt><dd>Round to two decimal places.</dd></div>
+        <div><dt><code>=MOD(A1,3)</code></dt><dd>Find the remainder after division by three.</dd></div>
+        <div><dt><code>=A1&amp;" "&amp;B1</code></dt><dd>Join text by concatenating values with a space.</dd></div>
+        <div><dt><code>=LEN(A1)</code></dt><dd>Count the characters in a value.</dd></div>
+        <div><dt><code>=UPPER(A1)</code></dt><dd>Convert text to uppercase.</dd></div>
+        <div><dt><code>=LOWER(A1)</code></dt><dd>Convert text to lowercase.</dd></div>
+        <div><dt><code>=TRIM(A1)</code></dt><dd>Remove leading, trailing and repeated spaces.</dd></div>
       </dl>
-      <button>Close</button>
+      <p id="sheet-function-count" role="status"></p>
+      <button type="button" id="sheet-function-close">Close</button>
     </form>
   </dialog>
   <dialog id="sheet-print-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-print-title">

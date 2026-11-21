@@ -772,7 +772,27 @@ $("sheet-autosum").addEventListener("click", () => {
   const column = selectedAddress[0];
   updateCell(selectedAddress, `=SUM(${column}1:${column}${row - 1})`);
 });
-$("sheet-function-help").addEventListener("click", () => $("sheet-function-dialog").showModal());
+const functionDialog = $("sheet-function-dialog");
+const functionQuery = $("sheet-function-query");
+function filterFunctions() {
+  const terms = functionQuery.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  let count = 0;
+  for (const example of $("sheet-function-examples").children) {
+    const description = example.textContent.toLowerCase();
+    example.hidden = !terms.every((term) => description.includes(term));
+    if (!example.hidden) count++;
+  }
+  $("sheet-function-count").textContent = !terms.length ? "" :
+    count === 0 ? "No matching functions." : `${count} ${count === 1 ? "match" : "matches"}`;
+}
+$("sheet-function-help").addEventListener("click", () => {
+  functionQuery.value = "";
+  filterFunctions();
+  functionDialog.showModal();
+});
+functionQuery.addEventListener("input", filterFunctions);
+functionDialog.querySelector("form").addEventListener("submit", (event) => event.preventDefault());
+$("sheet-function-close").addEventListener("click", () => functionDialog.close());
 $("sheet-gridlines").addEventListener("click", (event) => {
   const hidden = grid.classList.toggle("sheets-no-gridlines");
   event.currentTarget.setAttribute("aria-pressed", String(!hidden));
