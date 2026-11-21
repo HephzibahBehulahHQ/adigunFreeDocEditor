@@ -11,7 +11,7 @@ import StarterKit from "@tiptap/starter-kit";
 const modelFormat = "adigun-document";
 const paragraphTypes = ["paragraph", "heading", "listItem", "tableCell", "tableHeader"];
 const blockTypes = new Set(["paragraph", "heading", "bulletList", "orderedList", "listItem", "blockquote", "codeBlock", "horizontalRule", "table", "tableRow", "tableCell", "tableHeader"]);
-const inlineTypes = new Set(["text", "image", "hardBreak"]);
+const inlineTypes = new Set(["text", "image", "hardBreak", "footnote"]);
 
 function parseOrderedListOrdinal(value) {
   if (typeof value === "number") return Number.isInteger(value) && value >= -2147483648 && value <= 2147483647 ? value : null;
@@ -234,11 +234,28 @@ const ModelListItem = ListItem.extend({
   },
 });
 
+const Footnote = Node.create({
+  name: "footnote",
+  inline: true,
+  group: "inline",
+  atom: true,
+  addAttributes() {
+    return { text: { default: "", rendered: false } };
+  },
+  parseHTML() {
+    return [{ tag: "span[data-footnote-text]", getAttrs: (element) => ({ text: element.getAttribute("data-footnote-text").trim().slice(0, 2000) }) }];
+  },
+  renderHTML({ node }) {
+    return ["span", { "data-footnote-text": node.attrs.text, title: node.attrs.text, "aria-label": "Edit footnote", role: "button", tabindex: "0" }];
+  },
+});
+
 export const editorExtensions = [
   DocumentSheet,
   StarterKit.configure({ link: false, orderedList: false, listItem: false, heading: { levels: [1, 2, 3, 4, 5, 6] } }),
   ModelOrderedList,
   ModelListItem,
+  Footnote,
   TableKit,
   Image.configure({ inline: true, allowBase64: true }),
   Link.configure({ openOnClick: false, autolink: false, linkOnPaste: false }),
@@ -334,6 +351,9 @@ function modelNodeToEditor(node, marks = []) {
   if (node?.type === "text") return node.text ? [{ type: "text", text: node.text, ...(marks.length ? { marks } : {}) }] : [];
   if (node?.type !== "element") return [];
   const { tag, attrs = {}, children = [] } = node;
+  if (tag === "span" && attrs["data-footnote-text"]) {
+    return [{ type: "footnote", attrs: { text: attrs["data-footnote-text"] } }];
+  }
   const inlineMark = inlineMarkForTag(tag, attrs);
   if (inlineMark) return childrenToEditor(children, mergeMark(marks, inlineMark));
 
@@ -433,6 +453,7 @@ function editorNodeToModel(node) {
     ["src", node.attrs.src], ["alt", node.attrs.alt], ["width", node.attrs.width], ["height", node.attrs.height],
   ].filter(([, value]) => value !== null && value !== undefined && value !== "")), children: [] };
   if (node.type === "hardBreak") return { type: "element", tag: "br", attrs: {}, children: [] };
+  if (node.type === "footnote") return { type: "element", tag: "span", attrs: { "data-footnote-text": node.attrs.text }, children: [] };
   if (node.type === "horizontalRule") return { type: "element", tag: "hr", attrs: node.attrs.pageBreak ? { "data-page-break": "true" } : {}, children: [] };
 
   const children = (node.content || []).map(editorNodeToModel);
