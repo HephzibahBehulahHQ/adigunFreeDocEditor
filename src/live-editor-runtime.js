@@ -3,6 +3,7 @@ import { editorExtensions } from "./editor-schema.js";
 
 export function createLiveEditor({ element, onUpdate }) {
   const content = element.innerHTML;
+  element.replaceChildren();
   element.contentEditable = "false";
   const editor = new Editor({
     element,
