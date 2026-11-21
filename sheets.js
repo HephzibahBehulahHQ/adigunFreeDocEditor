@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, numberFormats, parseChartRange, parseCsv, parseSheetFilter, renameSheetReferences, shiftCellFormula, sortSheetRange, spreadsheetFonts, toCsv, validationOptions } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, numberFormats, parseChartRange, parseCsv, parseSheetFilter, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, spreadsheetFonts, toCsv, validationOptions } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 import { bindSheetPrinting } from "./sheet-print.js";
 
@@ -491,27 +491,66 @@ const filterForm = filterDialog.querySelector("form");
 const filterStatus = filterForm.querySelector("[role=status]");
 const sortDialog = $("sheet-sort-dialog");
 const sortForm = sortDialog.querySelector("form");
-$("sheet-sort").addEventListener("click", () => {
+let deduplicate = false;
+function openRecordTool(removeDuplicates) {
+  deduplicate = removeDuplicates;
+  $("sheet-sort-title").textContent = deduplicate ? "Remove duplicate records" : "Sort records";
+  sortForm.querySelector("[type=submit]").textContent = deduplicate ? "Remove duplicate rows" : "Sort data rows";
+  sortForm.querySelector("[data-sort-options]").hidden = deduplicate;
+  sortForm.elements.column.disabled = deduplicate;
   const sheet = currentSheet();
   sortForm.elements.range.value = selectedRange?.label || `A1:${cellAddress(sheet.rows - 1, sheet.columns - 1)}`;
   sortForm.elements.column.value = selectedAddress[0];
   sortForm.querySelector("[role=status]").textContent = "";
   sortDialog.showModal();
-});
+}
+$("sheet-sort").addEventListener("click", () => openRecordTool(false));
+$("sheet-deduplicate").addEventListener("click", () => openRecordTool(true));
 sortDialog.querySelector("[data-close]").addEventListener("click", () => sortDialog.close());
 sortForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const { range, column, direction } = sortForm.elements;
   try {
     const sheet = currentSheet();
-    const result = sortSheetRange(sheet, { range: range.value, column: column.value, direction: direction.value }, workbookValues());
+    const valueAt = workbookValues();
+    let result;
+    let message = "";
+    if (deduplicate) {
+      const { duplicates, records } = removeDuplicateRecords(sheet, range.value, valueAt);
+      if (!duplicates) {
+        sortForm.querySelector("[role=status]").textContent = "No duplicate records in this range.";
+        return;
+      }
+      result = records;
+      message = `${duplicates} duplicate ${duplicates === 1 ? "record" : "records"} removed.`;
+    } else result = sortSheetRange(sheet, { range: range.value, column: column.value, direction: direction.value }, valueAt);
     recordEdit();
     Object.assign(sheet, result);
     save();
     sortDialog.close();
     refreshValues();
     refreshFormula();
+    if (message) status(message);
   } catch (error) { sortForm.querySelector("[role=status]").textContent = error.message; }
+});
+const splitDialog = $("sheet-split-dialog");
+const splitForm = splitDialog.querySelector("form");
+$("sheet-split").addEventListener("click", () => {
+  splitForm.elements.range.value = selectedRange?.label || selectedAddress;
+  splitForm.querySelector("[role=status]").textContent = "";
+  splitDialog.showModal();
+});
+splitForm.querySelector("[data-close]").addEventListener("click", () => splitDialog.close());
+splitForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const { range, delimiter } = splitForm.elements;
+  try {
+    const changes = splitColumnText(currentSheet(), range.value, delimiter.value === "tab" ? "\t" : delimiter.value);
+    if (!changes.length) throw new Error("No matching separators in the selected text.");
+    applyCellChanges(changes);
+    splitDialog.close();
+    render();
+  } catch (error) { splitForm.querySelector("[role=status]").textContent = error.message; }
 });
 $("sheet-filter").addEventListener("click", () => {
   const sheet = currentSheet();

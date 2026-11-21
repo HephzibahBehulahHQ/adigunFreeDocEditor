@@ -80,20 +80,44 @@ export function hiddenFilterRows(filter, valueAt) {
   return hidden;
 }
 
-export function sortSheetRange(sheet, { range, column, direction }, valueAt) {
+function recordBounds(sheet, range, column) {
   const target = parseSheetFilter({ range, column, value: "sort" });
-  if (!target || !["asc", "desc"].includes(direction)) throw new Error("Choose a header row, data rows and a sort column.");
+  if (!target) throw new Error("Choose a header row, data rows and a column within the range.");
   const [start, end] = target.range.split(":");
   const first = Number(start.slice(1));
   const last = Number(end.slice(1));
   if (last > sheet.rows || end.charCodeAt(0) - 64 > sheet.columns) throw new Error("Choose a range within this sheet.");
   const left = start.charCodeAt(0) - 65;
   const right = end.charCodeAt(0) - 65;
-  const rows = Array.from({ length: last - first }, (_, index) => first + index + 1);
+  return { left, right, rows: Array.from({ length: last - first }, (_, index) => first + index + 1), column: target.column };
+}
+
+function rewriteRecordRows(sheet, { left, right, rows }, order) {
+  const keys = ["cells", "formats", "validation", "styles"];
+  const result = Object.fromEntries(keys.map((key) => [key, { ...sheet[key] }]));
+  for (const [offset, targetRow] of rows.entries()) {
+    const sourceRow = order[offset];
+    for (let index = left; index <= right; index++) {
+      const destination = cellAddress(targetRow - 1, index);
+      const source = sourceRow ? cellAddress(sourceRow - 1, index) : "";
+      for (const key of keys) {
+        const value = sourceRow ? sheet[key]?.[source] : undefined;
+        if (value === undefined) delete result[key][destination];
+        else result[key][destination] = key === "cells" ? shiftCellFormula(value, targetRow - sourceRow, 0) : value;
+      }
+    }
+  }
+  return result;
+}
+
+export function sortSheetRange(sheet, { range, column, direction }, valueAt) {
+  if (!["asc", "desc"].includes(direction)) throw new Error("Choose ascending or descending order.");
+  const record = recordBounds(sheet, range, column);
+  const { rows } = record;
   const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
   const numeric = (value) => typeof value === "number" || typeof value === "string" &&
     /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()) && Number.isFinite(Number(value));
-  const values = new Map(rows.map((row) => [row, valueAt(target.column + row)]));
+  const values = new Map(rows.map((row) => [row, valueAt(record.column + row)]));
   const compare = (a, b) => {
     if (a === "" || b === "") return Number(a === "") - Number(b === "");
     let difference;
@@ -103,21 +127,45 @@ export function sortSheetRange(sheet, { range, column, direction }, valueAt) {
     return direction === "asc" ? difference : -difference;
   };
   const order = rows.slice().sort((a, b) => compare(values.get(a), values.get(b)));
-  const result = {};
-  for (const key of ["cells", "formats", "validation", "styles"]) result[key] = { ...sheet[key] };
-  for (const [offset, sourceRow] of order.entries()) {
-    const targetRow = rows[offset];
-    for (let index = left; index <= right; index++) {
-      const source = cellAddress(sourceRow - 1, index);
-      const destination = cellAddress(targetRow - 1, index);
-      for (const key of ["cells", "formats", "validation", "styles"]) {
-        const value = sheet[key]?.[source];
-        if (value === undefined) delete result[key][destination];
-        else result[key][destination] = key === "cells" ? shiftCellFormula(value, targetRow - sourceRow, 0) : value;
-      }
+  return rewriteRecordRows(sheet, record, order);
+}
+
+export function removeDuplicateRecords(sheet, range, valueAt) {
+  const record = recordBounds(sheet, range, String(range).trim()[0]);
+  const seen = new Set();
+  let duplicates = 0;
+  const order = record.rows.filter((row) => {
+    const values = Array.from({ length: record.right - record.left + 1 }, (_, offset) =>
+      String(valueAt(cellAddress(row - 1, record.left + offset))).toUpperCase());
+    if (values.every((value) => value === "")) return false;
+    const key = JSON.stringify(values);
+    if (seen.has(key)) { duplicates++; return false; }
+    seen.add(key);
+    return true;
+  });
+  return { duplicates, ...(duplicates ? { records: rewriteRecordRows(sheet, record, order) } : {}) };
+}
+
+export function splitColumnText(sheet, range, delimiter) {
+  const match = /^([A-Z])([1-9]\d?|100)(?::\1([1-9]\d?|100))?$/.exec(String(range).trim().toUpperCase());
+  if (!match || ![",", ";", "\t", "|"].includes(delimiter)) throw new Error("Select cells in one column and choose a separator.");
+  const [, letter, start, end = start] = match;
+  const column = letter.charCodeAt(0) - 65;
+  if (Number(start) > Number(end) || Number(end) > sheet.rows || column >= sheet.columns) throw new Error("Select a range within this sheet.");
+  const changes = [];
+  for (let row = Number(start); row <= Number(end); row++) {
+    const source = sheet.cells[letter + row] ?? "";
+    if (!source || !source.includes(delimiter)) continue;
+    if (source.startsWith("=")) throw new Error("Select text cells without formulas.");
+    const parsed = parseCsv(source, delimiter);
+    if (parsed.length !== 1 || parsed[0].length + column > maxColumns) throw new Error("Split text exceeds the available columns.");
+    for (const [index, value] of parsed[0].entries()) {
+      const address = cellAddress(row - 1, column + index);
+      if (index && sheet.cells[address]) throw new Error(`The split would overwrite ${address}. Clear that cell first.`);
+      changes.push([address, /^[=']/.test(value) ? "'" + value : value]);
     }
   }
-  return result;
+  return changes;
 }
 
 export function parseChartRange(range = "") {

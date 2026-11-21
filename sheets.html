@@ -69,6 +69,8 @@
         <button type="button" id="sheet-validation">Dropdown validation</button>
         <button type="button" id="sheet-filter">Filter rows</button>
         <button type="button" id="sheet-sort">Sort records</button>
+        <button type="button" id="sheet-deduplicate">Remove duplicate records</button>
+        <button type="button" id="sheet-split">Split text into columns</button>
         <button type="button" id="sheet-filter-clear" disabled>Clear row filter</button>
         <button type="button" id="sheet-find">Find in this sheet</button>
         <button type="button" id="sheet-pivot-refresh" disabled>Refresh PivotTable</button>
@@ -194,11 +196,25 @@
     <h2 id="sheet-sort-title">Sort records</h2>
     <form>
       <label>Full range with headers <input name="range" placeholder="A1:D20" maxlength="9" required></label>
-      <label>Sort by column <input name="column" placeholder="B" maxlength="1" required></label>
-      <label>Order <select name="direction"><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
+      <div data-sort-options>
+        <label>Sort by column <input name="column" placeholder="B" maxlength="1" required></label>
+        <label>Order <select name="direction"><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
+      </div>
       <p role="status"></p>
       <div class="sheets-actions">
         <button class="button button-outline" type="submit">Sort data rows</button>
+        <button class="button button-outline" type="button" data-close>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="sheet-split-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-split-title">
+    <h2 id="sheet-split-title">Split text into columns</h2>
+    <form>
+      <label>Range in one column <input name="range" maxlength="9" required></label>
+      <label>Separator <select name="delimiter"><option value=",">Comma</option><option value=";">Semicolon</option><option value="tab">Tab</option><option value="|">Pipe</option></select></label>
+      <p role="status"></p>
+      <div class="sheets-actions">
+        <button class="button button-outline" type="submit">Apply split</button>
         <button class="button button-outline" type="button" data-close>Cancel</button>
       </div>
     </form>
