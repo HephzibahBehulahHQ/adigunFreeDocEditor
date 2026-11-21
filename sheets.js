@@ -10,6 +10,9 @@ const grid = $("sheet-grid");
 let workbook = { active: 0, sheets: [blankSheet()] };
 let selectedAddress = "A1";
 let selectedRange = null;
+const undoStack = [];
+const redoStack = [];
+let editingAddress;
 
 try {
   const stored = JSON.parse(localStorage.getItem(storageKey));
@@ -36,6 +39,33 @@ try {
 function status(message) { $("sheet-save").textContent = message; }
 function currentSheet() { return workbook.sheets[workbook.active]; }
 
+function updateHistoryButtons() {
+  $("sheet-undo").disabled = !undoStack.length;
+  $("sheet-redo").disabled = !redoStack.length;
+}
+
+function recordEdit(address) {
+  if (address && editingAddress === address) return;
+  undoStack.push(structuredClone(workbook));
+  if (undoStack.length > 30) undoStack.shift();
+  redoStack.length = 0;
+  editingAddress = address;
+  updateHistoryButtons();
+}
+
+function restoreEdit(from, to) {
+  if (!from.length) return;
+  to.push(workbook);
+  workbook = from.pop();
+  editingAddress = undefined;
+  save();
+  render();
+  updateHistoryButtons();
+}
+
+$("sheet-undo").addEventListener("click", () => restoreEdit(undoStack, redoStack));
+$("sheet-redo").addEventListener("click", () => restoreEdit(redoStack, undoStack));
+
 const pivotDialog = $("sheet-pivot-dialog");
 $("sheet-pivot").addEventListener("click", () => {
   if (workbook.sheets.length >= maxSheets) { status("The workbook already contains 12 sheets."); return; }
@@ -49,6 +79,7 @@ $("sheet-pivot-form").addEventListener("submit", (event) => {
   pivot.source = workbook.active;
   try {
     const result = buildPivot(currentSheet().cells, pivot);
+    recordEdit();
     workbook.active = workbook.sheets.push({ ...blankSheet(), ...result, pivot, name: "Pivot " + workbook.sheets.length }) - 1;
     pivotDialog.close();
     save();
@@ -60,7 +91,9 @@ $("sheet-pivot-refresh").addEventListener("click", () => {
   const source = workbook.sheets[sheet.pivot?.source];
   if (!source || source === sheet) { status("The source sheet is unavailable."); return; }
   try {
-    Object.assign(sheet, buildPivot(source.cells, sheet.pivot));
+    const result = buildPivot(source.cells, sheet.pivot);
+    recordEdit();
+    Object.assign(sheet, result);
     save();
     render();
     status("PivotTable refreshed.");
@@ -116,8 +149,10 @@ function refreshFormula() {
   $("sheet-formula").value = currentSheet().cells[selectedAddress] ?? "";
 }
 
-function updateCell(address, value) {
+function updateCell(address, value, mergeTyping = false) {
   const { cells } = currentSheet();
+  if ((cells[address] ?? "") === value) return;
+  recordEdit(mergeTyping ? address : undefined);
   if (value) cells[address] = value;
   else delete cells[address];
   $("sheet-export").disabled = Object.keys(cells).length === 0;
@@ -185,12 +220,43 @@ grid.addEventListener("focusin", (event) => {
   refreshFormula();
   refreshSelection();
 });
-grid.addEventListener("focusout", () => setTimeout(refreshValues, 0));
+grid.addEventListener("focusout", () => {
+  editingAddress = undefined;
+  setTimeout(refreshValues, 0);
+});
 grid.addEventListener("input", (event) => {
   const address = event.target.dataset.cell;
   if (!address) return;
   selectedAddress = address;
-  updateCell(address, event.target.value);
+  updateCell(address, event.target.value, true);
+});
+grid.addEventListener("paste", (event) => {
+  const address = event.target.dataset.cell;
+  const text = event.clipboardData?.getData("text/plain");
+  if (!address || !text || !/[\t\n\r]/.test(text)) return;
+  event.preventDefault();
+  try {
+    if (text.length > 1024 * 1024) throw new Error("Paste up to 1 MB of tabular text.");
+    const rows = parseCsv(text, "\t");
+    const row = Number(address.slice(1)) - 1;
+    const column = address.charCodeAt(0) - 65;
+    const width = Math.max(...rows.map((fields) => fields.length));
+    if (row + rows.length > maxRows || column + width > maxColumns) throw new Error("The pasted range exceeds the workbook grid.");
+    recordEdit();
+    const sheet = currentSheet();
+    sheet.rows = Math.max(sheet.rows, row + rows.length);
+    sheet.columns = Math.max(sheet.columns, column + width);
+    for (const [offset, fields] of rows.entries()) {
+      for (const [index, value] of fields.entries()) {
+        const target = cellAddress(row + offset, column + index);
+        if (value) sheet.cells[target] = value;
+        else delete sheet.cells[target];
+      }
+    }
+    save();
+    render();
+    grid.querySelector(`[data-cell="${address}"]`).focus();
+  } catch (error) { status(error.message); }
 });
 $("sheet-formula").addEventListener("change", (event) => updateCell(selectedAddress, event.target.value));
 $("sheet-selected").addEventListener("keydown", (event) => {
@@ -222,6 +288,7 @@ $("sheet-formula").addEventListener("keydown", (event) => {
 });
 for (const control of document.querySelectorAll("[data-sheet-format]")) {
   control.addEventListener("click", () => {
+    recordEdit();
     const formats = currentSheet().formats ??= {};
     const format = control.dataset.sheetFormat;
     for (const address of selectionAddresses()) {
@@ -269,23 +336,33 @@ $("sheet-find-form").addEventListener("submit", (event) => {
 });
 grid.addEventListener("keydown", (event) => {
   const address = event.target.dataset.cell;
+  const key = event.key.toLowerCase();
+  if (address && !event.isComposing && (event.ctrlKey || event.metaKey) && !event.altKey && ["z", "y"].includes(key)) {
+    event.preventDefault();
+    $(key === "y" || event.shiftKey ? "sheet-redo" : "sheet-undo").click();
+    grid.querySelector(`[data-cell="${selectedAddress}"]`)?.focus();
+    return;
+  }
   if (event.key !== "Enter" || !address || event.isComposing) return;
   event.preventDefault();
   const row = Number(address.slice(1)) + (event.shiftKey ? -1 : 1);
   grid.querySelector(`[data-cell="${address[0]}${row}"]`)?.focus();
 });
 $("sheet-add").addEventListener("click", () => {
+  recordEdit();
   workbook.active = workbook.sheets.push(blankSheet()) - 1;
   save();
   render();
   grid.querySelector('[data-cell="A1"]').focus();
 });
 $("sheet-add-row").addEventListener("click", () => {
+  recordEdit();
   currentSheet().rows++;
   save();
   render();
 });
 $("sheet-add-column").addEventListener("click", () => {
+  recordEdit();
   currentSheet().columns++;
   save();
   render();
@@ -306,6 +383,7 @@ $("sheet-file").addEventListener("change", async (event) => {
       sheet.columns = Math.max(sheet.columns, fields.length);
       fields.forEach((value, column) => { if (value) sheet.cells[cellAddress(row, column)] = value; });
     }
+    recordEdit();
     workbook.active = workbook.sheets.push(sheet) - 1;
     save();
     render();
@@ -324,6 +402,7 @@ $("workbook-file").addEventListener("change", async (event) => {
     const emptyWorkbook = workbook.sheets.length === 1 && !Object.keys(workbook.sheets[0].cells).length;
     const existing = emptyWorkbook ? [] : workbook.sheets;
     if (existing.length + sheets.length > maxSheets) { status("The import would exceed the workbook’s 12-sheet limit."); return; }
+    recordEdit();
     workbook = { active: existing.length, sheets: [...existing, ...sheets] };
     save();
     render();

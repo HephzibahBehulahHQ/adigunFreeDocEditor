@@ -14,7 +14,7 @@ export function displayCell(value, format, locale) {
   }).format(Number(value));
 }
 
-export function parseCsv(source) {
+export function parseCsv(source, delimiter = ",") {
   const rows = [];
   let row = [];
   let field = "";
@@ -38,7 +38,7 @@ export function parseCsv(source) {
       if (character === '"' && source[index + 1] === '"') { field += '"'; index++; }
       else if (character === '"') { quoted = false; quoteClosed = true; }
       else field += character;
-    } else if (character === ",") finishField();
+    } else if (character === delimiter) finishField();
     else if (character === "\r" || character === "\n") {
       if (character === "\r" && source[index + 1] === "\n") index++;
       finishRow();
