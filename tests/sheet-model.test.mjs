@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
-import { calculateSheet, cellAddress, parseCsv, toCsv } from "../sheet-model.js";
+import { calculateSheet, cellAddress, displayCell, parseCsv, toCsv } from "../sheet-model.js";
 import { exportWorkbook, importWorkbook } from "../sheet-xlsx.js";
 
 assert.equal(cellAddress(99, 25), "Z100");
+assert.equal(displayCell(0.375, "percent", "en-US"), "37.50%");
+assert.equal(displayCell("#ERROR!", "number", "en-US"), "#ERROR!");
 assert.deepEqual(parseCsv('name,value\r\n"one, two","a ""quote"""\r\n"line\nbreak",5'), [
   ["name", "value"], ["one, two", 'a "quote"'], ["line\nbreak", "5"],
 ]);
@@ -31,10 +33,10 @@ vm.runInNewContext(fs.readFileSync(new URL("../assets/vendor/fflate.min.js", imp
 const zip = zipContext.fflate;
 const dom = new JSDOM();
 try {
-  const sheets = [{ name: "Sales & costs", cells: { A1: "10", A2: "20", A3: "=SUM(A1:A2)", B1: "001", B2: "'=literal" } }, { name: "Notes", cells: { A1: 'Quotes and <symbols> "work"' } }];
+  const sheets = [{ name: "Sales & costs", cells: { A1: "10", A2: "20", A3: "=SUM(A1:A2)", B1: "001", B2: "'=literal" }, formats: { A3: "number", C1: "percent" } }, { name: "Notes", cells: { A1: 'Quotes and <symbols> "work"' }, formats: {} }];
   const bytes = exportWorkbook(sheets, zip);
   const imported = importWorkbook(bytes, zip, dom.window.DOMParser);
-  assert.deepEqual(imported.map(({ name, cells }) => ({ name, cells })), sheets);
+  assert.deepEqual(imported.map(({ name, cells, formats }) => ({ name, cells, formats })), sheets);
   assert.equal(calculateSheet(imported[0].cells)("A3"), 30);
   const parts = zip.unzipSync(bytes);
   assert.match(zip.strFromU8(parts["xl/worksheets/sheet1.xml"]), /<f>SUM\(A1:A2\)<\/f><v>30<\/v>/);

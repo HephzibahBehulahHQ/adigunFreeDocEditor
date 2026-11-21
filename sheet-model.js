@@ -1,6 +1,18 @@
 export const maxRows = 100;
 export const maxColumns = 26;
 export const maxCellLength = 4000;
+export const numberFormats = { general: 0, number: 4, percent: 10 };
+
+export function displayCell(value, format, locale) {
+  if (!Object.hasOwn(numberFormats, format) || format === "general") return value;
+  const numeric = typeof value === "number" || (typeof value === "string" && /^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(value.trim()));
+  if (!numeric || !Number.isFinite(Number(value))) return value;
+  return new Intl.NumberFormat(locale, {
+    style: format === "percent" ? "percent" : "decimal",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value));
+}
 
 export function parseCsv(source) {
   const rows = [];
