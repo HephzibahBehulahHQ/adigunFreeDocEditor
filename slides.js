@@ -110,6 +110,26 @@
     if (event.key === "ArrowRight") $("present-next").click();
   });
 
+  $("slide-import").addEventListener("click", () => $("slide-file").click());
+  $("slide-file").addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) { status("Choose a PPTX file under 8 MB."); return; }
+    try {
+      const slides = window.AdigunPresentation.importTextSlides(new Uint8Array(await file.arrayBuffer()));
+      const empty = deck.slides.length === 1 && !deck.slides[0].title && !deck.slides[0].content;
+      const existing = empty ? [] : deck.slides;
+      if (existing.length + slides.length > maxSlides) { status("This import would exceed the 40-slide limit."); return; }
+      deck = { name: empty ? file.name.replace(/\.pptx$/i, "").slice(0, 100) : deck.name, active: existing.length, slides: [...existing, ...slides] };
+      save();
+      render();
+      status("Slide text imported. Images and original formatting are not included.");
+    } catch (error) {
+      status(error.message || "This PowerPoint file could not be opened.");
+    }
+  });
+
   $("slide-export").addEventListener("click", async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
