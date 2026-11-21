@@ -1,4 +1,4 @@
-import { calculateSheet, cellAddress, displayCell, maxCellLength, maxColumns, maxRows, numberFormats, parseCsv, toCsv } from "./sheet-model.js";
+import { buildPivot, calculateSheet, cellAddress, displayCell, maxCellLength, maxColumns, maxRows, numberFormats, parseCsv, toCsv } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
@@ -21,6 +21,9 @@ try {
         validAddress.test(key) && typeof value === "string" && value.length <= maxCellLength)),
       formats: Object.fromEntries(Object.entries(item?.formats ?? {}).filter(([key, value]) =>
         validAddress.test(key) && Object.hasOwn(numberFormats, value))),
+      pivot: item?.pivot && Number.isInteger(item.pivot.source) &&
+        ["range", "group", "measure", "aggregate"].every((key) => typeof item.pivot[key] === "string" && item.pivot[key].length <= 25)
+        ? item.pivot : undefined,
     }));
     const active = Number.isInteger(stored.active) ? Math.max(0, Math.min(stored.active, sheets.length - 1)) : 0;
     workbook = { active, sheets };
@@ -31,6 +34,37 @@ try {
 
 function status(message) { $("sheet-save").textContent = message; }
 function currentSheet() { return workbook.sheets[workbook.active]; }
+
+const pivotDialog = $("sheet-pivot-dialog");
+$("sheet-pivot").addEventListener("click", () => {
+  if (workbook.sheets.length >= maxSheets) { status("The workbook already contains 12 sheets."); return; }
+  $("pivot-status").textContent = "";
+  pivotDialog.showModal();
+});
+$("pivot-cancel").addEventListener("click", () => pivotDialog.close());
+$("sheet-pivot-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const pivot = Object.fromEntries(["range", "group", "measure", "aggregate"].map((key) => [key, $("pivot-" + key).value]));
+  pivot.source = workbook.active;
+  try {
+    const result = buildPivot(currentSheet().cells, pivot);
+    workbook.active = workbook.sheets.push({ ...blankSheet(), ...result, pivot, name: "Pivot " + workbook.sheets.length }) - 1;
+    pivotDialog.close();
+    save();
+    render();
+  } catch (error) { $("pivot-status").textContent = error.message; }
+});
+$("sheet-pivot-refresh").addEventListener("click", () => {
+  const sheet = currentSheet();
+  const source = workbook.sheets[sheet.pivot?.source];
+  if (!source || source === sheet) { status("The source sheet is unavailable."); return; }
+  try {
+    Object.assign(sheet, buildPivot(source.cells, sheet.pivot));
+    save();
+    render();
+    status("PivotTable refreshed.");
+  } catch (error) { status(error.message); }
+});
 
 function save() {
   try {
@@ -66,6 +100,7 @@ function updateCell(address, value) {
 
 function render() {
   const sheet = currentSheet();
+  $("sheet-pivot-refresh").disabled = !sheet.pivot;
   if (Number(selectedAddress.slice(1)) > sheet.rows || selectedAddress.charCodeAt(0) - 64 > sheet.columns) selectedAddress = "A1";
   const header = document.createElement("thead");
   const heading = header.insertRow();

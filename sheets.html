@@ -24,6 +24,7 @@
       <details name="sheet-commands" class="command-menu"><summary>Insert</summary><div>
         <button id="sheet-add-row" type="button">Add row</button>
         <button id="sheet-add-column" type="button">Add column</button>
+        <button id="sheet-pivot" type="button">PivotTable</button>
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Format</summary><div>
         <button type="button" data-sheet-format="general">General</button>
@@ -38,6 +39,7 @@
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Data</summary><div>
         <button type="button" id="sheet-find">Find in this sheet</button>
+        <button type="button" id="sheet-pivot-refresh" disabled>Refresh PivotTable</button>
       </div></details>
       <input id="sheet-file" type="file" accept=".csv,text/csv" hidden>
       <input id="workbook-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
@@ -52,6 +54,17 @@
       <button id="sheet-add" type="button" class="button button-outline">＋ Sheet</button>
     </div>
   </main>
+  <dialog id="sheet-pivot-dialog" aria-labelledby="sheet-pivot-title">
+    <form id="sheet-pivot-form">
+      <h2 id="sheet-pivot-title">Create PivotTable</h2>
+      <label>Source range with headers <input id="pivot-range" value="A1:B20" required></label>
+      <label>Group by column <input id="pivot-group" value="A" maxlength="1" required></label>
+      <label>Summarize column <input id="pivot-measure" value="B" maxlength="1" required></label>
+      <label>Calculation <select id="pivot-aggregate"><option value="sum">Sum</option><option value="count">Count nonempty</option><option value="average">Average</option></select></label>
+      <div class="sheets-actions"><button type="submit" class="button button-outline">Create on new sheet</button><button id="pivot-cancel" type="button" class="button button-outline">Cancel</button></div>
+      <p id="pivot-status" role="status"></p>
+    </form>
+  </dialog>
   <dialog id="sheet-find-dialog" aria-labelledby="sheet-find-title">
     <form id="sheet-find-form">
       <h2 id="sheet-find-title">Find in this sheet</h2>

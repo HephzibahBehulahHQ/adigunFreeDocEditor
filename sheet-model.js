@@ -55,6 +55,45 @@ export function cellAddress(row, column) {
   return String.fromCharCode(65 + column) + (row + 1);
 }
 
+export function buildPivot(cells, { range, group, measure, aggregate }) {
+  const match = /^([A-Z])([1-9]\d?|100):([A-Z])([1-9]\d?|100)$/.exec(range.toUpperCase().trim());
+  if (!match) throw new Error("Enter a source range such as A1:D20, including the header row.");
+  const [, left, first, right, last] = match;
+  const groupColumn = group.toUpperCase().trim();
+  const valueColumn = measure.toUpperCase().trim();
+  const inRange = (column) => /^[A-Z]$/.test(column) && column >= left && column <= right;
+  if (+first >= +last || !inRange(groupColumn) || !inRange(valueColumn) || !["sum", "count", "average"].includes(aggregate)) {
+    throw new Error("Choose a header row, data rows, and columns within the source range.");
+  }
+  const valueAt = calculateSheet(cells);
+  const groups = new Map();
+  for (let row = +first + 1; row <= +last; row++) {
+    const label = valueAt(groupColumn + row);
+    const value = valueAt(valueColumn + row);
+    if (label === "") continue;
+    if (!groups.has(label)) groups.set(label, { sum: 0, count: 0 });
+    const bucket = groups.get(label);
+    if (aggregate === "count") { if (value !== "") bucket.count++; continue; }
+    if (value === "" || !/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(String(value).trim())) continue;
+    const number = Number(value);
+    if (!Number.isFinite(number)) continue;
+    bucket.sum += number;
+    bucket.count++;
+  }
+  const literal = (value) => /^[=']/.test(String(value)) ? "'" + value : String(value);
+  const result = {
+    A1: literal(valueAt(groupColumn + first) || groupColumn),
+    B1: literal(aggregate.toUpperCase() + " of " + (valueAt(valueColumn + first) || valueColumn)),
+  };
+  let row = 2;
+  for (const [label, { sum, count }] of groups) {
+    result["A" + row] = literal(label);
+    const value = aggregate === "count" ? count : aggregate === "average" && count ? sum / count : sum;
+    result["B" + row++] = Number.isFinite(value) ? String(value) : "#VALUE!";
+  }
+  return { cells: result, rows: Math.max(20, row - 1), columns: 8 };
+}
+
 export function calculateSheet(cells) {
   const computed = new Map();
   const visiting = new Set();

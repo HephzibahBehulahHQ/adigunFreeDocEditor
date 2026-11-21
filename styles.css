@@ -500,6 +500,9 @@ a.nav-item{text-decoration:none}
 .sheet-formula-line input{flex:1;min-width:0;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
 #sheet-find-dialog{width:min(420px,calc(100vw - 24px));border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);padding:16px}
 #sheet-find-dialog::backdrop{background:#0b122066}
+#sheet-pivot-dialog{width:min(400px,calc(100vw - 24px));border:1px solid var(--line);border-radius:10px;padding:16px;background:var(--panel);color:var(--ink)}
+#sheet-pivot-dialog::backdrop{background:#0b122066}
+#sheet-pivot-form,#sheet-pivot-form label{display:grid;gap:8px}
 #sheet-find-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 #sheet-find-form :is(h2,label,p){width:100%;margin:0}
 #sheet-find-query{max-width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:5px}
