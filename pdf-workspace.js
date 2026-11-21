@@ -2,12 +2,14 @@ import { buildPdf } from "./pdf-pages.js";
 import { bindPdfOcr } from "./pdf-ocr.js";
 import { bindPdfRedaction } from "./pdf-redact.js";
 import { bindPdfForms } from "./pdf-forms.js";
+import { bindPdfNavigation } from "./pdf-navigation.js";
 
 const $ = (id) => document.getElementById(id);
 const sources = [];
 bindPdfOcr(sources);
 bindPdfRedaction(sources);
 bindPdfForms(sources, showPreview);
+const closeNavigation = bindPdfNavigation(sources, showPreview);
 const preview = $("pdf-preview");
 let previewUrl;
 let busy = false;
@@ -20,11 +22,11 @@ function clearPreview() {
   previewUrl = undefined;
 }
 
-function showPreview(file) {
+function showPreview(file, page) {
   clearPreview();
   previewUrl = URL.createObjectURL(file);
   preview.title = "PDF preview: " + file.name;
-  preview.src = previewUrl;
+  preview.src = page ? previewUrl + "#page=" + page : previewUrl;
   preview.hidden = false;
 }
 
@@ -39,6 +41,8 @@ function button(label, handler, disabled = false) {
 }
 
 function render() {
+  closeNavigation();
+  $("pdf-navigation-toggle").disabled = busy || sources.length === 0;
   $("pdf-form-open").disabled = busy || sources.length === 0;
   $("pdf-redact").disabled = busy || sources.length === 0;
   $("pdf-ocr").disabled = busy || sources.length === 0;

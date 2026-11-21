@@ -4,11 +4,11 @@ export function openPdfRaster(data) {
   return renderer.getDocument({ data, isEvalSupported: false, enableXfa: false });
 }
 
-export async function renderPdfPage(document, index, canvas, rotation = 0) {
+export async function renderPdfPage(document, index, canvas, rotation = 0, maxDimension = 3500) {
   const page = await document.getPage(index + 1);
   const angle = (page.rotate + rotation) % 360;
   const size = page.getViewport({ scale: 1, rotation: angle });
-  const scale = Math.min(2.5, 3500 / Math.max(size.width, size.height));
+  const scale = Math.min(2.5, maxDimension / Math.max(size.width, size.height));
   const viewport = page.getViewport({ scale, rotation: angle });
   canvas.width = Math.ceil(viewport.width);
   canvas.height = Math.ceil(viewport.height);

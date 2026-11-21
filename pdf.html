@@ -35,6 +35,9 @@
         <label class="pdf-format-option"><input id="pdf-page-numbers" type="checkbox"> Number output pages</label>
         <label class="pdf-format-option">Footer text <input id="pdf-footer-text" type="text" maxlength="60"></label>
       </div></details>
+      <details name="pdf-commands" class="command-menu"><summary>View</summary><div>
+        <button id="pdf-navigation-toggle" type="button" aria-controls="pdf-navigation" aria-expanded="false" disabled>Pages and search</button>
+      </div></details>
       <details name="pdf-commands" class="command-menu"><summary>Forms</summary><div>
         <button id="pdf-form-open" type="button" disabled>Fill form fields</button>
       </div></details>
@@ -51,6 +54,16 @@
       <section aria-labelledby="pdf-list-title">
         <h2 id="pdf-list-title">Source PDFs</h2>
         <ol id="pdf-source-list"></ol>
+        <section id="pdf-navigation" class="pdf-navigation" aria-labelledby="pdf-navigation-title" hidden>
+          <header><h2 id="pdf-navigation-title">Page navigation</h2><button id="pdf-navigation-close" type="button" class="button button-outline">Close</button></header>
+          <label>Source <select id="pdf-navigation-source"></select></label>
+          <form id="pdf-jump"><label>Page <input name="page" type="number" min="1" step="1" required></label><button class="button button-outline">Go</button></form>
+          <form id="pdf-search"><label>Find text <input name="query" type="search" maxlength="120" required></label><button class="button button-outline">Find</button></form>
+          <p id="pdf-navigation-status" role="status"></p>
+          <ol id="pdf-search-results" aria-label="Search results"></ol>
+          <details id="pdf-bookmark-section" hidden><summary>Bookmarks</summary><ol id="pdf-bookmarks"></ol></details>
+          <ol id="pdf-thumbnails" aria-label="Page thumbnails"></ol>
+        </section>
       </section>
       <iframe id="pdf-preview" title="PDF preview" hidden></iframe>
     </div>
