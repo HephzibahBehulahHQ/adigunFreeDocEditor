@@ -83,6 +83,7 @@ jobs:
           node tests/file-picker-labels.test.cjs
           node tests/merge-compress-tools.test.cjs
           node tests/assistant-panel-state.test.cjs
+          node tests/sheet-model.test.mjs
 
 
 

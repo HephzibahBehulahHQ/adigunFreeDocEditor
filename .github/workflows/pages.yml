@@ -78,10 +78,11 @@ jobs:
           node tests/mobile-menu-outside-click.test.cjs
           node tests/file-picker-labels.test.cjs
           node tests/assistant-panel-state.test.cjs
+          node tests/sheet-model.test.mjs
       - name: Package application
         run: |
           mkdir -p _site/assets/vendor
-          cp index.html styles.css app.js document-model.js editor-runtime.js CNAME _site/
+          cp index.html styles.css app.js document-model.js editor-runtime.js sheets.html sheets.js sheet-model.js CNAME _site/
           cp assets/hb-official.jpg _site/assets/
           python scripts/assemble_pdfjs.py
           cp assets/vendor/mammoth.browser.min.js assets/vendor/MAMMOTH-LICENSE assets/vendor/fflate.min.js assets/vendor/FFLATE-LICENSE assets/vendor/pdf.min.js assets/vendor/pdf.worker.min.js assets/vendor/PDFJS-LICENSE _site/assets/vendor/
@@ -97,6 +98,10 @@ jobs:
           for asset in ("styles.css", "document-model.js", "editor-runtime.js", "app.js", "assets/vendor/fflate.min.js", "assets/vendor/pdf.min.js", "assets/vendor/pdf.worker.min.js"):
               html = html.replace(f'./{asset}"', f'./{asset}?v={version}"')
           index.write_text(html)
+          sheets = Path("_site/sheets.html")
+          sheets.write_text(sheets.read_text().replace('./styles.css"', f'./styles.css?v={version}"').replace('./sheets.js"', f'./sheets.js?v={version}"'))
+          sheets_module = Path("_site/sheets.js")
+          sheets_module.write_text(sheets_module.read_text().replace('"./sheet-model.js"', f'"./sheet-model.js?v={version}"'))
           PY
           touch _site/.nojekyll
       - name: Upload artifact

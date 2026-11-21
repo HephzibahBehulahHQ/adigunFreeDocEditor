@@ -31,6 +31,8 @@ Open `http://localhost:4173`. The DOCX converter is vendored locally; the app do
 
 ## Current support
 
+- Open **Sheets** from the sidebar to edit a browser-local workbook with up to 12 sheets, 100 rows, and 26 columns per sheet. Use arithmetic, cell references, and SUM, AVERAGE, MIN, and MAX. Import CSV into a new sheet and export the active sheet’s calculated values as CSV. Excel workbook files are a future increment.
+
 - Start from six on-device templates for meeting notes, project briefs, formal letters, status reports, research notes, and resumes, or create a blank document. Template content opens in the editable workspace and stays in this browser.
 - Create and edit text with headings, emphasis, lists, alignment, links, tables, local PNG/JPEG/GIF images (up to 8 MB each) and browser spellcheck.
 - Export editable documents as `.docx`, preserving supported headings, basic text emphasis, hyperlinks, lists, tables with horizontal and vertical cell spans, PNG/JPEG/GIF images, page size, orientation, preset margins and custom per-side margins. Tracked insertions and deletions export as native OOXML revisions with author/date. Anchored review comments export as native Word comments with author/date/resolved state; advanced Word styling is not preserved.
