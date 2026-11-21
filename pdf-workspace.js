@@ -5,6 +5,7 @@ import { bindPdfForms } from "./pdf-forms.js";
 import { bindPdfNavigation } from "./pdf-navigation.js";
 import { bindPdfComments } from "./pdf-comments.js";
 import { bindPdfOrganizer } from "./pdf-organize.js";
+import { bindPdfText } from "./pdf-text.js";
 
 const $ = (id) => document.getElementById(id);
 const sources = [];
@@ -14,6 +15,7 @@ bindPdfForms(sources, showPreview);
 const closeNavigation = bindPdfNavigation(sources, showPreview);
 bindPdfComments(sources, showPreview);
 bindPdfOrganizer(sources, () => { render(); status("Page arrangement applied to the output."); });
+bindPdfText(sources, showPreview);
 const preview = $("pdf-preview");
 let previewUrl;
 let busy = false;
@@ -47,6 +49,8 @@ function button(label, handler, disabled = false) {
 function render() {
   closeNavigation();
   $("pdf-organize").disabled = busy || sources.length === 0;
+  $("pdf-text-open").disabled = busy || sources.length === 0;
+  $("pdf-sign-open").disabled = busy || sources.length === 0;
   $("pdf-navigation-toggle").disabled = busy || sources.length === 0;
   $("pdf-comments-open").disabled = busy || sources.length === 0;
   $("pdf-form-open").disabled = busy || sources.length === 0;

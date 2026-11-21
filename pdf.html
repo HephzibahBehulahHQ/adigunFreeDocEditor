@@ -44,6 +44,10 @@
       </div></details>
       <details name="pdf-commands" class="command-menu"><summary>Forms</summary><div>
         <button id="pdf-form-open" type="button" disabled>Fill form fields</button>
+        <button id="pdf-sign-open" type="button" disabled>Place visible signature</button>
+      </div></details>
+      <details name="pdf-commands" class="command-menu"><summary>Edit</summary><div>
+        <button id="pdf-text-open" type="button" disabled>Add text</button>
       </div></details>
       <details name="pdf-commands" class="command-menu"><summary>Scan &amp; OCR</summary><div>
         <button id="pdf-ocr" type="button" disabled>Recognize text</button>
@@ -83,6 +87,28 @@
       </div>
     </div>
   </main>
+  <dialog id="pdf-text-dialog" class="pdf-tool-dialog pdf-redact-dialog" aria-labelledby="pdf-text-title">
+    <h2 id="pdf-text-title">Add text to PDF</h2>
+    <p data-signature-info hidden>This places a typed signature on the page. Certificate signing requires a separate signing application.</p>
+    <form>
+      <div class="pdf-redact-fields">
+        <label>Source PDF <select name="source"></select></label>
+        <label>Page <select name="page"></select></label>
+      </div>
+      <canvas aria-label="PDF placement preview" hidden></canvas>
+      <label>Text to place <input name="text" maxlength="250" required></label>
+      <div class="pdf-redact-fields">
+        <label>Left % <input name="left" type="number" min="0" max="100" step="0.1" required></label>
+        <label>Baseline from top % <input name="top" type="number" min="0" max="100" step="0.1" required></label>
+        <label>Font size <input name="size" type="number" min="8" max="72" required></label>
+      </div>
+      <p role="status"></p>
+      <div class="slides-actions">
+        <button class="button button-outline" type="submit">Download PDF copy</button>
+        <button class="button button-outline" type="button" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="pdf-organize-dialog" class="pdf-tool-dialog pdf-redact-dialog" aria-labelledby="pdf-organize-title">
     <h2 id="pdf-organize-title">Arrange PDF pages</h2>
     <label>Source PDF <select></select></label>
