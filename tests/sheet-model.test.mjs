@@ -62,7 +62,8 @@ try {
   const filter = { range: "A1:B3", column: "A", value: "20" };
   const chart = parseChartRange("A1:B3");
   const conditionalRule = { range: "A1:A3", operator: "greaterThan", threshold: 10, color: "green" };
-  const bytes = exportWorkbook([{ ...sheets[0], freezeFirstRow: true, validation, filter, chart, conditionalRule }, { ...sheets[1], hidden: true }], zip);
+  const styles = { A3: { bold: true, italic: true, font: "Georgia", size: 14, align: "right", color: "2543A0", fill: "FFE5AA", border: true } };
+  const bytes = exportWorkbook([{ ...sheets[0], freezeFirstRow: true, validation, filter, chart, conditionalRule, styles }, { ...sheets[1], hidden: true }], zip);
   const imported = importWorkbook(bytes, zip, dom.window.DOMParser);
   assert.deepEqual(imported.map(({ name, cells, formats }) => ({ name, cells, formats })), sheets);
   assert.equal(calculateSheet(imported[0].cells)("A3"), 30);
@@ -73,6 +74,7 @@ try {
   assert.deepEqual(imported[0].filter, filter);
   assert.deepEqual(imported[0].chart, chart);
   assert.deepEqual(imported[0].conditionalRule, conditionalRule);
+  assert.deepEqual(imported[0].styles, styles);
   const reopened = importWorkbook(exportWorkbook(linked, zip), zip, dom.window.DOMParser);
   assert.equal(reopened[0].cells.A1, linked[0].cells.A1);
   assert.equal(calculateWorkbook(reopened, 0)("A1"), 14);

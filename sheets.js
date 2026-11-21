@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeConditionalRule, numberFormats, parseChartRange, parseCsv, parseSheetFilter, renameSheetReferences, shiftCellFormula, sortSheetRange, toCsv, validationOptions } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, numberFormats, parseChartRange, parseCsv, parseSheetFilter, renameSheetReferences, shiftCellFormula, sortSheetRange, spreadsheetFonts, toCsv, validationOptions } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
@@ -26,6 +26,8 @@ try {
         validAddress.test(key) && typeof value === "string" && value.length <= maxCellLength)),
       formats: Object.fromEntries(Object.entries(item?.formats ?? {}).filter(([key, value]) =>
         validAddress.test(key) && Object.hasOwn(numberFormats, value))),
+      styles: Object.fromEntries(Object.entries(item?.styles ?? {}).filter(([key]) => validAddress.test(key))
+        .map(([address, value]) => [address, normalizeCellStyle(value)])),
       freezeFirstRow: item?.freezeFirstRow === true,
       filter: parseSheetFilter(item?.filter),
       chart: parseChartRange(item?.chart?.range),
@@ -147,6 +149,18 @@ function refreshValues() {
     field.toggleAttribute("data-conditional-fill", Boolean(fill));
     if (fill) field.style.setProperty("--conditional-fill", "#" + fill);
     else field.style.removeProperty("--conditional-fill");
+    const style = sheet.styles?.[address];
+    field.style.fontFamily = style?.font || "";
+    field.style.fontSize = style?.size ? style.size + "pt" : "";
+    field.style.fontWeight = style?.bold ? "700" : "";
+    field.style.fontStyle = style?.italic ? "italic" : "";
+    field.style.textDecoration = style?.underline ? "underline" : "";
+    field.style.textAlign = style?.align || "";
+    field.style.color = style?.color ? "#" + style.color : "";
+    field.toggleAttribute("data-cell-fill", Boolean(style?.fill));
+    field.toggleAttribute("data-cell-border", Boolean(style?.border));
+    if (style?.fill) field.style.setProperty("--cell-fill", "#" + style.fill);
+    else field.style.removeProperty("--cell-fill");
   }
   const hidden = hiddenFilterRows(sheet.filter, valueAt);
   for (const [index, row] of [...grid.tBodies[0].rows].entries()) {
@@ -278,6 +292,45 @@ $("sheet-rule-remove").addEventListener("click", () => {
   refreshValues();
   refreshRuleForm();
 });
+
+const styleDialog = $("sheet-style-dialog");
+const styleForm = styleDialog.querySelector("form");
+styleForm.elements.font.add(new Option("Default", ""));
+for (const font of spreadsheetFonts) styleForm.elements.font.add(new Option(font));
+$("sheet-style-open").addEventListener("click", () => {
+  const style = currentSheet().styles?.[selectedAddress] ?? {};
+  const fields = styleForm.elements;
+  $("sheet-style-range").value = selectedRange?.label || selectedAddress;
+  for (const key of ["bold", "italic", "underline", "border"]) fields[key].checked = Boolean(style[key]);
+  for (const key of ["font", "size", "align"]) fields[key].value = style[key] ?? "";
+  fields.color.value = "#" + (style.color ?? "182035");
+  fields.useFill.checked = Boolean(style.fill);
+  fields.fill.value = "#" + (style.fill ?? "EDE8FF");
+  styleDialog.showModal();
+});
+function applyAppearance(style) {
+  recordEdit();
+  const sheet = currentSheet();
+  sheet.styles ??= {};
+  for (const address of selectionAddresses()) {
+    if (Object.keys(style).length) sheet.styles[address] = style;
+    else delete sheet.styles[address];
+  }
+  save();
+  styleDialog.close();
+  refreshValues();
+}
+styleForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const { bold, italic, underline, border, font, size, align, color, useFill, fill } = styleForm.elements;
+  applyAppearance(normalizeCellStyle({
+    bold: bold.checked, italic: italic.checked, underline: underline.checked, border: border.checked,
+    font: font.value, size: size.valueAsNumber, align: align.value,
+    color: color.value.slice(1), fill: useFill.checked ? fill.value.slice(1) : "",
+  }));
+});
+styleForm.querySelector("[data-clear]").addEventListener("click", () => applyAppearance({}));
+styleForm.querySelector("[data-close]").addEventListener("click", () => styleDialog.close());
 
 function selectionAddresses() {
   if (!selectedRange) return [selectedAddress];

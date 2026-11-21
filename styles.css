@@ -605,7 +605,12 @@ button.slide-object[aria-pressed="true"],button.slide-object:focus-visible{outli
 .sheet-chart-panel label{display:grid;gap:4px;margin:10px 0}
 .sheet-chart-panel input{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:5px;font:inherit}
 .sheet-chart-panel select{width:100%;min-height:32px;border:1px solid var(--line);border-radius:5px;font:inherit}
+#sheet-grid input[data-cell-fill]{background:var(--cell-fill)}
 #sheet-grid input[data-conditional-fill]{background:var(--conditional-fill)}
+#sheet-grid input[data-cell-border]{outline:1px solid #75839c;outline-offset:-1px}
+.sheet-style-toggles{display:flex;flex-wrap:wrap;gap:8px 14px}
+#sheet-style-dialog label:has(input[type=checkbox]){display:flex;align-items:center;gap:5px}
+#sheet-style-dialog input[type=checkbox]{width:auto}
 .sheet-chart-values{display:grid;gap:8px;margin:0;padding:0;list-style:none}
 .sheet-chart-values li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;font-size:13px}
 .sheet-chart-values span{overflow-wrap:anywhere}
@@ -621,6 +626,7 @@ button.slide-object[aria-pressed="true"],button.slide-object:focus-visible{outli
 .sheets-grid .sheet-freeze-row tbody tr:first-child :is(td,th){position:sticky;top:var(--sheet-heading-height);z-index:1;background:var(--panel);border-bottom-color:var(--muted)}
 .sheets-grid .sheet-freeze-row tbody tr:first-child th{z-index:2;background:var(--canvas)}
 .sheets-grid input{display:block;width:100%;min-width:104px;min-height:30px;border:0;padding:4px 8px;background:transparent;color:var(--ink)}
+.sheets-grid input[data-cell]{font-family:Calibri,Arial,sans-serif}
 .sheets-grid input:focus{outline:2px solid var(--blue);outline-offset:-2px;background:var(--purple-soft)}
 .sheets-tab-bar{margin-top:10px}
 .sheets-tab-bar [aria-pressed="true"]{border-color:var(--purple);background:var(--purple-soft)}

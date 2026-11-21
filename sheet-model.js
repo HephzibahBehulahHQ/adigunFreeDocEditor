@@ -3,6 +3,18 @@ export const maxColumns = 26;
 export const maxCellLength = 4000;
 export const numberFormats = { general: 0, number: 4, percent: 10, decimal: 2 };
 export const conditionalColors = { yellow: "FFF3B8", green: "D6F3DE", red: "FFDDE3" };
+export const spreadsheetFonts = ["Arial", "Calibri", "Georgia", "Times New Roman", "Courier New"];
+
+export function normalizeCellStyle(input) {
+  const value = input ?? {};
+  const style = {};
+  for (const key of ["bold", "italic", "underline", "border"]) if (value[key] === true) style[key] = true;
+  if (spreadsheetFonts.includes(value.font)) style.font = value.font;
+  if (Number.isInteger(value.size) && value.size >= 8 && value.size <= 36) style.size = value.size;
+  if (["left", "center", "right"].includes(value.align)) style.align = value.align;
+  for (const key of ["color", "fill"]) if (/^[a-f0-9]{6}$/i.test(value[key] ?? "")) style[key] = value[key].toUpperCase();
+  return style;
+}
 
 export function normalizeConditionalRule(input) {
   const { range, operator, threshold, color } = input ?? {};
@@ -81,13 +93,13 @@ export function sortSheetRange(sheet, { range, column, direction }, valueAt) {
   };
   const order = rows.slice().sort((a, b) => compare(values.get(a), values.get(b)));
   const result = {};
-  for (const key of ["cells", "formats", "validation"]) result[key] = { ...sheet[key] };
+  for (const key of ["cells", "formats", "validation", "styles"]) result[key] = { ...sheet[key] };
   for (const [offset, sourceRow] of order.entries()) {
     const targetRow = rows[offset];
     for (let index = left; index <= right; index++) {
       const source = cellAddress(sourceRow - 1, index);
       const destination = cellAddress(targetRow - 1, index);
-      for (const key of ["cells", "formats", "validation"]) {
+      for (const key of ["cells", "formats", "validation", "styles"]) {
         const value = sheet[key]?.[source];
         if (value === undefined) delete result[key][destination];
         else result[key][destination] = key === "cells" ? shiftCellFormula(value, targetRow - sourceRow, 0) : value;

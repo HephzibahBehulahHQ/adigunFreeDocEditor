@@ -46,6 +46,7 @@
         <button id="sheet-chart-open" type="button" aria-controls="sheet-chart-panel" aria-expanded="false">Bar chart</button>
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Format</summary><div>
+        <button id="sheet-style-open" type="button">Cell appearance</button>
         <button type="button" data-sheet-format="general">General</button>
         <button type="button" data-sheet-format="number">Number (2 decimals)</button>
         <button type="button" data-sheet-format="decimal">Number (no grouping)</button>
@@ -117,6 +118,27 @@
       <span id="sheet-selection-statistics"></span>
     </footer>
   </main>
+  <dialog id="sheet-style-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-style-title">
+    <h2 id="sheet-style-title">Cell appearance</h2>
+    <form>
+      <p>Apply to <output id="sheet-style-range"></output></p>
+      <label>Font <select name="font"></select></label>
+      <label>Font size <input name="size" type="number" min="8" max="36" placeholder="Default"></label>
+      <label>Alignment <select name="align"><option value="">Default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
+      <div class="sheet-style-toggles">
+        <label><input name="bold" type="checkbox"> Bold</label><label><input name="italic" type="checkbox"> Italic</label>
+        <label><input name="underline" type="checkbox"> Underline</label><label><input name="border" type="checkbox"> Border</label>
+      </div>
+      <label>Text color <input name="color" type="color"></label>
+      <label><input name="useFill" type="checkbox"> Cell fill</label>
+      <label>Fill color <input name="fill" type="color"></label>
+      <div class="sheets-actions">
+        <button class="button button-outline" type="submit">Apply appearance</button>
+        <button class="button button-outline" type="button" data-clear>Clear appearance</button>
+        <button class="button button-outline" type="button" data-close>Cancel</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="sheet-manage-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-manage-title">
     <h2 id="sheet-manage-title">Manage sheets</h2>
     <form>

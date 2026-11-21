@@ -1,4 +1,4 @@
-import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeConditionalRule, numberFormats, parseSheetFilter, validationOptions } from "./sheet-model.js";
+import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, numberFormats, parseSheetFilter, validationOptions } from "./sheet-model.js";
 import { readWorksheetChart, writeWorksheetChart } from "./sheet-chart-xlsx.js";
 
 const mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -17,9 +17,46 @@ function xml(value) {
     .replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
 }
 
-function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart, conditionalRule }, valueAt) {
+function createStyleBook() {
+  const fonts = [];
+  const fills = [];
+  const borders = [];
+  const cellFormats = [];
+  function indexOf(store, value) {
+    const index = store.indexOf(value);
+    if (index >= 0) return index;
+    return store.push(value) - 1;
+  }
+  function indexFor(formatName, appearance) {
+    const style = normalizeCellStyle(appearance);
+    const font = indexOf(fonts, `<font>${style.bold ? "<b/>" : ""}${style.italic ? "<i/>" : ""}${style.underline ? "<u/>" : ""}<sz val="${style.size || 11}"/>${style.color ? `<color rgb="FF${style.color}"/>` : ""}<name val="${style.font || "Calibri"}"/></font>`);
+    const fill = style.fill ? indexOf(fills, `<fill><patternFill patternType="solid"><fgColor rgb="FF${style.fill}"/><bgColor indexed="64"/></patternFill></fill>`) : 0;
+    const border = style.border ? indexOf(borders, "<border>" + ["left", "right", "top", "bottom"].map((side) => `<${side} style="thin"><color rgb="FF75839C"/></${side}>`).join("") + "</border>") : 0;
+    const number = numberFormats[formatName] || 0;
+    if (!font && !fill && !border && !number && !style.align) return 0;
+    const flags = [font && 'applyFont="1"', fill && 'applyFill="1"', border && 'applyBorder="1"',
+      number && 'applyNumberFormat="1"', style.align && 'applyAlignment="1"'].filter(Boolean).join(" ");
+    const start = `<xf numFmtId="${number}" fontId="${font}" fillId="${fill}" borderId="${border}" xfId="0" ${flags}`;
+    return indexOf(cellFormats, style.align ? `${start}><alignment horizontal="${style.align}"/></xf>` : `${start}/>`);
+  }
+  fills.push('<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>');
+  borders.push("<border/>");
+  cellFormats.push('<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>');
+  indexFor("general");
+  function markup(includeConditions) {
+    const collection = (tag, items) => `<${tag} count="${items.length}">${items.join("")}</${tag}>`;
+    const differential = includeConditions ? collection("dxfs", conditionNames.map((name) =>
+      `<dxf><fill><patternFill patternType="solid"><fgColor rgb="FF${conditionalColors[name]}"/><bgColor rgb="FF${conditionalColors[name]}"/></patternFill></fill></dxf>`)) : "";
+    return `<styleSheet xmlns="${mainNs}">${collection("fonts", fonts)}${collection("fills", fills)}${collection("borders", borders)}
+      ${collection("cellStyleXfs", ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>'])}
+      ${collection("cellXfs", cellFormats)}<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>${differential}</styleSheet>`;
+  }
+  return { indexFor, markup, hasCellStyles: () => cellFormats.length > 1 };
+}
+
+function makeWorksheet({ cells, formats = {}, styles = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart, conditionalRule }, valueAt, styleBook) {
   const rows = new Map();
-  for (const address of new Set([...Object.keys(cells), ...Object.keys(formats)])) {
+  for (const address of new Set([...Object.keys(cells), ...Object.keys(formats), ...Object.keys(styles)])) {
     const raw = cells[address] ?? "";
     const row = Number(address.slice(1));
     if (!rows.has(row)) rows.set(row, []);
@@ -33,7 +70,7 @@ function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {}, f
       const text = raw.startsWith("'") ? raw.slice(1) : raw;
       markup = `<c r="${address}" t="inlineStr"><is><t xml:space="preserve">${xml(text)}</t></is></c>`;
     }
-    const style = styleNames.indexOf(formats[address]);
+    const style = styleBook.indexFor(formats[address], styles[address]);
     if (style > 0) markup = markup.replace("<c ", `<c s="${style}" `);
     rows.get(row).push({ address, markup });
   }
@@ -108,6 +145,7 @@ export function exportWorkbook(sheets, zip) {
   const rels = [];
   const overrides = [];
   const names = new Set();
+  const styleBook = createStyleBook();
   for (const [index, sheet] of sheets.entries()) {
     const id = index + 1;
     const target = `worksheets/sheet${id}.xml`;
@@ -121,19 +159,14 @@ export function exportWorkbook(sheets, zip) {
     rels.push(`<Relationship Id="rId${id}" Type="${officeNs}/worksheet" Target="${target}"/>`);
     overrides.push(`<Override PartName="/xl/${target}" ContentType="${worksheetType}"/>`);
     const valueAt = calculateWorkbook(sheets, index);
-    files["xl/" + target] = makeWorksheet(sheet, valueAt);
+    files["xl/" + target] = makeWorksheet(sheet, valueAt, styleBook);
     if (sheet.chart) writeWorksheetChart(files, overrides, id, name, sheet.chart, valueAt, xml);
   }
   const hasConditions = sheets.some((sheet) => normalizeConditionalRule(sheet.conditionalRule));
-  if (hasConditions || sheets.some((sheet) => Object.keys(sheet.formats ?? {}).length)) {
+  if (hasConditions || styleBook.hasCellStyles()) {
     rels.push(`<Relationship Id="rIdStyles" Type="${officeNs}/styles" Target="styles.xml"/>`);
     overrides.push('<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>');
-    const formats = styleNames.map((name) => `<xf numFmtId="${numberFormats[name]}" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>`).join("");
-    files["xl/styles.xml"] = `<styleSheet xmlns="${mainNs}"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${styleNames.length}">${formats}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
-    if (hasConditions) {
-      const fills = conditionNames.map((name) => `<dxf><fill><patternFill patternType="solid"><fgColor rgb="FF${conditionalColors[name]}"/><bgColor rgb="FF${conditionalColors[name]}"/></patternFill></fill></dxf>`).join("");
-      files["xl/styles.xml"] = files["xl/styles.xml"].replace("</styleSheet>", `<dxfs count="${conditionNames.length}">${fills}</dxfs></styleSheet>`);
-    }
+    files["xl/styles.xml"] = styleBook.markup(hasConditions);
   }
   const workbookViews = sheets.some((sheet) => sheet.freezeFirstRow || sheet.hidden)
     ? `<bookViews><workbookView activeTab="${Math.max(0, sheets.findIndex((sheet) => !sheet.hidden))}"/></bookViews>`
@@ -173,6 +206,28 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
   const cellXfs = styles?.getElementsByTagNameNS("*", "cellXfs")[0];
   const savedFormats = Array.from(cellXfs?.children ?? [], (xf) =>
     styleNames.find((format) => String(numberFormats[format]) === xf.getAttribute("numFmtId")));
+  const parts = (tag) => styles?.getElementsByTagNameNS(mainNs, tag)[0]?.children ?? [];
+  const child = (element, tag) => element?.getElementsByTagNameNS(mainNs, tag)[0];
+  const readColor = (element) => /^(?:[\da-f]{2})?([\da-f]{6})$/i.exec(element?.getAttribute("rgb") ?? "")?.[1];
+  const activeStyle = (element) => element && !["0", "false", "none"].includes(element.getAttribute("val"));
+  const savedStyles = Array.from(cellXfs?.children ?? [], (format) => {
+    const font = parts("fonts")[Number(format.getAttribute("fontId"))];
+    const border = parts("borders")[Number(format.getAttribute("borderId"))];
+    const fill = child(parts("fills")[Number(format.getAttribute("fillId"))], "patternFill");
+    const fontName = child(font, "name")?.getAttribute("val");
+    const size = Number(child(font, "sz")?.getAttribute("val"));
+    return normalizeCellStyle({
+      font: fontName === "Calibri" ? undefined : fontName,
+      size: size === 11 ? undefined : size,
+      bold: Boolean(activeStyle(child(font, "b"))),
+      italic: Boolean(activeStyle(child(font, "i"))),
+      underline: Boolean(activeStyle(child(font, "u"))),
+      color: readColor(child(font, "color")),
+      fill: fill?.getAttribute("patternType") === "solid" ? readColor(child(fill, "fgColor")) : undefined,
+      border: ["left", "right", "top", "bottom"].every((side) => child(border, side)?.getAttribute("style") === "thin"),
+      align: child(format, "alignment")?.getAttribute("horizontal"),
+    });
+  });
   const fills = Array.from(styles?.getElementsByTagNameNS(mainNs, "dxfs")[0]?.children ?? [], (dxf) => {
     const color = dxf.getElementsByTagNameNS(mainNs, "fgColor")[0]?.getAttribute("rgb")?.toUpperCase();
     return conditionNames.find((name) => "FF" + conditionalColors[name] === color);
@@ -186,6 +241,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     if (!/^xl\/worksheets\/[\w.-]+\.xml$/.test(path)) throw new Error("The workbook uses an unsupported worksheet location.");
     const cells = {};
     const formats = {};
+    const cellStyles = {};
     let rows = 20;
     let columns = 8;
     const worksheet = parse(path);
@@ -219,13 +275,16 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       } else if (type === "inlineStr") raw = textRuns(node);
       else if (type === "b") raw = value === "1" ? "TRUE" : "FALSE";
       const format = savedFormats[Number(node.getAttribute("s"))];
-      if (!raw && (!format || format === "general")) continue;
+      const style = savedStyles[Number(node.getAttribute("s"))];
+      const hasStyle = style && Object.keys(style).length;
+      if (!raw && (!format || format === "general") && !hasStyle) continue;
       if (!formula && /^[=']/.test(raw)) raw = "'" + raw;
       if (!/^[A-Z](?:[1-9]\d?|100)$/.test(address) || raw.length > maxCellLength) {
         throw new Error("Workbook cells exceed the 100-row, 26-column, or cell-length limit.");
       }
       if (raw) cells[address] = raw;
       if (format && format !== "general") formats[address] = format;
+      if (hasStyle) cellStyles[address] = style;
       rows = Math.max(rows, Number(address.slice(1)));
       columns = Math.max(columns, address.charCodeAt(0) - 64);
     }
@@ -243,6 +302,6 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       columns = Math.max(columns, chart.values.charCodeAt(0) - 64);
     }
     const hidden = ["hidden", "veryHidden"].includes(definition.getAttribute("state"));
-    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, freezeFirstRow, validation, filter, chart, hidden, conditionalRule };
+    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles, freezeFirstRow, validation, filter, chart, hidden, conditionalRule };
   });
 }
