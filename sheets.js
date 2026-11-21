@@ -25,6 +25,7 @@ try {
         validAddress.test(key) && typeof value === "string" && value.length <= maxCellLength)),
       formats: Object.fromEntries(Object.entries(item?.formats ?? {}).filter(([key, value]) =>
         validAddress.test(key) && Object.hasOwn(numberFormats, value))),
+      freezeFirstRow: item?.freezeFirstRow === true,
       pivot: item?.pivot && Number.isInteger(item.pivot.source) &&
         ["range", "group", "measure", "aggregate"].every((key) => typeof item.pivot[key] === "string" && item.pivot[key].length <= 25)
         ? item.pivot : undefined,
@@ -196,6 +197,9 @@ function render() {
     }
   }
   grid.replaceChildren(header, body);
+  grid.style.setProperty("--sheet-heading-height", header.offsetHeight + "px");
+  grid.classList.toggle("sheet-freeze-row", Boolean(sheet.freezeFirstRow));
+  $("sheet-freeze-row").setAttribute("aria-pressed", String(Boolean(sheet.freezeFirstRow)));
   refreshValues();
   refreshFormula();
   $("sheet-tabs").replaceChildren(...workbook.sheets.map((_sheet, index) => {
@@ -309,6 +313,13 @@ $("sheet-autosum").addEventListener("click", () => {
 $("sheet-gridlines").addEventListener("click", (event) => {
   const hidden = grid.classList.toggle("sheets-no-gridlines");
   event.currentTarget.setAttribute("aria-pressed", String(!hidden));
+});
+$("sheet-freeze-row").addEventListener("click", () => {
+  recordEdit();
+  const sheet = currentSheet();
+  sheet.freezeFirstRow = !sheet.freezeFirstRow;
+  save();
+  render();
 });
 const findDialog = $("sheet-find-dialog");
 $("sheet-find").addEventListener("click", () => {
