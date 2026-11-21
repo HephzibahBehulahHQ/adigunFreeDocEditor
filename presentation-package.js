@@ -6,15 +6,20 @@
     }).join("").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  const themes = Object.freeze({ paper: Object.freeze({ background: "FFFFFF", text: "182035" }), violet: Object.freeze({ background: "EEE7FC", text: "30204B" }), midnight: Object.freeze({ background: "17213A", text: "F3F5F9" }) });
+
   function createParts(slides) {
     if (slides.length > 80) throw new Error("PowerPoint output is limited to 80 slides.");
     const pns = "http://schemas.openxmlformats.org/presentationml/2006/main";
     const ans = "http://schemas.openxmlformats.org/drawingml/2006/main";
     const rns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-    const slideXml = ({ title: slideTitle, lines }) => {
+    const slideXml = ({ title: slideTitle, lines, theme }) => {
+      const palette = Object.hasOwn(themes, theme) ? themes[theme] : themes.paper;
+      const textFill = '<a:solidFill><a:srgbClr val="' + palette.text + '"/></a:solidFill>';
+      const background = '<p:bg><p:bgPr><a:solidFill><a:srgbClr val="' + palette.background + '"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>';
       const title = xmlText(slideTitle);
-      const paragraphs = (lines.length ? lines : [""]).map((line) => "<a:p><a:pPr algn=\"l\"/><a:r><a:rPr lang=\"en-US\" sz=\"1800\"/><a:t xml:space=\"preserve\">" + xmlText(line) + "</a:t></a:r></a:p>").join("");
-      return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="' + ans + '" xmlns:r="' + rns + '" xmlns:p="' + pns + '"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="800000" y="350000"/><a:ext cx="10500000" cy="900000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="2800" b="1"/><a:t xml:space="preserve">' + title + '</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Content"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="900000" y="1450000"/><a:ext cx="10300000" cy="5000000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap="square"><a:normAutofit/></a:bodyPr><a:lstStyle/>' + paragraphs + '</p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>';
+      const paragraphs = (lines.length ? lines : [""]).map((line) => "<a:p><a:pPr algn=\"l\"/><a:r><a:rPr lang=\"en-US\" sz=\"1800\">" + textFill + "</a:rPr><a:t xml:space=\"preserve\">" + xmlText(line) + "</a:t></a:r></a:p>").join("");
+      return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="' + ans + '" xmlns:r="' + rns + '" xmlns:p="' + pns + '"><p:cSld>' + background + '<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="800000" y="350000"/><a:ext cx="10500000" cy="900000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="2800" b="1">' + textFill + '</a:rPr><a:t xml:space="preserve">' + title + '</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Content"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="900000" y="1450000"/><a:ext cx="10300000" cy="5000000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap="square"><a:normAutofit/></a:bodyPr><a:lstStyle/>' + paragraphs + '</p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>';
     };
     const files = Object.create(null);
     files["_rels/.rels"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>';
@@ -92,5 +97,5 @@
     });
   }
 
-  window.AdigunPresentation = { createParts, createBlob, importTextSlides };
+  window.AdigunPresentation = { createParts, createBlob, importTextSlides, themes };
 })();

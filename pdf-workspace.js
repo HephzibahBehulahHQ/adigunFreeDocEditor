@@ -119,7 +119,7 @@ async function outputPages(show) {
   busy = true;
   render();
   try {
-    const bytes = await buildPdf(sources, window.PDFLib);
+    const bytes = await buildPdf(sources, window.PDFLib, { numberPages: $("pdf-page-numbers").checked });
     if (show) {
       showPreview(new File([bytes], "Selected pages.pdf", { type: "application/pdf" }));
       status("Showing the selected pages");

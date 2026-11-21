@@ -10,11 +10,12 @@ for (const file of ["assets/vendor/fflate.min.js", "presentation-package.js"]) {
   if (file.endsWith("fflate.min.js")) window.fflate = context.fflate;
 }
 const parts = window.AdigunPresentation.createParts([
-  { title: "First <slide>", lines: ["A & B", "Second line"] },
+  { title: "First <slide>", lines: ["A & B", "Second line"], theme: "midnight" },
   { title: "Blank", lines: [] },
 ]);
 assert.match(window.fflate.strFromU8(parts["ppt/presentation.xml"]), /r:id="rId1".*r:id="rId2"/);
 assert.match(window.fflate.strFromU8(parts["ppt/slides/slide1.xml"]), /First &lt;slide&gt;.*A &amp; B.*Second line/);
+assert.match(window.fflate.strFromU8(parts["ppt/slides/slide1.xml"]), /<p:bg>.*srgbClr val="17213A".*srgbClr val="F3F5F9"/);
 assert.match(window.fflate.strFromU8(parts["ppt/slides/slide2.xml"]), /name="Content".*<a:p>/);
 assert.throws(() => window.AdigunPresentation.createParts(Array(81).fill({ title: "", lines: [] })), /limited to 80/);
 const dom = new JSDOM();

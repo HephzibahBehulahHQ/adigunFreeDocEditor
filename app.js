@@ -173,6 +173,10 @@
   }
 
   const toolsets = {
+    format: [
+      [{ label: "Bold", action: "bold", icon: "Bold", pressed: true }, { label: "Italic", action: "italic", icon: "Italic", pressed: true }, { label: "Underline", action: "underline", icon: "Underline", pressed: true }, { label: "Clear character formatting", action: "removeFormat", icon: "Clear formatting" }],
+      [{ label: "Align left", action: "justifyLeft", icon: "Align left", pressed: true }, { label: "Center", action: "justifyCenter", icon: "Center", pressed: true }, { label: "Align right", action: "justifyRight", icon: "Align right", pressed: true }, { label: "Justify", action: "justifyFull", icon: "Justify", pressed: true }],
+    ],
     file: [
       [{ label: "New document", action: "file-new", icon: "New document" }, { label: "Open a file", action: "file-open", icon: "Open a file" }, { label: "Save now", action: "file-save", icon: "Save now" }],
       [{ label: "Download Word", action: "file-docx", icon: "Download Word" }, { label: "Download HTML", action: "file-html", icon: "Download HTML" }],

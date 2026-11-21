@@ -16,7 +16,7 @@ export function parsePages(input, count) {
   return [...selected];
 }
 
-export async function buildPdf(sources, { PDFDocument, degrees }) {
+export async function buildPdf(sources, { PDFDocument, degrees, StandardFonts, rgb }, { numberPages = false } = {}) {
   if (!sources.length) throw new Error("Add a PDF before exporting.");
   const output = await PDFDocument.create();
   for (const { document, selection, rotation } of sources) {
@@ -29,6 +29,18 @@ export async function buildPdf(sources, { PDFDocument, degrees }) {
     for (const page of pages) {
       if (rotation) page.setRotation(degrees((page.getRotation().angle + rotation + 360) % 360));
       output.addPage(page);
+    }
+  }
+  if (numberPages) {
+    const font = await output.embedFont(StandardFonts.Helvetica);
+    for (const [index, page] of output.getPages().entries()) {
+      const box = page.getCropBox();
+      const rotation = (page.getRotation().angle + 360) % 360;
+      const xInset = Math.min(24, box.width / 4);
+      const yInset = Math.min(24, box.height / 4);
+      const offsets = { 0: [xInset, yInset], 90: [box.width - xInset, yInset], 180: [box.width - xInset, box.height - yInset], 270: [xInset, box.height - yInset] };
+      const [x, y] = offsets[rotation] ?? offsets[0];
+      page.drawText(String(index + 1), { x: box.x + x, y: box.y + y, font, size: 10, color: rgb(.18, .22, .29), rotate: degrees(rotation) });
     }
   }
   return output.save();
