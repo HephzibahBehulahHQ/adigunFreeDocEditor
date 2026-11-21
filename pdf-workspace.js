@@ -86,7 +86,7 @@ function render() {
       $("pdf-source-list").children[destination].querySelector("button").focus();
     };
     actions.append(
-      button("Preview", () => showPreview(source.file)),
+      button("Preview", () => { closeNavigation(); showPreview(source.file); }),
       button("Up", () => move(-1), index === 0),
       button("Down", () => move(1), index === sources.length - 1),
       button("Remove", () => { sources.splice(index, 1); clearPreview(); render(); $("pdf-add").focus(); }),

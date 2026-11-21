@@ -68,7 +68,18 @@
           <ol id="pdf-thumbnails" aria-label="Page thumbnails"></ol>
         </section>
       </section>
-      <iframe id="pdf-preview" title="PDF preview" hidden></iframe>
+      <div class="pdf-stage">
+        <iframe id="pdf-preview" title="PDF preview" hidden></iframe>
+        <section id="pdf-reader" class="pdf-reader" aria-label="PDF page reader" hidden>
+          <header>
+            <button id="pdf-reader-prev" class="button button-outline" type="button">Previous</button>
+            <span id="pdf-reader-page"></span>
+            <button id="pdf-reader-next" class="button button-outline" type="button">Next</button>
+            <label>Zoom <select id="pdf-reader-zoom"><option value="fit">Fit page</option><option value="width">Fit width</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select></label>
+          </header>
+          <div id="pdf-reader-scroll" class="pdf-reader-scroll" tabindex="0" aria-label="Page content"></div>
+        </section>
+      </div>
     </div>
   </main>
   <dialog id="pdf-comments-dialog" class="pdf-tool-dialog pdf-redact-dialog" aria-labelledby="pdf-comments-title">
