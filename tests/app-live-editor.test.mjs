@@ -110,10 +110,21 @@ try {
   assert.match(window.__testEditor.getHTML(), /data-indent-level="1"[^>]*style="[^"]*margin-left:\s*36pt/, "paragraph indent remains visible on the live editor surface");
 
   const indentRuler = window.document.querySelector('#paragraph-indent-ruler');
+  const rulerPanel = window.document.querySelector("#document-ruler");
+  assert.equal(rulerPanel.hidden, true, "the writing surface opens with the indent ruler hidden");
+  window.document.querySelector("#ribbon-tab-view").click();
+  const rulerToggle = window.document.querySelector('[data-action="indent-ruler"]');
+  assert.equal(rulerToggle.getAttribute("aria-pressed"), "false");
+  rulerToggle.click();
+  assert.equal(rulerPanel.hidden, false);
+  assert.equal(rulerToggle.getAttribute("aria-pressed"), "true");
   indentRuler.value = "2";
   indentRuler.dispatchEvent(new window.Event("input", { bubbles: true }));
   assert.equal(window.__testEditor.getJSON().content[0].attrs.indentLevel, "2", "the paragraph ruler updates the structured paragraph attributes");
   assert.match(window.__testEditor.getHTML(), /data-indent-level="2"[^>]*style="[^"]*margin-left:\s*72pt/, "ruler indent remains visible on the live editor surface");
+  rulerToggle.click();
+  assert.equal(rulerPanel.hidden, true);
+  window.document.querySelector("#ribbon-tab-home").click();
 
   const lineSpacing = window.document.querySelector('#ribbon-tools [data-tool="line-spacing"]');
   lineSpacing.value = "1.5";
