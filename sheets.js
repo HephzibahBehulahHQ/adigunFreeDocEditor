@@ -9,6 +9,7 @@ const validAddress = /^[A-Z](?:[1-9]\d?|100)$/;
 const grid = $("sheet-grid");
 let workbook = { active: 0, sheets: [blankSheet()] };
 let selectedAddress = "A1";
+let selectedRange = null;
 
 try {
   const stored = JSON.parse(localStorage.getItem(storageKey));
@@ -81,10 +82,37 @@ function refreshValues() {
   for (const field of grid.querySelectorAll("input")) {
     if (document.activeElement !== field) field.value = displayCell(valueAt(field.dataset.cell), sheet.formats?.[field.dataset.cell]);
   }
+  refreshSelection(valueAt);
+}
+
+function selectionAddresses() {
+  if (!selectedRange) return [selectedAddress];
+  const { firstRow, lastRow, firstColumn, lastColumn } = selectedRange;
+  const addresses = [];
+  for (let row = firstRow; row <= lastRow; row++) {
+    for (let column = firstColumn; column <= lastColumn; column++) addresses.push(cellAddress(row, column));
+  }
+  return addresses;
+}
+
+function refreshSelection(valueAt = calculateSheet(currentSheet().cells)) {
+  const addresses = selectionAddresses();
+  const selected = new Set(addresses);
+  for (const field of grid.querySelectorAll("[data-cell]")) {
+    field.parentElement.classList.toggle("sheet-range-cell", selected.has(field.dataset.cell));
+    field.parentElement.classList.toggle("sheet-active-cell", field.dataset.cell === selectedAddress);
+  }
+  const values = addresses.map(valueAt).filter((value) => value !== "");
+  const numbers = values.filter((value) => typeof value === "number" ||
+    (typeof value === "string" && /^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(value.trim()))).map(Number).filter(Number.isFinite);
+  const sum = numbers.reduce((total, value) => total + value, 0);
+  const format = new Intl.NumberFormat(undefined, { maximumFractionDigits: 8 });
+  $("sheet-active-name").textContent = currentSheet().name || `Sheet ${workbook.active + 1}`;
+  $("sheet-selection-statistics").textContent = `Count ${values.length} · Sum ${format.format(sum)} · Average ${numbers.length ? format.format(sum / numbers.length) : "—"}`;
 }
 
 function refreshFormula() {
-  $("sheet-selected").textContent = selectedAddress;
+  $("sheet-selected").value = selectedRange?.label || selectedAddress;
   $("sheet-formula").value = currentSheet().cells[selectedAddress] ?? "";
 }
 
@@ -100,6 +128,7 @@ function updateCell(address, value) {
 
 function render() {
   const sheet = currentSheet();
+  selectedRange = null;
   $("sheet-pivot-refresh").disabled = !sheet.pivot;
   if (Number(selectedAddress.slice(1)) > sheet.rows || selectedAddress.charCodeAt(0) - 64 > sheet.columns) selectedAddress = "A1";
   const header = document.createElement("thead");
@@ -151,8 +180,10 @@ function render() {
 grid.addEventListener("focusin", (event) => {
   if (!event.target.dataset.cell) return;
   selectedAddress = event.target.dataset.cell;
+  selectedRange = null;
   event.target.value = currentSheet().cells[selectedAddress] ?? "";
   refreshFormula();
+  refreshSelection();
 });
 grid.addEventListener("focusout", () => setTimeout(refreshValues, 0));
 grid.addEventListener("input", (event) => {
@@ -162,6 +193,30 @@ grid.addEventListener("input", (event) => {
   updateCell(address, event.target.value);
 });
 $("sheet-formula").addEventListener("change", (event) => updateCell(selectedAddress, event.target.value));
+$("sheet-selected").addEventListener("keydown", (event) => {
+  if (event.key === "Escape") { refreshFormula(); return; }
+  if (event.key !== "Enter" || event.isComposing) return;
+  event.preventDefault();
+  const name = event.currentTarget;
+  const label = name.value.trim().toUpperCase();
+  const [first, last = first, extra] = label.split(":");
+  const field = (address) => validAddress.test(address) && grid.querySelector(`[data-cell="${address}"]`);
+  if (!field(first) || !field(last) || extra !== undefined) {
+    status("Enter a cell or range within this sheet, such as B2 or B2:F12.");
+    return;
+  }
+  field(first).focus();
+  if (first !== last) {
+    const rows = [first, last].map((address) => Number(address.slice(1)) - 1);
+    const columns = [first, last].map((address) => address.charCodeAt(0) - 65);
+    selectedRange = {
+      firstRow: Math.min(...rows), lastRow: Math.max(...rows),
+      firstColumn: Math.min(...columns), lastColumn: Math.max(...columns), label,
+    };
+    refreshFormula();
+    refreshSelection();
+  }
+});
 $("sheet-formula").addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); event.currentTarget.blur(); }
 });
@@ -169,8 +224,10 @@ for (const control of document.querySelectorAll("[data-sheet-format]")) {
   control.addEventListener("click", () => {
     const formats = currentSheet().formats ??= {};
     const format = control.dataset.sheetFormat;
-    if (format === "general") delete formats[selectedAddress];
-    else formats[selectedAddress] = format;
+    for (const address of selectionAddresses()) {
+      if (format === "general") delete formats[address];
+      else formats[address] = format;
+    }
     refreshValues();
     save();
   });
