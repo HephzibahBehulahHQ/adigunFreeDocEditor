@@ -3623,6 +3623,7 @@
     ribbon.classList.toggle("home-ribbon", activeTab === "home");
     const [type, colors, spacing, emphasis, lists, indents, alignment] = toolsets.home;
     const groups = activeTab === "home" ? [
+      { label: "Clipboard", rows: [[{ label: "Paste text", action: "clipboard-paste", icon: "▣ Paste", shortcut: "Control+V Meta+V" }], [{ label: "Cut selection", action: "clipboard-cut", icon: "✂ Cut", shortcut: "Control+X Meta+X" }, { label: "Copy selection", action: "clipboard-copy", icon: "▤ Copy", shortcut: "Control+C Meta+C" }]] },
       { label: "Text", rows: [type, [...emphasis, ...colors]] },
       { label: "Paragraph", rows: [[...lists, ...indents], [...alignment, ...spacing]] },
       { label: "Editing", rows: [[{ label: "Find and replace", action: "find", icon: "⌕ Find & replace" }], [{ label: "Fit to page width", action: "zoom-fit", icon: "↔ Fit width" }]] },
@@ -3680,6 +3681,7 @@
         control = document.createElement("button");
         control.type = "button"; control.className = "tool-button"; control.dataset.action = tool.action; control.textContent = tool.action === "orientation" && pageOrientation === "landscape" ? "▭ Landscape" : tool.icon; control.title = tool.title || tool.label; control.setAttribute("aria-label", tool.label);
         if (tool.shortcut) control.setAttribute("aria-keyshortcuts", tool.shortcut);
+        if (tool.action.startsWith("clipboard-")) control.addEventListener("pointerdown", (event) => event.preventDefault());
         if (tool.pressed || ["page-numbers", "track-changes"].includes(tool.action)) control.setAttribute("aria-pressed", tool.action === "page-numbers" ? String(pageNumbersEnabled) : tool.action === "track-changes" ? String(trackChangesEnabled) : "false");
         if (tool.action === "indent-ruler") {
           control.setAttribute("aria-pressed", String(showIndentRuler));
@@ -3719,6 +3721,9 @@
 
   function updateRibbonSelection() {
     updateHistoryAvailability();
+    for (const button of ribbon.querySelectorAll('[data-action="clipboard-cut"], [data-action="clipboard-copy"]')) {
+      button.disabled = !liveEditor || liveEditor.state.selection.empty;
+    }
     const selection = window.getSelection();
     const focusNode = selection?.focusNode || selection?.anchorNode;
     const anchorNode = selection?.anchorNode;
@@ -4300,8 +4305,54 @@
     updateRibbonSelection();
   }
 
+  async function runClipboardAction(action) {
+    if (!liveEditor || activeWorkspaceMode !== "document") {
+      notify("Use the keyboard clipboard shortcuts in the document.");
+      return;
+    }
+    const { view } = liveEditor;
+    const { doc, selection } = view.state;
+    const stillSelected = () =>
+      liveEditor?.view === view && activeWorkspaceMode === "document" &&
+      view.state.doc === doc && view.state.selection.eq(selection);
+    try {
+      if (action === "clipboard-paste") {
+        const value = await navigator.clipboard.readText();
+        if (!stillSelected() || !value) return;
+        view.focus();
+        const event = new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertFromPaste", data: value });
+        if (view.dom.dispatchEvent(event)) view.pasteText(value);
+        return;
+      }
+      if (selection.empty) return;
+      const { text, dom } = view.serializeForClipboard(selection.content());
+      if (window.ClipboardItem && navigator.clipboard?.write) {
+        const item = new ClipboardItem({
+          "text/plain": new Blob([text], { type: "text/plain" }),
+          "text/html": new Blob([dom.innerHTML], { type: "text/html" }),
+        });
+        try { await navigator.clipboard.write([item]); }
+        catch (error) {
+          if (!text) throw error;
+          await navigator.clipboard.writeText(text);
+        }
+      } else {
+        if (!text) { notify("Use the keyboard clipboard shortcuts for non-text selections."); return; }
+        await navigator.clipboard.writeText(text);
+      }
+      if (action === "clipboard-cut" && stillSelected()) {
+        view.focus();
+        const event = new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "deleteContentForward" });
+        if (view.dom.dispatchEvent(event)) view.dispatch(view.state.tr.deleteSelection().scrollIntoView());
+      }
+    } catch {
+      notify("Clipboard access is unavailable. Use Ctrl or Command with C, X, or V in the document.");
+    }
+  }
+
   function runTool(action, button) {
     switch (action) {
+      case "clipboard-copy": case "clipboard-cut": case "clipboard-paste": void runClipboardAction(action); break;
       case "page-numbers": setPageNumbers(!pageNumbersEnabled, button); break;
       case "indent-ruler":
         showIndentRuler = !showIndentRuler;

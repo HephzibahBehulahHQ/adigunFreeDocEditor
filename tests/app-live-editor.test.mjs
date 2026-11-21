@@ -13,6 +13,7 @@ const dom = new JSDOM(fs.readFileSync(path.join(root, "index.html"), "utf8"), {
 const { window } = dom;
 window.TextDecoder = globalThis.TextDecoder;
 window.TextEncoder = globalThis.TextEncoder;
+window.ClipboardEvent = window.Event;
 window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
 window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
 window.Element.prototype.scrollIntoView = () => {};
@@ -78,6 +79,35 @@ try {
   assert.equal(liveRoot.getAttribute("role"), "textbox", "the live editing root keeps the accessible textbox role");
   assert.equal(window.document.querySelector("#undo").disabled, true, "Undo is disabled when the new document has no history");
   assert.equal(window.document.querySelector("#redo").disabled, true, "Redo is disabled when the new document has no redo history");
+
+  let clipboardText = "";
+  let failClipboardWrite = false;
+  Object.defineProperty(window.navigator, "clipboard", { value: {
+    async writeText(text) {
+      if (failClipboardWrite) throw new Error("Permission denied");
+      clipboardText = text;
+    },
+    async readText() { return clipboardText; },
+  } });
+  const clipboardButton = (action) => window.document.querySelector(`[data-action="clipboard-${action}"]`);
+  window.__testEditor.commands.setContent("<p>Clip word</p>");
+  window.__testEditor.commands.setTextSelection({ from: 1, to: 5 });
+  window.document.dispatchEvent(new window.Event("selectionchange"));
+  clipboardButton("copy").click();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(clipboardText, "Clip");
+  failClipboardWrite = true;
+  clipboardButton("cut").click();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(window.__testEditor.getText().trim(), "Clip word", "a denied clipboard write preserves the document");
+  failClipboardWrite = false;
+  clipboardButton("cut").click();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(window.__testEditor.getText().trim(), "word");
+  clipboardText = "New";
+  clipboardButton("paste").click();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(window.__testEditor.getText().trim(), "New word");
 
   window.__testEditor.commands.setContent("<h1>Chapter</h1><h6>Footnote</h6>");
   const outlineToggle = window.document.querySelector("#toggle-outline");
