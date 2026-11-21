@@ -62,8 +62,9 @@ function makeWorksheet({ cells, formats = {}, styles = {}, freezeFirstRow, valid
     if (!rows.has(row)) rows.set(row, []);
     const value = valueAt(address);
     let markup;
-    if (raw.startsWith("=") && typeof value === "number") {
-      markup = `<c r="${address}"><f>${xml(raw.slice(1))}</f><v>${value}</v></c>`;
+    if (raw.startsWith("=") && !valueAt.isError(address)) {
+      const type = typeof value === "string" ? ' t="str"' : "";
+      markup = `<c r="${address}"${type}><f>${xml(raw.slice(1))}</f><v>${xml(String(value))}</v></c>`;
     } else if (raw.trim() && Number.isFinite(Number(raw)) && String(Number(raw)) === raw) {
       markup = `<c r="${address}"><v>${raw}</v></c>`;
     } else {
