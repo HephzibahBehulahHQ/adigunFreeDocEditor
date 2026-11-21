@@ -53,12 +53,17 @@
       <aside class="slides-sidebar" aria-label="Slides">
         <ol id="slide-list"></ol>
       </aside>
+      <div>
       <section class="slides-paper" aria-label="Current slide">
         <label for="slide-title" class="sr-only">Slide title</label>
         <input id="slide-title" maxlength="120" placeholder="Slide title">
         <label for="slide-content" class="sr-only">Slide text</label>
         <textarea id="slide-content" maxlength="1500" placeholder="Add slide text"></textarea>
       </section>
+      <details id="slide-notes-panel" class="slide-notes-panel"><summary>Speaker notes</summary>
+        <textarea id="slide-notes" aria-label="Speaker notes" maxlength="4000" rows="4"></textarea>
+      </details>
+      </div>
     </div>
     <footer class="sheet-status-bar"><span id="slide-status-index"></span></footer>
   </main>
@@ -95,8 +100,10 @@
       <output id="present-count"></output>
       <button id="present-next" class="button button-outline" type="button">Next</button>
       <button id="present-play" class="button button-outline" type="button" hidden>Play effect</button>
+      <button id="present-notes-toggle" class="button button-outline" type="button" aria-controls="present-notes" aria-expanded="false" hidden>Show speaker notes</button>
       <button id="present-close" class="button button-outline" type="button">Close</button>
     </div>
+    <aside id="present-notes" class="slide-notes-panel" aria-label="Speaker notes" hidden></aside>
   </dialog>
   <script src="./assets/vendor/fflate.min.js" defer></script>
   <script src="./presentation-package.js" defer></script>

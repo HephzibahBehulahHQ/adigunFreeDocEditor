@@ -42,6 +42,38 @@
       '<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>',
       ...slides.map((_, i) => '<Override PartName="/ppt/slides/slide' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>'),
     ];
+    const notes = slides.map((slide, index) => [slide.notes, index + 1]).filter(([text]) => typeof text === "string" && text.trim());
+    if (notes.length) {
+      const head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+      const ns = `xmlns:p="${pns}" xmlns:a="${ans}" xmlns:r="${rns}"`;
+      const relationship = (id, type, target) => `<Relationship Id="${id}" Type="${rns}/${type}" Target="${target}"/>`;
+      const relationships = (...values) => head + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + values.join("") + "</Relationships>";
+      const part = (path, type) => overrides.push(`<Override PartName="/${path}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.${type}+xml"/>`);
+      const group = '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>';
+      const notesShape = (paragraphs, master = false) => '<p:sp><p:nvSpPr><p:cNvPr id="2" name="Notes"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr>' +
+        (master ? '<p:spPr><a:xfrm><a:off x="550000" y="4400000"/><a:ext cx="5700000" cy="3800000"/></a:xfrm></p:spPr>' : '<p:spPr/>') +
+        '<p:txBody><a:bodyPr/><a:lstStyle/>' + paragraphs + '</p:txBody></p:sp>';
+      files["ppt/presentation.xml"] = files["ppt/presentation.xml"]
+        .replace("<p:sldIdLst>", '<p:notesMasterIdLst><p:notesMasterId r:id="rIdNotes"/></p:notesMasterIdLst><p:sldIdLst>')
+        .replace("</p:presentation>", '<p:notesSz cx="6858000" cy="9144000"/></p:presentation>');
+      files["ppt/_rels/presentation.xml.rels"] = files["ppt/_rels/presentation.xml.rels"].replace("</Relationships>",
+        relationship("rIdNotes", "notesMaster", "notesMasters/notesMaster1.xml") + "</Relationships>");
+      const colorMap = '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>';
+      files["ppt/notesMasters/notesMaster1.xml"] = head + `<p:notesMaster ${ns}><p:cSld><p:spTree>${group}${notesShape("<a:p/>", true)}</p:spTree></p:cSld>${colorMap}</p:notesMaster>`;
+      files["ppt/notesMasters/_rels/notesMaster1.xml.rels"] = relationships(relationship("rId1", "theme", "../theme/theme1.xml"));
+      part("ppt/notesMasters/notesMaster1.xml", "notesMaster");
+      for (const [text, number] of notes) {
+        const paragraphs = text.split(/\r?\n/).map((line) => `<a:p><a:r><a:t xml:space="preserve">${xmlText(line)}</a:t></a:r></a:p>`).join("");
+        const path = `ppt/notesSlides/notesSlide${number}.xml`;
+        files[path] = head + `<p:notes ${ns}><p:cSld><p:spTree>${group}${notesShape(paragraphs)}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>`;
+        files[`ppt/notesSlides/_rels/notesSlide${number}.xml.rels`] = relationships(
+          relationship("rId1", "notesMaster", "../notesMasters/notesMaster1.xml"),
+          relationship("rId2", "slide", `../slides/slide${number}.xml`));
+        const slideRels = `ppt/slides/_rels/slide${number}.xml.rels`;
+        files[slideRels] = files[slideRels].replace("</Relationships>", relationship("rIdNotes", "notesSlide", `../notesSlides/notesSlide${number}.xml`) + "</Relationships>");
+        part(path, "notesSlide");
+      }
+    }
     files["[Content_Types].xml"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' + overrides.join("") + '</Types>';
     return Object.fromEntries(Object.entries(files).map(([name, value]) => [name, window.fflate.strToU8(value)]));
   }
@@ -58,7 +90,7 @@
     let total = 0;
     const parts = window.fflate.unzipSync(bytes, {
       filter({ name, originalSize }) {
-        if (!/^ppt\/(?:presentation\.xml|_rels\/presentation\.xml\.rels|slides\/[\w.-]+\.xml)$/.test(name)) return false;
+        if (!/^ppt\/(?:presentation\.xml|_rels\/presentation\.xml\.rels|slides\/(?:[\w.-]+\.xml|_rels\/[\w.-]+\.xml\.rels)|notesSlides\/[\w.-]+\.xml)$/.test(name)) return false;
         total += originalSize;
         if (total > 12 * 1024 * 1024) throw new Error("PowerPoint text parts are too large.");
         return true;
@@ -76,6 +108,19 @@
       .filter((part) => part.getAttribute("Type")?.endsWith("/slide") && part.getAttribute("TargetMode") !== "External")
       .map((part) => [part.getAttribute("Id"), part.getAttribute("Target")]));
     const definitions = [...parse("ppt/presentation.xml").getElementsByTagNameNS("*", "sldId")];
+    const paragraphs = (shape) => [...shape.getElementsByTagNameNS("*", "p")].map((paragraph) =>
+      [...paragraph.getElementsByTagNameNS("*", "t")].map((run) => run.textContent).join("")).join("\n");
+    function slideNotes(path) {
+      const relationshipPath = path.replace("slides/", "slides/_rels/") + ".rels";
+      if (!Object.hasOwn(parts, relationshipPath)) return "";
+      const relationship = [...parse(relationshipPath).getElementsByTagNameNS("*", "Relationship")].find((part) =>
+        part.getAttribute("Type")?.endsWith("/notesSlide") && part.getAttribute("TargetMode") !== "External");
+      const target = relationship?.getAttribute("Target") ?? "";
+      const notesPath = target.replace(/^(?:\.\.\/notesSlides\/|\/ppt\/notesSlides\/)/, "ppt/notesSlides/");
+      if (!/^ppt\/notesSlides\/[\w.-]+\.xml$/.test(notesPath) || !Object.hasOwn(parts, notesPath)) return "";
+      return [...parse(notesPath).getElementsByTagNameNS("*", "sp")].filter((shape) =>
+        shape.getElementsByTagNameNS("*", "ph")[0]?.getAttribute("type") === "body").map(paragraphs).join("\n");
+    }
     if (!definitions.length || definitions.length > 40) throw new Error("Open a presentation with 1–40 slides.");
     return definitions.map((definition) => {
       const id = definition.getAttributeNS(officeNs, "id") ||
@@ -85,17 +130,20 @@
       if (!/^ppt\/slides\/[\w.-]+\.xml$/.test(path)) throw new Error("Unsupported PowerPoint slide location.");
       const slide = parse(path);
       const shapes = [...slide.getElementsByTagNameNS("*", "sp")].map((shape) => {
-        const paragraphs = [...shape.getElementsByTagNameNS("*", "p")].map((paragraph) =>
-          [...paragraph.getElementsByTagNameNS("*", "t")].map((run) => run.textContent).join(""));
         const placeholder = shape.getElementsByTagNameNS("*", "ph")[0]?.getAttribute("type");
         const name = shape.getElementsByTagNameNS("*", "cNvPr")[0]?.getAttribute("name");
-        return { text: paragraphs.join("\n"), isTitle: ["title", "ctrTitle"].includes(placeholder) || name === "Title" };
+        return { text: paragraphs(shape), isTitle: ["title", "ctrTitle"].includes(placeholder) || name === "Title" };
       });
       const titleIndex = shapes.findIndex((shape) => shape.isTitle);
       const title = titleIndex < 0 ? "" : shapes[titleIndex].text;
       const content = shapes.filter((shape, index) => index !== titleIndex && shape.text).map((shape) => shape.text).join("\n");
       if (title.length > 120 || content.length > 1500) throw new Error("A slide exceeds the title or body text limit.");
-      return ["0", "false"].includes(slide.documentElement.getAttribute("show")) ? { title, content, hidden: true } : { title, content };
+      const result = { title, content };
+      const notes = slideNotes(path);
+      if (notes.length > 4000) throw new Error("A slide exceeds the 4,000-character notes limit.");
+      if (notes) result.notes = notes;
+      if (["0", "false"].includes(slide.documentElement.getAttribute("show"))) result.hidden = true;
+      return result;
     });
   }
 
