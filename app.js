@@ -29,7 +29,6 @@
   let activeDocumentKind = "none";
   let activeWorkspaceMode = "landing";
   let openDocumentTabs = [];
-  let assistantManuallyControlled = false;
   let assistantDockWidth = 310;
   try {
     const savedAssistantWidth = Number(localStorage.getItem("adigun-assistant-dock-width"));
@@ -39,6 +38,7 @@
   let editorPaginationTimer;
   let toastTimer;
   let zoom = 100;
+  let showIndentRuler = false;
   let pdfUrl;
   let activePdfFile;
   let pageOrientation = "portrait";
@@ -199,7 +199,7 @@
     ],
     view: [
       [{ label: "Zoom out", action: "zoom-out", icon: "−" }, { label: "Zoom in", action: "zoom-in", icon: "+" }, { label: "Fit to width", action: "zoom-fit", icon: "↔ Fit width" }, { label: "Reset zoom", action: "zoom-reset", icon: "100%" }],
-      [{ label: "Find and replace", action: "find", icon: "⌕ Find & replace" }, { label: "Toggle Adigun", action: "assistant", icon: "✧ Adigun" }],
+      [{ label: "Indent ruler", action: "indent-ruler", icon: "Indent ruler" }, { label: "Find and replace", action: "find", icon: "⌕ Find & replace" }, { label: "Toggle Adigun", action: "assistant", icon: "✧ Adigun" }],
     ],
   };
 
@@ -1674,7 +1674,7 @@
     $("#conversion-workspace").hidden = !isConversion;
     for (const tool of ["merge", "compress", "unzip", "translate"]) $("#" + tool + "-workspace").hidden = mode !== tool;
     if (!isFileTool) { editor.hidden = false; $(".page-footer").hidden = false; }
-    $("#document-ruler").hidden = !isDocument;
+    $("#document-ruler").hidden = !isDocument || !showIndentRuler;
     if (!isDocument) $("#editor-card").classList.remove("paper-layout");
     if (liveEditor) liveEditor.setEditable(isDocument);
     editor.contentEditable = String(isDocument);
@@ -1697,7 +1697,6 @@
     activeWorkspaceMode = mode;
     renderOpenDocumentTabs();
     updateParagraphRuler();
-    maybeAutoOpenAssistantForDocument(isDocument);
   }
 
   function setActiveNavigationItem(activeItem) {
@@ -3609,6 +3608,10 @@
           control.type = "button"; control.className = "tool-button"; control.dataset.action = tool.action; control.textContent = tool.action === "orientation" && pageOrientation === "landscape" ? "▭ Landscape" : tool.icon; control.title = tool.title || tool.label; control.setAttribute("aria-label", tool.label);
           if (tool.shortcut) control.setAttribute("aria-keyshortcuts", tool.shortcut);
           if (tool.pressed || ["page-numbers", "track-changes"].includes(tool.action)) control.setAttribute("aria-pressed", tool.action === "page-numbers" ? String(pageNumbersEnabled) : tool.action === "track-changes" ? String(trackChangesEnabled) : "false");
+          if (tool.action === "indent-ruler") {
+            control.setAttribute("aria-pressed", String(showIndentRuler));
+            control.setAttribute("aria-controls", "document-ruler");
+          }
           control.addEventListener("click", () => runTool(tool.action, control));
         }
         section.append(control);
@@ -4230,6 +4233,11 @@
   function runTool(action, button) {
     switch (action) {
       case "page-numbers": setPageNumbers(!pageNumbersEnabled, button); break;
+      case "indent-ruler":
+        showIndentRuler = !showIndentRuler;
+        $("#document-ruler").hidden = !showIndentRuler;
+        button.setAttribute("aria-pressed", String(showIndentRuler));
+        break;
       case "outline": $("#toggle-outline").click(); break;
       case "quick-overview": toggleAssistant(true); buildOverview(); break;
       case "track-changes":
@@ -4288,7 +4296,7 @@
       case "zoom-reset": setZoom(100); break;
       case "zoom-fit": fitToWidth(); break;
       case "find": openFindDialog(); break;
-      case "assistant": toggleAssistant(undefined, true); break;
+      case "assistant": toggleAssistant(); break;
     }
   }
 
@@ -4965,12 +4973,7 @@
 
   function safeFilename(name) { return name.replace(/[\\/:*?"<>|]/g, "-").slice(0, 90) || "document"; }
 
-  function maybeAutoOpenAssistantForDocument(isDocument) {
-    if (isDocument && !assistantManuallyControlled && window.matchMedia("(min-width: 1200px)").matches) toggleAssistant(true, false);
-  }
-
-  function toggleAssistant(open = assistant.classList.contains("hidden"), userInitiated = false) {
-    if (userInitiated) assistantManuallyControlled = true;
+  function toggleAssistant(open = assistant.classList.contains("hidden")) {
     if (open && window.matchMedia("(max-width: 1050px)").matches) {
       showReviewPanel(false);
       $("#document-outline").classList.remove("mobile-open");
@@ -5314,11 +5317,11 @@
   $("#zoom-in").addEventListener("click", () => setZoom(zoom + 10));
   $("#zoom-fit").addEventListener("click", fitToWidth);
   $("#paragraph-indent-ruler").addEventListener("input", (event) => setParagraphIndent(event.currentTarget.value));
-  $("#assist-button").addEventListener("click", () => toggleAssistant(undefined, true));
+  $("#assist-button").addEventListener("click", () => toggleAssistant());
   $("#assistant-find").addEventListener("click", useAssistantFind);
   $("#assistant-review").addEventListener("click", useAssistantReview);
-  $("#close-adigun").addEventListener("click", () => toggleAssistant(false, true));
-  $("#minimize-adigun").addEventListener("click", () => { assistantManuallyControlled = true; assistant.classList.toggle("minimized"); $("#minimize-adigun").setAttribute("aria-label", assistant.classList.contains("minimized") ? "Restore Adigun" : "Minimize Adigun"); });
+  $("#close-adigun").addEventListener("click", () => toggleAssistant(false));
+  $("#minimize-adigun").addEventListener("click", () => { assistant.classList.toggle("minimized"); $("#minimize-adigun").setAttribute("aria-label", assistant.classList.contains("minimized") ? "Restore Adigun" : "Minimize Adigun"); });
   function activateRibbonTab(tab) {
     if (!tab) return;
     activeTab = tab.dataset.tab;
