@@ -46,6 +46,7 @@
         <button type="button" id="sheet-freeze-row" aria-pressed="false">Freeze first row</button>
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Data</summary><div>
+        <button type="button" id="sheet-validation">Dropdown validation</button>
         <button type="button" id="sheet-find">Find in this sheet</button>
         <button type="button" id="sheet-pivot-refresh" disabled>Refresh PivotTable</button>
       </div></details>
@@ -55,6 +56,7 @@
     <div class="sheet-formula-line">
       <input id="sheet-selected" aria-label="Go to cell or range" value="A1" maxlength="9" autocomplete="off" spellcheck="false">
       <input id="sheet-formula" aria-label="Selected cell value or formula" maxlength="4000" autocomplete="off">
+      <select id="sheet-validation-picker" aria-label="Allowed values for the active cell" hidden></select>
     </div>
     <p class="sheets-help" id="sheets-help">Use formulas such as =SUM(A1:A5) or ='Sheet 2'!$B$4. CSV downloads contain calculated values from the active sheet.</p>
     <div class="sheets-grid" tabindex="0" role="region" aria-label="Editable spreadsheet">
@@ -69,6 +71,20 @@
       <span id="sheet-selection-statistics"></span>
     </footer>
   </main>
+  <dialog id="sheet-validation-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-validation-title">
+    <h2 id="sheet-validation-title">Dropdown validation</h2>
+    <form>
+      <label>Allowed values for <output id="sheet-validation-range"></output>
+        <textarea name="options" rows="6" maxlength="500" placeholder="One value per line"></textarea>
+      </label>
+      <p>Leave the list empty to remove validation. Use up to 253 characters total, with one value per line.</p>
+      <p role="status"></p>
+      <div class="sheets-actions">
+        <button class="button button-outline" type="submit">Apply to selection</button>
+        <button class="button button-outline" type="button" data-close>Cancel</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="sheet-pivot-dialog" aria-labelledby="sheet-pivot-title">
     <form id="sheet-pivot-form">
       <h2 id="sheet-pivot-title">Create PivotTable</h2>

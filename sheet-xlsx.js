@@ -1,4 +1,4 @@
-import { calculateWorkbook, maxCellLength, maxColumns, maxRows, numberFormats } from "./sheet-model.js";
+import { calculateWorkbook, cellAddress, maxCellLength, maxColumns, maxRows, numberFormats, validationOptions } from "./sheet-model.js";
 
 const mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const officeNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -15,7 +15,7 @@ function xml(value) {
     .replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
 }
 
-function makeWorksheet({ cells, formats = {}, freezeFirstRow }, valueAt) {
+function makeWorksheet({ cells, formats = {}, freezeFirstRow, validation = {} }, valueAt) {
   const rows = new Map();
   for (const address of new Set([...Object.keys(cells), ...Object.keys(formats)])) {
     const raw = cells[address] ?? "";
@@ -40,7 +40,40 @@ function makeWorksheet({ cells, formats = {}, freezeFirstRow }, valueAt) {
   const views = freezeFirstRow
     ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>'
     : "";
-  return `<worksheet xmlns="${mainNs}">${views}<sheetData>${data}</sheetData></worksheet>`;
+  const lists = new Map();
+  for (const [address, options] of Object.entries(validation)) {
+    const list = options.join(",");
+    if (!lists.has(list)) lists.set(list, []);
+    lists.get(list).push(address);
+  }
+  const rules = [...lists].map(([list, addresses]) =>
+    `<dataValidation type="list" allowBlank="1" showErrorMessage="1" sqref="${addresses.join(" ")}"><formula1>"${xml(list)}"</formula1></dataValidation>`).join("");
+  const validations = rules ? `<dataValidations count="${lists.size}">${rules}</dataValidations>` : "";
+  return `<worksheet xmlns="${mainNs}">${views}<sheetData>${data}</sheetData>${validations}</worksheet>`;
+}
+
+function readValidation(worksheet) {
+  const validation = {};
+  let visited = 0;
+  for (const rule of worksheet.getElementsByTagNameNS(mainNs, "dataValidation")) {
+    if (rule.getAttribute("type") !== "list") continue;
+    const formula = rule.getElementsByTagNameNS(mainNs, "formula1")[0]?.textContent ?? "";
+    if (!/^"[^"]+"$/.test(formula)) continue;
+    const options = validationOptions(formula.slice(1, -1).split(","));
+    if (!options.length) continue;
+    for (const address of (rule.getAttribute("sqref") ?? "").split(/\s+/)) {
+      const match = /^([A-Z])([1-9]\d?|100)(?::([A-Z])([1-9]\d?|100))?$/.exec(address);
+      if (!match) continue;
+      const [, firstColumn, firstRow, lastColumn = firstColumn, lastRow = firstRow] = match;
+      for (let row = Number(firstRow) - 1; row < Number(lastRow); row++) {
+        for (let column = firstColumn.charCodeAt(0) - 65; column <= lastColumn.charCodeAt(0) - 65; column++) {
+          if (++visited > maxRows * maxColumns) return validation;
+          validation[cellAddress(row, column)] = options;
+        }
+      }
+    }
+  }
+  return validation;
 }
 
 export function exportWorkbook(sheets, zip) {
@@ -116,6 +149,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     let rows = 20;
     let columns = 8;
     const worksheet = parse(path);
+    const validation = readValidation(worksheet);
     const pane = worksheet.getElementsByTagNameNS(mainNs, "pane")[0];
     const freezeFirstRow = pane?.getAttribute("state") === "frozen" && pane.getAttribute("ySplit") === "1" &&
       !Number(pane.getAttribute("xSplit"));
@@ -142,6 +176,10 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       rows = Math.max(rows, Number(address.slice(1)));
       columns = Math.max(columns, address.charCodeAt(0) - 64);
     }
-    return { name: definition.getAttribute("name") || "", rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, freezeFirstRow };
+    for (const address of Object.keys(validation)) {
+      rows = Math.max(rows, Number(address.slice(1)));
+      columns = Math.max(columns, address.charCodeAt(0) - 64);
+    }
+    return { name: definition.getAttribute("name") || "", rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, freezeFirstRow, validation };
   });
 }
