@@ -55,7 +55,7 @@
         if (["http:", "https:", "mailto:"].includes(url.protocol)) result.href = url.href;
       } catch { /* Invalid links are omitted from the document model. */ }
     }
-    if (["ins", "del"].includes(tag) && typeof attributes["data-revision-id"] === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(attributes["data-revision-id"])) {
+    if (/^(ins|del|p|h[1-6])$/.test(tag) && typeof attributes["data-revision-id"] === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(attributes["data-revision-id"])) {
       result["data-revision-id"] = attributes["data-revision-id"];
       if (typeof attributes["data-revision-author"] === "string") result["data-revision-author"] = attributes["data-revision-author"].slice(0, 80);
       const createdAt = Number(attributes["data-revision-created-at"]);
@@ -132,6 +132,7 @@
     if (node.nodeType === Node.TEXT_NODE) return { type: "text", text: node.nodeValue };
     if (node.nodeType !== Node.ELEMENT_NODE) return null;
     const sourceTag = node.tagName.toLowerCase();
+    if (sourceTag === "br" && node.classList?.contains("ProseMirror-trailingBreak")) return null;
     const tag = sourceTag === "font" ? "span" : sourceTag;
     const attrs = {};
     for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "value", "data-page-break", "data-page-flow-id", "data-page-header-copy", "data-font-family", "data-font-size", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level", "data-revision-id", "data-revision-author", "data-revision-created-at"]) {
@@ -168,7 +169,15 @@
             if (previousBody) previousBody.children.push(...child.children);
             else merged[merged.length - 1].children.push(child);
           }
-        } else merged[merged.length - 1].children.push(...node.children);
+        } else {
+          const previous = merged[merged.length - 1];
+          previous.children.push(...node.children);
+          if (/^(p|h[1-6])$/.test(node.tag) && node.attrs["data-revision-id"]) {
+            for (const key of ["data-revision-id", "data-revision-author", "data-revision-created-at"]) {
+              if (key in node.attrs) previous.attrs[key] = node.attrs[key];
+            }
+          }
+        }
       }
       else merged.push(node);
       previousFlowId = flowId;

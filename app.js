@@ -109,7 +109,12 @@
     if (editor.contentEditable === "true" && typeof createLiveEditor === "function") {
       liveEditor = createLiveEditor.call(window.AdigunEditorRuntime, {
         element: editorContainer,
-        onUpdate: () => { updateHistoryAvailability(); countWords(); saveDocument(); },
+        onUpdate: () => {
+          updateHistoryAvailability();
+          if (trackChangesEnabled || !$("#review-comments").hidden) renderTrackedChanges();
+          countWords();
+          saveDocument();
+        },
       });
       editor = liveEditor.view.dom;
       editor.style.cssText = editorContainer.style.cssText;
@@ -533,6 +538,9 @@
         }
         if (/^(UL|OL)$/.test(node.tagName)) mergeListItemFragments(previousNode);
         if (node.tagName === "TABLE") { mergeTableRowFragments(previousNode); mergeNestedListFragments(previousNode); mergeNestedTableFragments(previousNode); }
+        if (/^(P|H[1-6])$/.test(node.tagName) && node.dataset.revisionId) {
+          for (const key of ["revisionId", "revisionAuthor", "revisionCreatedAt"]) previousNode.dataset[key] = node.dataset[key];
+        }
         node.remove();
         continue;
       }
@@ -627,6 +635,9 @@
     const flowId = crypto.randomUUID();
     for (const [index, chunk] of chunks.entries()) {
       chunk.setAttribute("data-page-flow-id", flowId);
+      if (index < chunks.length - 1 && chunk.getAttribute("data-revision-id")) {
+        for (const attribute of ["data-revision-id", "data-revision-author", "data-revision-created-at"]) chunk.removeAttribute(attribute);
+      }
       if (block.tagName === "LI" && index) {
         chunk.setAttribute("data-page-flow-continuation", "true");
         const list = block.parentElement;
@@ -1203,8 +1214,23 @@
     $("#toggle-outline").setAttribute("aria-expanded", String(open));
   }
 
-  function trackedRevisionNodes() {
-    return [...editor.querySelectorAll("ins[data-revision-id], del[data-revision-id]")];
+  const revisionSelector = "ins[data-revision-id], del[data-revision-id], p[data-revision-id], :is(h1,h2,h3,h4,h5,h6)[data-revision-id]";
+  function trackedRevisionNodes(root = editor) {
+    return [...root.querySelectorAll(revisionSelector)];
+  }
+
+  function trackedRevisionGroups(root = editor) {
+    const groups = new Map();
+    for (const node of trackedRevisionNodes(root)) {
+      const id = node.dataset.revisionId;
+      if (!groups.has(id)) groups.set(id, []);
+      groups.get(id).push(node);
+    }
+    return groups;
+  }
+
+  function isTrackedParagraph(node) {
+    return /^(P|H[1-6])$/.test(node?.tagName || "");
   }
 
   function goToTrackedRevision(id) {
@@ -1219,10 +1245,11 @@
   function renderTrackedChanges() {
     const list = $("#tracked-revision-list");
     if (!list) return;
-    const revisions = trackedRevisionNodes();
+    const revisions = [...trackedRevisionGroups().values()];
     $("#tracked-revision-count").textContent = `${revisions.length} pending ${revisions.length === 1 ? "change" : "changes"}`;
     list.replaceChildren();
-    for (const revision of revisions) {
+    for (const nodes of revisions) {
+      const revision = nodes[0];
       const card = document.createElement("article");
       card.className = "tracked-revision";
       const meta = document.createElement("div");
@@ -1234,7 +1261,8 @@
       meta.append(label, author);
       const quote = document.createElement("p");
       quote.className = "tracked-revision-quote";
-      quote.textContent = revision.textContent || "(empty text)";
+      const preview = nodes.map((node) => isTrackedParagraph(node) ? "\n" : node.textContent).join("").trim();
+      quote.textContent = preview || (nodes.some(isTrackedParagraph) ? "(paragraph break)" : "(empty text)");
       const actions = document.createElement("div");
       actions.className = "tracked-revision-actions";
       const go = document.createElement("button");
@@ -1262,7 +1290,15 @@
 
   function settleTrackedRevision(revision, accept) {
     if (!revision?.parentNode) return;
-    if (revision.tagName.toLowerCase() === "ins") {
+    if (isTrackedParagraph(revision)) {
+      const next = revision.nextElementSibling;
+      for (const key of ["revisionId", "revisionAuthor", "revisionCreatedAt"]) delete revision.dataset[key];
+      if (accept && isTrackedParagraph(next)) {
+        revision.append(...next.childNodes);
+        if (next.dataset.revisionId) Object.assign(revision.dataset, next.dataset);
+        next.remove();
+      }
+    } else if (revision.tagName.toLowerCase() === "ins") {
       if (accept) revision.replaceWith(...revision.childNodes);
       else revision.remove();
     } else if (revision.tagName.toLowerCase() === "del") {
@@ -1271,10 +1307,27 @@
     }
   }
 
+  function settleTrackedRevisions(ids, accept) {
+    const groups = trackedRevisionGroups();
+    const selected = ids.flatMap((id) => groups.get(id) || []);
+    if (!selected.some(isTrackedParagraph)) {
+      selected.forEach((node) => settleTrackedRevision(node, accept));
+      return;
+    }
+    // Work on logical paragraphs so a visual sheet boundary cannot prevent a join.
+    const root = document.createElement("div");
+    root.innerHTML = documentModel.toHTML(documentModel.fromDOM(editor));
+    const idSet = new Set(ids);
+    const nodes = trackedRevisionNodes(root).filter((node) => idSet.has(node.dataset.revisionId));
+    nodes.filter((node) => !isTrackedParagraph(node)).forEach((node) => settleTrackedRevision(node, accept));
+    // Join from the end so each marked break retains its original successor.
+    nodes.filter(isTrackedParagraph).reverse().forEach((node) => settleTrackedRevision(node, accept));
+    setDocumentContent(root.innerHTML);
+    scheduleEditorPagination();
+  }
+
   function resolveTrackedRevision(id, action) {
-    const revision = trackedRevisionNodes().find((item) => item.dataset.revisionId === id);
-    if (!revision) return;
-    settleTrackedRevision(revision, action === "accept");
+    settleTrackedRevisions([id], action === "accept");
     renderTrackedChanges();
     renderReviewComments();
     saveDocument();
@@ -1282,8 +1335,8 @@
   }
 
   function resolveAllTrackedRevisions(accept) {
-    const revisions = trackedRevisionNodes();
-    for (const revision of revisions) settleTrackedRevision(revision, accept);
+    const revisions = [...trackedRevisionGroups().keys()];
+    settleTrackedRevisions(revisions, accept);
     renderTrackedChanges();
     renderReviewComments();
     saveDocument();
@@ -1291,19 +1344,77 @@
     notify(`${accept ? "Accepted" : "Rejected"} ${revisions.length} pending ${revisions.length === 1 ? "change" : "changes"}.`);
   }
 
-  function createTrackedRevision(tag, content) {
+  function createTrackedRevision(tag, content, metadata = {}) {
     const revision = document.createElement(tag);
-    revision.dataset.revisionId = crypto.randomUUID();
-    revision.dataset.revisionAuthor = "You";
-    revision.dataset.revisionCreatedAt = String(Date.now());
+    revision.dataset.revisionId = metadata.revisionId || crypto.randomUUID();
+    revision.dataset.revisionAuthor = metadata.revisionAuthor || "You";
+    revision.dataset.revisionCreatedAt = metadata.revisionCreatedAt || String(Date.now());
     if (typeof content === "string") revision.textContent = content;
     else revision.append(content);
     return revision;
   }
 
-  function handleTrackedBeforeInput(event) {
-    if (!trackChangesEnabled || editor.contentEditable !== "true" || event.isComposing) return;
-    const type = event.inputType;
+  function trackAcrossParagraphs(root, range, startBlock, endBlock) {
+    const blocks = [...root.children].flatMap((child) =>
+      child.matches(".document-sheet") ? [...child.children] : [child]);
+    const start = blocks.indexOf(startBlock);
+    const end = blocks.indexOf(endBlock);
+    if (start < 0 || end <= start) return false;
+    const selected = blocks.slice(start, end + 1);
+    if (!selected.every(isTrackedParagraph) || selected.some((block) => block.matches(revisionSelector))) return false;
+    if (range.cloneContents().querySelector("img")) return false;
+    const { startContainer, startOffset, endContainer, endOffset } = range;
+    const metadata = { revisionId: crypto.randomUUID(), revisionAuthor: "You", revisionCreatedAt: String(Date.now()) };
+    for (let index = selected.length - 1; index >= 0; index--) {
+      const block = selected[index];
+      const next = selected[index + 1];
+      const part = document.createRange();
+      part.selectNodeContents(block);
+      if (block === startBlock) part.setStart(startContainer, startOffset);
+      if (block === endBlock) part.setEnd(endContainer, endOffset);
+      const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+      const segments = [];
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!part.intersectsNode(node)) continue;
+        if (node.nodeType === Node.TEXT_NODE) {
+          const from = part.startContainer === node ? part.startOffset : 0;
+          const to = part.endContainer === node ? part.endOffset : node.length;
+          if (from < to) segments.push({ node, from, to });
+        } else if (node.tagName === "BR" && !node.classList.contains("ProseMirror-trailingBreak") && !node.classList.contains("ProseMirror-gapcursor")) {
+          segments.push({ node });
+        }
+      }
+      let firstDeletion;
+      for (const { node, from, to } of segments) {
+        let selectedNode = node;
+        if (node.nodeType === Node.TEXT_NODE) {
+          if (to < node.length) node.splitText(to);
+          if (from > 0) selectedNode = node.splitText(from);
+        }
+        const deletion = createTrackedRevision("del", document.createDocumentFragment(), metadata);
+        selectedNode.replaceWith(deletion);
+        deletion.append(selectedNode);
+        firstDeletion ||= deletion;
+      }
+      // Consecutive visual fragments of one paragraph have no logical break.
+      if (next && (!block.dataset.pageFlowId || block.dataset.pageFlowId !== next.dataset.pageFlowId)) {
+        Object.assign(block.dataset, metadata);
+      }
+      if (block === startBlock) {
+        if (firstDeletion) {
+          range.setStartBefore(firstDeletion);
+          range.collapse(true);
+        } else {
+          range.selectNodeContents(block);
+          range.collapse(false);
+        }
+      }
+    }
+    return true;
+  }
+
+  function handleTrackedBeforeInput(event, type = event.inputType) {
+    if (!trackChangesEnabled || editor.contentEditable !== "true" || !event.cancelable || event.isComposing) return;
     const isBackwardDelete = type === "deleteContentBackward";
     const isForwardDelete = type === "deleteContentForward";
     const isInsert = type === "insertText" || type === "insertFromPaste";
@@ -1312,16 +1423,16 @@
     if (isInsert && (!value || /[\r\n]/.test(value))) return;
     const selection = window.getSelection();
     if (!selection?.rangeCount || !editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) return;
-    const range = selection.getRangeAt(0).cloneRange();
+    let range = selection.getRangeAt(0).cloneRange();
     const startNode = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
-    const existingRevision = startNode?.closest("[data-revision-id]");
+    const existingRevision = startNode?.closest("ins[data-revision-id], del[data-revision-id]");
     if (existingRevision) {
       if (existingRevision.tagName.toLowerCase() === "del" && isInsert && range.collapsed) {
         range.setStartAfter(existingRevision);
         range.collapse(true);
       } else return;
     }
-    if (range.cloneContents().querySelector?.("[data-revision-id]")) return;
+    if (range.cloneContents().querySelector?.(revisionSelector)) return;
     const blockSelector = "p,h1,h2,h3,h4,h5,h6,li,td,th,blockquote,pre";
     if (range.collapsed && !isInsert) {
       const textNode = range.startContainer;
@@ -1334,7 +1445,23 @@
     const endElement = range.endContainer.nodeType === Node.ELEMENT_NODE ? range.endContainer : range.endContainer.parentElement;
     const startBlock = startElement?.closest(blockSelector);
     const endBlock = endElement?.closest(blockSelector);
-    if (!startBlock || startBlock !== endBlock || range.toString().length > 4000) return;
+    if (!startBlock || !endBlock || range.toString().length > 4000) return;
+    const crossesParagraphs = startBlock !== endBlock;
+    let draft;
+    let caretOffset;
+    if (crossesParagraphs) {
+      caretOffset = editorOffset(range.startContainer, range.startOffset);
+      draft = editor.cloneNode(true);
+      const locateInDraft = (node) => {
+        if (node === editor) return draft;
+        return locateInDraft(node.parentNode).childNodes[[...node.parentNode.childNodes].indexOf(node)];
+      };
+      const draftRange = document.createRange();
+      draftRange.setStart(locateInDraft(range.startContainer), range.startOffset);
+      draftRange.setEnd(locateInDraft(range.endContainer), range.endOffset);
+      if (!trackAcrossParagraphs(draft, draftRange, locateInDraft(startBlock), locateInDraft(endBlock))) return;
+      range = draftRange;
+    }
     event.preventDefault();
     if (!range.collapsed) {
       const deleted = range.extractContents();
@@ -1357,11 +1484,18 @@
       }
       range.collapse(true);
     }
-    selection.removeAllRanges();
-    selection.addRange(range);
+    if (draft) {
+      setDocumentContent(documentModel.toHTML(documentModel.fromDOM(draft)));
+      const offset = caretOffset + (isInsert ? value.length : 0);
+      restoreEditorSelection({ anchorTextOffset: offset, focusTextOffset: offset });
+    } else {
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
     renderTrackedChanges();
     countWords();
     saveDocument();
+    return true;
   }
 
   function openCommentDialog() {
@@ -4496,13 +4630,15 @@
         return `<w:hyperlink r:id="${hyperlinkIds.get(href)}">${children}</w:hyperlink>`;
       }
       if (["mark", "sub", "sup"].includes(tag)) unsupported.add(tag);
-      if (revisionType) {
-        const rawDate = Number(node.getAttribute("data-revision-created-at"));
-        const revisionDate = Number.isFinite(rawDate) ? new Date(rawDate).toISOString() : new Date().toISOString();
-        const author = wordXmlText((node.getAttribute("data-revision-author") || "You").slice(0, 80));
-        return `<w:${revisionType} w:id="${nextRevision++}" w:author="${author}" w:date="${revisionDate}">${children}</w:${revisionType}>`;
-      }
+      if (revisionType) return `<w:${revisionType} ${wordRevisionAttributes(node)}>${children}</w:${revisionType}>`;
       return children;
+    }
+
+    function wordRevisionAttributes(node) {
+      const timestamp = Number(node.getAttribute("data-revision-created-at"));
+      const date = timestamp > 0 && timestamp <= 8640000000000000 ? new Date(timestamp) : new Date();
+      const author = wordXmlText((node.getAttribute("data-revision-author") || "You").slice(0, 80));
+      return `w:id="${nextRevision++}" w:author="${author}" w:date="${date.toISOString()}"`;
     }
 
     const body = [];
@@ -4546,6 +4682,9 @@
       const indentLevel = Number(element.getAttribute?.("data-indent-level")) || 0;
       if (indentLevel >= 1 && indentLevel <= 4) paragraphProperties.push(`<w:ind w:left="${indentLevel * 720}"/>`);
       if (listKind) paragraphProperties.push('<w:numPr><w:ilvl w:val="' + Math.min(listLevel, 8) + '"/><w:numId w:val="' + listNumId + '"/></w:numPr>');
+      if (/^(p|h[1-6])$/.test(tag) && element.getAttribute("data-revision-id")) {
+        paragraphProperties.push(`<w:rPr><w:del ${wordRevisionAttributes(element)}/></w:rPr>`);
+      }
       const marks = tag === "th" || element.closest("th") ? { bold: true } : {};
       const runs = [...element.childNodes].map((node) => serializeInline(node, marks)).join("") || "<w:r><w:t></w:t></w:r>";
       output.push("<w:p>" + (paragraphProperties.length ? "<w:pPr>" + paragraphProperties.join("") + "</w:pPr>" : "") + runs + "</w:p>");
@@ -5111,10 +5250,18 @@
     editorResizeObserver = new ResizeObserver(applyPaperCanvasMinimumHeight);
     editorResizeObserver.observe(editorContainer);
   }
-  editor.addEventListener("beforeinput", (event) => {
+  editorContainer.addEventListener("keydown", (event) => {
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (event.key !== "Backspace" && event.key !== "Delete") return;
+    if (window.getSelection()?.isCollapsed !== false) return;
+    const type = event.key === "Backspace" ? "deleteContentBackward" : "deleteContentForward";
+    if (handleTrackedBeforeInput(event, type)) event.stopPropagation();
+  }, true);
+  editorContainer.addEventListener("beforeinput", (event) => {
+    if (event.defaultPrevented) return;
     if (event.target?.id === "document-list-search") return;
     handleTrackedBeforeInput(event);
-  });
+  }, true);
   editor.addEventListener("input", (event) => {
     if (event.target?.id === "document-list-search") { filterSavedDocumentList(event.target.value); return; }
     countWords();

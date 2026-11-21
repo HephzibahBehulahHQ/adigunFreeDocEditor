@@ -135,6 +135,58 @@ try {
   assert.equal(saved.content.content[0].attrs["data-paragraph-spacing"], "12", "saved documents retain the toolbar paragraph spacing");
   assert.match(JSON.stringify(saved.content), /data-font-size.*14pt/, "saved documents retain the Home ribbon font size");
 
+  window.document.querySelector("#ribbon-tab-review").click();
+  window.document.querySelector('[data-action="track-changes"]').click();
+  function markParagraphDeletion(html, startOffset, endOffset, keyboard = false) {
+    window.__testEditor.commands.setContent(html);
+    const paragraphs = liveRoot.querySelectorAll("p");
+    const range = window.document.createRange();
+    range.setStart(paragraphs[0].firstChild, startOffset);
+    range.setEnd(paragraphs[paragraphs.length - 1].firstChild, endOffset);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    const options = { bubbles: true, cancelable: true };
+    const event = keyboard
+      ? new window.KeyboardEvent("keydown", { ...options, key: "Backspace" })
+      : new window.InputEvent("beforeinput", { ...options, inputType: "deleteContentForward" });
+    liveRoot.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, true, "the tracked deletion replaces the default editor action");
+    assert.equal(window.document.querySelector("#tracked-revision-count").textContent, "1 pending change");
+  }
+  const originalParagraphs = "<p>Keep <strong>bold</strong> tail</p><p>Middle</p><p>Drop end</p>";
+  const documentHtml = () => window.AdigunDocumentModel.toHTML(window.AdigunDocumentModel.fromDOM(liveRoot));
+  markParagraphDeletion(originalParagraphs, 5, 5, true);
+  const pendingHtml = documentHtml();
+  window.__testEditor.commands.setContent(pendingHtml);
+  assert.equal(liveRoot.querySelectorAll("p[data-revision-id]").length, 2, "paragraph break revisions survive the persisted model and live schema");
+  window.document.querySelector("#export-docx").click();
+  const docxBuffer = await new Promise((resolve, reject) => {
+    const reader = new window.FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(window.__lastDownloadedBlob);
+  });
+  const documentXml = new TextDecoder().decode(window.fflate.unzipSync(new window.Uint8Array(docxBuffer))["word/document.xml"]);
+  assert.equal([...documentXml.matchAll(/<w:rPr><w:del /g)].length, 2, "Word export writes both deletions of paragraph marks");
+  assert.match(documentXml, /<w:delText[^>]*>Middle<\/w:delText>/, "Word export also records deleted text");
+  window.document.querySelector('[data-revision-action="reject"]').click();
+  assert.equal(documentHtml(), originalParagraphs, "rejection restores paragraph boundaries and inline formatting");
+  markParagraphDeletion(originalParagraphs, 5, 5);
+  window.document.querySelector('[data-revision-action="accept"]').click();
+  assert.equal(documentHtml(), "<p>Keep end</p>", "acceptance removes the selected text and joins the remaining paragraphs");
+  markParagraphDeletion("<p>Left</p><p>Right</p>", 4, 0);
+  assert.equal(liveRoot.querySelectorAll("del").length, 0, "a boundary-only selection does not mark unrelated text");
+  window.document.querySelector('[data-revision-action="accept-all"]').click();
+  assert.equal(documentHtml(), "<p>LeftRight</p>");
+  const acrossPages = '<div class="document-sheet"><p>Left</p></div><div class="document-sheet"><p></p><p>Right</p></div>';
+  markParagraphDeletion(acrossPages, 4, 0);
+  window.document.querySelector('[data-revision-action="accept"]').click();
+  assert.equal(documentHtml(), "<p>LeftRight</p>", "acceptance joins across sheets without inserting breaks for empty paragraphs");
+  window.document.querySelector('[data-action="track-changes"]').click();
+  window.document.querySelector("#ribbon-tab-home").click();
+  window.__testEditor.commands.setContent("<p>Live text</p>");
+
   const listButton = window.document.querySelector('#ribbon-tools [data-action="insertUnorderedList"]');
   listButton.click();
   assert.equal(window.__testEditor.isActive("bulletList"), true, "the Home ribbon creates a real bulleted list");
