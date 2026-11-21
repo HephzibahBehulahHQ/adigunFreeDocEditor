@@ -611,6 +611,27 @@ button.slide-object[aria-pressed="true"],button.slide-object:focus-visible{outli
 #sheet-grid input[data-conditional-fill]{background:var(--conditional-fill)}
 #sheet-grid input[data-cell-border]{outline:1px solid #75839c;outline-offset:-1px}
 .sheet-style-toggles{display:flex;flex-wrap:wrap;gap:8px 14px}
+.sheet-csv-preview{max-height:38vh;overflow:auto;margin-bottom:12px}
+.sheet-csv-preview table{border-collapse:collapse;min-width:100%}
+.sheet-csv-preview td{padding:6px 10px;border:1px solid var(--line);white-space:pre-wrap;overflow-wrap:anywhere}
+.sheet-print-layout{display:none}
+@page adigun-sheet-a4{size:A4 portrait;margin:12mm}
+@page adigun-sheet-a4-wide{size:A4 landscape;margin:12mm}
+@page adigun-sheet-letter{size:letter portrait;margin:12mm}
+@page adigun-sheet-letter-wide{size:letter landscape;margin:12mm}
+@media print{
+  .sheets-page>:not(.sheet-print-layout){display:none!important}
+  .sheet-print-layout{display:block;page:adigun-sheet-a4;color:#182035}
+  .sheet-print-layout[data-orientation=landscape]{page:adigun-sheet-a4-wide}
+  .sheet-print-layout[data-paper=letter]{page:adigun-sheet-letter}
+  .sheet-print-layout[data-paper=letter][data-orientation=landscape]{page:adigun-sheet-letter-wide}
+  .sheet-print-layout h1{font-size:14pt}
+  .sheet-print-layout table{width:100%;table-layout:fixed;border-collapse:collapse;font:10pt Calibri,Arial,sans-serif;print-color-adjust:exact}
+  .sheet-print-layout td{padding:3px 6px;white-space:pre-wrap;overflow-wrap:anywhere}
+  .sheet-print-gridlines td{border:1px solid #aeb8c7}
+  .sheet-print-layout tr{break-inside:avoid}
+  .sheet-print-layout thead{display:table-header-group;font-weight:bold}
+}
 #sheet-style-dialog label:has(input[type=checkbox]){display:flex;align-items:center;gap:5px}
 #sheet-style-dialog input[type=checkbox]{width:auto}
 .sheet-chart-values{display:grid;gap:8px;margin:0;padding:0;list-style:none}

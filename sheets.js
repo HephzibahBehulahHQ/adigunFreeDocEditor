@@ -1,5 +1,6 @@
 import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, numberFormats, parseChartRange, parseCsv, parseSheetFilter, renameSheetReferences, shiftCellFormula, sortSheetRange, spreadsheetFonts, toCsv, validationOptions } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
+import { bindSheetPrinting } from "./sheet-print.js";
 
 const $ = (id) => document.getElementById(id);
 const storageKey = "adigun-sheets-v1";
@@ -33,6 +34,7 @@ try {
       chart: parseChartRange(item?.chart?.range),
       conditionalRule: normalizeConditionalRule(item?.conditionalRule),
       hidden: item?.hidden === true,
+      print: item?.print,
       validation: Object.fromEntries(Object.entries(item?.validation ?? {})
         .filter(([address, options]) => validAddress.test(address) && validationOptions(options).length)),
       pivot: item?.pivot && Number.isInteger(item.pivot.source) &&
@@ -792,26 +794,76 @@ $("sheet-add-column").addEventListener("click", () => {
   save();
   render();
 });
-$("sheet-open").addEventListener("click", () => $("sheet-file").click());
+const csvDialog = $("sheet-csv-dialog");
+const csvForm = csvDialog.querySelector("form");
+let csvPreviewRequested = false;
+let csvSource = "";
+let csvRows;
+function appendCsv(rows) {
+  if (workbook.sheets.length >= maxSheets) throw new Error("The workbook already contains 12 sheets.");
+  const sheet = { ...blankSheet(), name: uniqueName(`Sheet ${workbook.sheets.length + 1}`) };
+  sheet.rows = Math.max(sheet.rows, rows.length);
+  for (const [row, fields] of rows.entries()) {
+    sheet.columns = Math.max(sheet.columns, fields.length);
+    fields.forEach((value, column) => { if (value) sheet.cells[cellAddress(row, column)] = value; });
+  }
+  recordEdit();
+  workbook.active = workbook.sheets.push(sheet) - 1;
+  save();
+  render();
+}
+function renderCsvPreview() {
+  const message = csvForm.querySelector("[role=status]");
+  const table = csvForm.querySelector("table");
+  const submit = csvForm.querySelector("[type=submit]");
+  table.replaceChildren();
+  csvRows = undefined;
+  submit.disabled = true;
+  try {
+    const value = csvForm.elements.delimiter.value;
+    csvRows = parseCsv(csvSource, value === "tab" ? "\t" : value);
+    if (!csvRows.length) throw new Error("This file contains no records.");
+    const columns = Math.max(...csvRows.map((row) => row.length));
+    message.textContent = `${csvRows.length} rows · ${columns} columns${csvRows.length > 8 ? " · First 8 shown" : ""}`;
+    const body = table.createTBody();
+    for (const row of csvRows.slice(0, 8)) {
+      const line = body.insertRow();
+      for (const value of row) line.insertCell().textContent = value;
+    }
+    submit.disabled = false;
+  } catch (error) { message.textContent = error.message; }
+}
+csvForm.elements.delimiter.addEventListener("change", renderCsvPreview);
+csvForm.querySelector("[data-close]").addEventListener("click", () => csvDialog.close());
+csvDialog.addEventListener("close", () => { csvSource = ""; csvRows = undefined; });
+csvForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!csvRows?.length) return;
+  try {
+    appendCsv(csvRows);
+    csvDialog.close();
+  } catch (error) { csvForm.querySelector("[role=status]").textContent = error.message; }
+});
+$("sheet-open").addEventListener("click", () => { csvPreviewRequested = false; $("sheet-file").click(); });
+$("sheet-open-preview").addEventListener("click", () => { csvPreviewRequested = true; $("sheet-file").click(); });
+$("sheet-file").addEventListener("cancel", () => { csvPreviewRequested = false; });
 $("sheet-file").addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
+  const preview = csvPreviewRequested;
+  csvPreviewRequested = false;
   event.target.value = "";
   if (!file) return;
   if (workbook.sheets.length >= maxSheets) { status("The workbook already contains 12 sheets."); return; }
   if (file.size > 1024 * 1024) { status("Choose a CSV file under 1 MB."); return; }
   try {
-    const rows = parseCsv((await file.text()).replace(/^\uFEFF/, ""));
-    if (workbook.sheets.length >= maxSheets) { status("The workbook already contains 12 sheets."); return; }
-    const sheet = { ...blankSheet(), name: uniqueName(`Sheet ${workbook.sheets.length + 1}`) };
-    sheet.rows = Math.max(sheet.rows, rows.length);
-    for (const [row, fields] of rows.entries()) {
-      sheet.columns = Math.max(sheet.columns, fields.length);
-      fields.forEach((value, column) => { if (value) sheet.cells[cellAddress(row, column)] = value; });
+    const text = (await file.text()).replace(/^\uFEFF/, "");
+    if (preview) {
+      csvSource = text;
+      renderCsvPreview();
+      csvDialog.showModal();
+    } else {
+      appendCsv(parseCsv(text));
     }
-    recordEdit();
-    workbook.active = workbook.sheets.push(sheet) - 1;
-    save();
-    render();
   } catch (error) {
     status(error.message || "This CSV could not be opened.");
   }
@@ -982,5 +1034,16 @@ function sheetMutation(action) {
 for (const button of manageForm.querySelectorAll("[data-manage]")) {
   button.addEventListener("click", () => sheetMutation(button.dataset.manage));
 }
+
+bindSheetPrinting({
+  activeSheet: currentSheet,
+  activeWorkbook: () => workbook,
+  selection: () => selectedRange?.label || "",
+  change: (settings) => {
+    recordEdit();
+    currentSheet().print = settings;
+    save();
+  },
+});
 
 render();

@@ -4,6 +4,17 @@ export const maxCellLength = 4000;
 export const numberFormats = { general: 0, number: 4, percent: 10, decimal: 2 };
 export const conditionalColors = { yellow: "FFF3B8", green: "D6F3DE", red: "FFDDE3" };
 export const spreadsheetFonts = ["Arial", "Calibri", "Georgia", "Times New Roman", "Courier New"];
+export function normalizePrintSettings(input) {
+  const settings = input ?? {};
+  const validRange = normalizeConditionalRule({ range: settings.range, operator: "equal", threshold: 0, color: "yellow" });
+  return {
+    range: validRange?.range || "",
+    paper: settings.paper === "letter" ? "letter" : "a4",
+    orientation: settings.orientation === "landscape" ? "landscape" : "portrait",
+    grid: settings.grid !== false,
+    repeat: settings.repeat === true,
+  };
+}
 
 export function normalizeCellStyle(input) {
   const value = input ?? {};

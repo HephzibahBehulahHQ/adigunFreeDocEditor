@@ -86,6 +86,7 @@ jobs:
         run: |
           mkdir -p _site/assets/vendor
           cp index.html styles.css app.js document-model.js editor-runtime.js sheets.html sheets.js sheet-model.js sheet-xlsx.js sheet-chart-xlsx.js slides.html slides.js presentation-package.js pdf.html pdf-workspace.js pdf-pages.js ai.html ai-draft.js ai-draft-model.js CNAME _site/
+          cp sheet-print.js _site/
           cp pdf-ocr.js pdf-redact.js pdf-render.js pdf-forms.js pdf-navigation.js pdf-comments.js pdf-organize.js pdf-text.js _site/
           cp assets/hb-official.jpg _site/assets/
           python scripts/assemble_pdfjs.py
@@ -134,10 +135,10 @@ jobs:
           for asset in ("styles.css", "sheets.js", "assets/vendor/fflate.min.js"):
               html = html.replace(f'./{asset}"', f'./{asset}?v={version}"')
           sheets.write_text(html)
-          for module in ("sheets.js", "sheet-xlsx.js", "sheet-chart-xlsx.js"):
+          for module in ("sheets.js", "sheet-xlsx.js", "sheet-chart-xlsx.js", "sheet-print.js"):
               source = Path("_site") / module
               code = source.read_text()
-              for dependency in ("sheet-model.js", "sheet-xlsx.js", "sheet-chart-xlsx.js"):
+              for dependency in ("sheet-model.js", "sheet-xlsx.js", "sheet-chart-xlsx.js", "sheet-print.js"):
                   code = code.replace(f'"./{dependency}"', f'"./{dependency}?v={version}"')
               source.write_text(code)
           PY
