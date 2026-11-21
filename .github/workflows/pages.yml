@@ -86,7 +86,7 @@ jobs:
         run: |
           mkdir -p _site/assets/vendor
           cp index.html styles.css app.js document-model.js editor-runtime.js sheets.html sheets.js sheet-model.js sheet-xlsx.js sheet-chart-xlsx.js slides.html slides.js presentation-package.js pdf.html pdf-workspace.js pdf-pages.js ai.html ai-draft.js ai-draft-model.js CNAME _site/
-          cp pdf-ocr.js pdf-redact.js pdf-render.js pdf-forms.js pdf-navigation.js pdf-comments.js pdf-organize.js _site/
+          cp pdf-ocr.js pdf-redact.js pdf-render.js pdf-forms.js pdf-navigation.js pdf-comments.js pdf-organize.js pdf-text.js _site/
           cp assets/hb-official.jpg _site/assets/
           python scripts/assemble_pdfjs.py
           npm run build:pdf
@@ -116,10 +116,10 @@ jobs:
           for asset in ("styles.css", "pdf-workspace.js", "assets/vendor/pdf-lib.min.js", "assets/vendor/pdf.min.js", "assets/vendor/ocr/tesseract.min.js"):
               html = html.replace(f'./{asset}"', f'./{asset}?v={version}"')
           pdf.write_text(html)
-          for module in ("pdf-workspace.js", "pdf-ocr.js", "pdf-redact.js", "pdf-render.js", "pdf-navigation.js", "pdf-comments.js", "pdf-organize.js"):
+          for module in ("pdf-workspace.js", "pdf-ocr.js", "pdf-redact.js", "pdf-render.js", "pdf-navigation.js", "pdf-comments.js", "pdf-organize.js", "pdf-text.js"):
               source = Path("_site") / module
               code = source.read_text()
-              for dependency in ("pdf-pages.js", "pdf-ocr.js", "pdf-redact.js", "pdf-render.js", "pdf-forms.js", "pdf-navigation.js", "pdf-comments.js", "pdf-organize.js", "assets/vendor/pdf.worker.min.js"):
+              for dependency in ("pdf-pages.js", "pdf-ocr.js", "pdf-redact.js", "pdf-render.js", "pdf-forms.js", "pdf-navigation.js", "pdf-comments.js", "pdf-organize.js", "pdf-text.js", "assets/vendor/pdf.worker.min.js"):
                   code = code.replace(f'"./{dependency}"', f'"./{dependency}?v={version}"')
               source.write_text(code)
           ai = Path("_site/ai.html")
