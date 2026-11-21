@@ -7,6 +7,8 @@
   const slideShow = $("slide-show");
   const animationDialog = $("slide-animation-dialog");
   const animationForm = animationDialog.querySelector("form");
+  const animationPanel = $("slide-animation-panel");
+  const animationList = $("slide-animation-list");
   const transitionDialog = $("slide-transition-dialog");
   const transitionForm = transitionDialog.querySelector("form");
   const { normalizeTransition, transitionFrames, normalizeObjects, imageLimit, imageData } = window.AdigunPresentation;
@@ -18,7 +20,10 @@
     drift: [{ transform: "translateX(0)" }, { transform: "translateX(24px)" }, { transform: "translateX(0)" }],
   };
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-  let playing = [];
+  const playing = new Map();
+  const effectTimers = new Set();
+  let manualEffect = 0;
+  let editingEffect;
   let transitioning;
   let advanceTimer;
   let deck = newDeck();
@@ -30,7 +35,7 @@
     const { effect, target, start, duration, delay } = animation || {};
     return {
       effect: Object.hasOwn(effects, effect) ? effect : "none",
-      target: ["title", "content"].includes(target) ? target : "both",
+      target: typeof target === "string" && (/^object:(?:[0-9]|1[0-9]|2[0-4])$/.test(target) || ["title", "content"].includes(target)) ? target : "both",
       start: start === "manual" ? start : "auto",
       duration: Number.isFinite(duration) && duration >= 0.1 && duration <= 5 ? duration : 0.6,
       delay: Number.isFinite(delay) && delay >= 0 && delay <= 10 ? delay : 0,
@@ -45,7 +50,8 @@
         title: typeof slide?.title === "string" ? slide.title.slice(0, 120) : "",
         content: typeof slide?.content === "string" ? slide.content.slice(0, 1500) : "",
         theme: Object.hasOwn(window.AdigunPresentation.themes, slide?.theme) ? slide.theme : "paper",
-        animation: normalizeAnimation(slide?.animation),
+        animations: (Array.isArray(slide?.animations) ? slide.animations : [slide?.animation]).slice(0, 16)
+          .map(normalizeAnimation).filter((effect) => effect.effect !== "none"),
         hidden: slide?.hidden === true,
         notes: typeof slide?.notes === "string" ? slide.notes.slice(0, 4000) : "",
         transition: normalizeTransition(slide?.transition),
@@ -138,6 +144,7 @@
     $("slide-status-index").textContent = `Slide ${deck.active + 1} of ${deck.slides.length}${slide.hidden ? " · Hidden in slideshow" : ""}`;
     renderList();
     renderObjects();
+    renderEffectList();
   }
 
   function applyTheme(paper, theme) {
@@ -270,6 +277,7 @@
   }
 
   function selectObject(index, focus = false) {
+    if (index !== null) animationPanel.hidden = true;
     selectedObject = index;
     renderObjects();
     if (focus) objectLayer.children[index]?.focus();
@@ -332,17 +340,23 @@
     renderObjects();
   });
   function rearrangeObject(front) {
-    const objects = deck.slides[deck.active].objects;
+    const slide = deck.slides[deck.active];
+    const objects = slide.objects;
+    const before = [...objects];
     const [object] = objects.splice(selectedObject, 1);
     if (front) objects.push(object);
     else objects.unshift(object);
+    remapEffects(slide, before);
     save();
     selectObject(front ? objects.length - 1 : 0, true);
   }
   $("slide-object-front").addEventListener("click", () => rearrangeObject(true));
   $("slide-object-back").addEventListener("click", () => rearrangeObject(false));
   $("slide-object-delete").addEventListener("click", () => {
-    deck.slides[deck.active].objects.splice(selectedObject, 1);
+    const slide = deck.slides[deck.active];
+    const before = [...slide.objects];
+    slide.objects.splice(selectedObject, 1);
+    remapEffects(slide, before);
     save();
     selectObject(null);
     document.querySelector("[data-slide-object]").closest("details").querySelector("summary").focus();
@@ -353,20 +367,98 @@
     objectLayer.children[index]?.focus();
   });
 
-  $("slide-animate").addEventListener("click", () => {
-    const animation = normalizeAnimation(deck.slides[deck.active].animation);
+  function remapEffects(slide, before) {
+    slide.animations = (slide.animations || []).flatMap((effect) => {
+      if (!effect.target.startsWith("object:")) return [effect];
+      const index = slide.objects.indexOf(before[Number(effect.target.slice(7))]);
+      return index < 0 ? [] : [{ ...effect, target: "object:" + index }];
+    });
+  }
+  function targetOptions(slide) {
+    return [["both", "Title and text"], ["title", "Title"], ["content", "Text"],
+      ...(slide.objects || []).map((object, index) => ["object:" + index, `${object.kind} ${index + 1}${object.text ? " · " + object.text.slice(0, 40) : ""}`])];
+  }
+  function activeEffects() { return deck.slides[deck.active].animations ??= []; }
+  function openEffect(index) {
+    editingEffect = index;
+    const slide = deck.slides[deck.active];
+    const animation = normalizeAnimation(activeEffects()[index]);
+    animationForm.elements.target.replaceChildren(...targetOptions(slide).map(([value, name]) => new Option(name, value)));
     for (const [field, value] of Object.entries(animation)) animationForm.elements[field].value = value;
+    if (!animationForm.elements.target.value) animationForm.elements.target.value = "both";
     animationDialog.showModal();
+  }
+  function renderEffectList() {
+    const list = activeEffects();
+    const names = new Map(targetOptions(deck.slides[deck.active]));
+    $("slide-animation-add").disabled = list.length >= 16;
+    animationList.replaceChildren(...list.map((effect, index) => {
+      const li = document.createElement("li");
+      const title = document.createElement("span");
+      const label = [...animationForm.elements.effect.options].find((option) => option.value === effect.effect)?.textContent;
+      title.textContent = `${label} · ${names.get(effect.target) || "Object"} · ${effect.start === "auto" ? "Auto" : "Manual"}`;
+      const commands = document.createElement("div");
+      commands.className = "slides-actions";
+      function action(text, callback, disabled = false) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "button button-outline";
+        button.disabled = disabled;
+        button.textContent = text;
+        button.setAttribute("aria-label", `${text} effect ${index + 1}`);
+        button.addEventListener("click", callback);
+        commands.append(button);
+      }
+      function update(change, focus) {
+        change();
+        save();
+        renderEffectList();
+        (animationList.children[focus]?.querySelector("button") ?? $("slide-animation-add")).focus();
+      }
+      function swap(other) { [list[index], list[other]] = [list[other], list[index]]; }
+      action("Edit", () => openEffect(index));
+      action("Up", () => update(() => swap(index - 1), index - 1), index === 0);
+      action("Down", () => update(() => swap(index + 1), index + 1), index === list.length - 1);
+      action("Remove", () => update(() => list.splice(index, 1), index));
+      li.append(title, commands);
+      return li;
+    }));
+  }
+  $("slide-animate").addEventListener("click", () => {
+    selectObject(null);
+    animationPanel.hidden = false;
+    renderEffectList();
+    if (!activeEffects().length) openEffect();
+    else $("slide-animation-add").focus();
+  });
+  $("slide-animation-add").addEventListener("click", () => openEffect());
+  $("slide-animation-close").addEventListener("click", () => {
+    animationPanel.hidden = true;
+    $("slide-animate").focus();
   });
   animationDialog.querySelector("[data-close]").addEventListener("click", () => animationDialog.close());
+  animationDialog.querySelector("[data-preview]").addEventListener("click", () => {
+    const preview = animationDialog.querySelector(".transition-preview div");
+    const { effect, duration, delay } = animationForm.elements;
+    preview.getAnimations().forEach((animation) => animation.cancel());
+    if (animationForm.reportValidity() && !reducedMotion.matches && effects[effect.value]) {
+      preview.animate(effects[effect.value], { duration: duration.valueAsNumber * 1000, delay: delay.valueAsNumber * 1000 });
+    }
+  });
   animationForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const { effect, target, start, duration, delay } = animationForm.elements;
-    deck.slides[deck.active].animation = normalizeAnimation({
+    const config = normalizeAnimation({
       effect: effect.value, target: target.value, start: start.value,
       duration: duration.valueAsNumber, delay: delay.valueAsNumber,
     });
+    const list = activeEffects();
+    if (editingEffect !== undefined) {
+      if (config.effect === "none") list.splice(editingEffect, 1);
+      else list[editingEffect] = config;
+    } else if (config.effect !== "none") list.push(config);
     save();
+    renderEffectList();
     animationDialog.close();
   });
 
@@ -407,25 +499,49 @@
   });
 
   function stopAnimation() {
-    for (const animation of playing) animation.cancel();
-    playing = [];
+    for (const timer of effectTimers) window.clearTimeout(timer);
+    effectTimers.clear();
+    for (const animation of playing.values()) animation.cancel();
+    playing.clear();
   }
 
-  function playAnimation() {
-    stopAnimation();
-    const { effect, target, duration, delay } = normalizeAnimation(deck.slides[presentedSlide].animation);
+  function animateEffect({ effect, target, duration, delay }) {
     if (effect === "none" || reducedMotion.matches) return;
-    const targets = target === "both" ? [$("present-title"), $("present-content")] : [$("present-" + target)];
-    playing = targets.filter((element) => element.textContent).map((element) => element.animate(effects[effect], {
-      duration: duration * 1000,
-      delay: delay * 1000,
-      easing: "ease-in-out",
-      fill: "both",
-    }));
+    const targets = target === "both" ? [$("present-title"), $("present-content")] : target.startsWith("object:")
+      ? [$("present-object-layer").children[Number(target.slice(7))]] : [$("present-" + target)];
+    for (const element of targets.filter((element) => element && (element.textContent || element.children.length || target.startsWith("object:")))) {
+      playing.get(element)?.cancel();
+      const frames = element.style.transform
+        ? effects[effect].map((frame) => frame.transform ? { ...frame, transform: element.style.transform + " " + frame.transform } : frame)
+        : effects[effect];
+      playing.set(element, element.animate(frames, { duration: duration * 1000, delay: delay * 1000, easing: "ease-in-out", fill: "both" }));
+    }
+  }
+  function currentEffects(trigger) {
+    return (deck.slides[presentedSlide].animations ?? []).filter((effect) => effect.start === trigger);
+  }
+  function automaticEffects() {
+    let elapsed = 0;
+    for (const config of currentEffects("auto")) {
+      if (!elapsed) animateEffect(config);
+      else {
+        const timer = window.setTimeout(() => { effectTimers.delete(timer); animateEffect(config); }, elapsed);
+        effectTimers.add(timer);
+      }
+      elapsed += (config.delay + config.duration) * 1000;
+    }
+  }
+  function playAnimation() {
+    const queue = currentEffects("manual");
+    if (!queue.length) { stopAnimation(); automaticEffects(); return; }
+    if (manualEffect === queue.length) { stopAnimation(); manualEffect = 0; }
+    animateEffect(queue[manualEffect++]);
+    $("present-play").textContent = manualEffect === queue.length ? "Replay effects" : "Play next effect";
   }
 
   function renderPresentation() {
     stopAnimation();
+    manualEffect = 0;
     window.clearTimeout(advanceTimer);
     transitioning?.cancel();
     const slide = deck.slides[presentedSlide];
@@ -444,9 +560,10 @@
     if (config.advance && !$("present-next").disabled) {
       advanceTimer = window.setTimeout(() => $("present-next").click(), config.advance);
     }
-    const { effect, start } = normalizeAnimation(slide.animation);
-    $("present-play").hidden = effect === "none" || reducedMotion.matches;
-    if (start === "auto") playAnimation();
+    const manual = currentEffects("manual");
+    $("present-play").hidden = !slide.animations?.length || reducedMotion.matches;
+    $("present-play").textContent = manual.length ? "Play effect" : "Replay effects";
+    if (!reducedMotion.matches) automaticEffects();
   }
   function visibleSlide(index, direction) {
     for (let candidate = index; candidate >= 0 && candidate < deck.slides.length; candidate += direction) {
