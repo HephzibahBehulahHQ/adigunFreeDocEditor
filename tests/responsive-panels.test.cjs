@@ -45,7 +45,7 @@ nodes["#review-comments"].hidden = true;
 const assistant = element();
 const window = { innerWidth: 1000, matchMedia(query) { const range = query.match(/(min|max)-width: ?([0-9]+)px/); const threshold = Number(range?.[2]); return { matches: range?.[1] === "min" ? this.innerWidth >= threshold : this.innerWidth <= threshold }; }, addEventListener() {} };
 const appShell = nodes[".app-shell"];
-const api = new Function("window", "$", "assistant", "appShell", "assistantResizeHandle", "renderReviewComments", [
+const api = new Function("window", "$", "assistant", "appShell", "assistantResizeHandle", "renderReviewComments", "renderOutline", [
   source.slice(reviewStart, reviewEnd),
   source.slice(assistantStart, assistantEnd),
   "return { showReviewPanel, showOutlinePanel, toggleAssistant };",
@@ -55,6 +55,7 @@ const api = new Function("window", "$", "assistant", "appShell", "assistantResiz
   assistant,
   appShell,
   assistantResizeHandle,
+  () => {},
   () => {},
 );
 
