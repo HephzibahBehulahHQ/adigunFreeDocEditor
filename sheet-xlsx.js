@@ -65,7 +65,7 @@ function readFilter(worksheet) {
   const offset = filterColumn.getAttribute("colId") ?? "";
   const filters = filterColumn.firstElementChild;
   if (!/^\d{1,2}$/.test(offset) || filters?.localName !== "filters" || filters.children.length !== 1 ||
-    filters.firstElementChild.localName !== "filter" || filters.hasAttribute("blank")) return null;
+    filters.firstElementChild.localName !== "filter" || ["1", "true"].includes(filters.getAttribute("blank"))) return null;
   const column = String.fromCharCode(range.charCodeAt(0) + Number(offset));
   return parseSheetFilter({ range, column, value: filters.firstElementChild.getAttribute("val") });
 }

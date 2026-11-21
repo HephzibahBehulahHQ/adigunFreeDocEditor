@@ -602,7 +602,7 @@ $("workbook-file").addEventListener("change", async (event) => {
     workbook = { active: existing.length, sheets: [...existing, ...sheets] };
     save();
     render();
-    status("Excel values and formulas imported. Original formatting is not included.");
+    status("Excel data and supported workbook settings imported.");
   } catch (error) {
     status(error.message || "This Excel file could not be opened.");
   }
