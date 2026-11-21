@@ -1,4 +1,4 @@
-import { calculateSheet, maxCellLength, maxColumns, maxRows } from "./sheet-model.js";
+import { calculateSheet, maxCellLength, maxColumns, maxRows, numberFormats } from "./sheet-model.js";
 
 const mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const officeNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -8,16 +8,18 @@ const xmlHead = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const worksheetType = "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml";
 const workbookType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
 export const xlsxMime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const styleNames = Object.keys(numberFormats);
 
 function xml(value) {
   return String(value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, "")
     .replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
 }
 
-function makeWorksheet(cells) {
+function makeWorksheet(cells, formats = {}) {
   const rows = new Map();
   const valueAt = calculateSheet(cells);
-  for (const [address, raw] of Object.entries(cells)) {
+  for (const address of new Set([...Object.keys(cells), ...Object.keys(formats)])) {
+    const raw = cells[address] ?? "";
     const row = Number(address.slice(1));
     if (!rows.has(row)) rows.set(row, []);
     const value = valueAt(address);
@@ -30,6 +32,8 @@ function makeWorksheet(cells) {
       const text = raw.startsWith("'") ? raw.slice(1) : raw;
       markup = `<c r="${address}" t="inlineStr"><is><t xml:space="preserve">${xml(text)}</t></is></c>`;
     }
+    const style = styleNames.indexOf(formats[address]);
+    if (style > 0) markup = markup.replace("<c ", `<c s="${style}" `);
     rows.get(row).push({ address, markup });
   }
   const data = [...rows].sort(([a], [b]) => a - b).map(([row, cellsInRow]) =>
@@ -55,7 +59,13 @@ export function exportWorkbook(sheets, zip) {
     workbookSheets.push(`<sheet name="${xml(name)}" sheetId="${id}" r:id="rId${id}"/>`);
     rels.push(`<Relationship Id="rId${id}" Type="${officeNs}/worksheet" Target="${target}"/>`);
     overrides.push(`<Override PartName="/xl/${target}" ContentType="${worksheetType}"/>`);
-    files["xl/" + target] = makeWorksheet(sheet.cells);
+    files["xl/" + target] = makeWorksheet(sheet.cells, sheet.formats);
+  }
+  if (sheets.some((sheet) => Object.keys(sheet.formats ?? {}).length)) {
+    rels.push(`<Relationship Id="rIdStyles" Type="${officeNs}/styles" Target="styles.xml"/>`);
+    overrides.push('<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>');
+    const formats = styleNames.map((name) => `<xf numFmtId="${numberFormats[name]}" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>`).join("");
+    files["xl/styles.xml"] = `<styleSheet xmlns="${mainNs}"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${styleNames.length}">${formats}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
   }
   files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}"><sheets>${workbookSheets.join("")}</sheets></workbook>`;
   files["xl/_rels/workbook.xml.rels"] = `<Relationships xmlns="${packageNs}">${rels.join("")}</Relationships>`;
@@ -68,7 +78,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
   let total = 0;
   const files = zip.unzipSync(bytes, {
     filter({ name, originalSize }) {
-      if (!/^xl\/(?:workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|worksheets\/[\w.-]+\.xml)$/.test(name)) return false;
+      if (!/^xl\/(?:workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|styles\.xml|worksheets\/[\w.-]+\.xml)$/.test(name)) return false;
       total += originalSize;
       if (total > 12 * 1024 * 1024) throw new Error("Workbook content is too large.");
       return true;
@@ -88,6 +98,9 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
   const textRuns = (node) => [...node.getElementsByTagNameNS("*", "t")].map((run) => run.textContent).join("");
   const shared = Object.hasOwn(files, "xl/sharedStrings.xml")
     ? [...parse("xl/sharedStrings.xml").getElementsByTagNameNS("*", "si")].map(textRuns) : [];
+  const cellXfs = Object.hasOwn(files, "xl/styles.xml") ? parse("xl/styles.xml").getElementsByTagNameNS("*", "cellXfs")[0] : null;
+  const savedFormats = Array.from(cellXfs?.children ?? [], (xf) =>
+    styleNames.find((format) => String(numberFormats[format]) === xf.getAttribute("numFmtId")));
   const definitions = [...parse("xl/workbook.xml").getElementsByTagNameNS("*", "sheet")];
   if (!definitions.length || definitions.length > 12) throw new Error("A workbook must contain between 1 and 12 sheets.");
   return definitions.map((definition) => {
@@ -96,6 +109,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const path = target.startsWith("/") ? target.slice(1) : "xl/" + target;
     if (!/^xl\/worksheets\/[\w.-]+\.xml$/.test(path)) throw new Error("The workbook uses an unsupported worksheet location.");
     const cells = {};
+    const formats = {};
     let rows = 20;
     let columns = 8;
     for (const node of parse(path).getElementsByTagNameNS("*", "c")) {
@@ -110,15 +124,17 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
         raw = shared[Number(raw)];
       } else if (type === "inlineStr") raw = textRuns(node);
       else if (type === "b") raw = value === "1" ? "TRUE" : "FALSE";
-      if (!raw) continue;
+      const format = savedFormats[Number(node.getAttribute("s"))];
+      if (!raw && (!format || format === "general")) continue;
       if (!formula && /^[=']/.test(raw)) raw = "'" + raw;
       if (!/^[A-Z](?:[1-9]\d?|100)$/.test(address) || raw.length > maxCellLength) {
         throw new Error("Workbook cells exceed the 100-row, 26-column, or cell-length limit.");
       }
-      cells[address] = raw;
+      if (raw) cells[address] = raw;
+      if (format && format !== "general") formats[address] = format;
       rows = Math.max(rows, Number(address.slice(1)));
       columns = Math.max(columns, address.charCodeAt(0) - 64);
     }
-    return { name: definition.getAttribute("name") || "", rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells };
+    return { name: definition.getAttribute("name") || "", rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats };
   });
 }

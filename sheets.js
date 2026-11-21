@@ -1,13 +1,14 @@
-import { calculateSheet, cellAddress, maxCellLength, maxColumns, maxRows, parseCsv, toCsv } from "./sheet-model.js";
+import { calculateSheet, cellAddress, displayCell, maxCellLength, maxColumns, maxRows, numberFormats, parseCsv, toCsv } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
 const storageKey = "adigun-sheets-v1";
 const maxSheets = 12;
-const blankSheet = () => ({ rows: 20, columns: 8, cells: {} });
+const blankSheet = () => ({ rows: 20, columns: 8, cells: {}, formats: {} });
 const validAddress = /^[A-Z](?:[1-9]\d?|100)$/;
 const grid = $("sheet-grid");
 let workbook = { active: 0, sheets: [blankSheet()] };
+let selectedAddress = "A1";
 
 try {
   const stored = JSON.parse(localStorage.getItem(storageKey));
@@ -18,6 +19,8 @@ try {
       columns: Math.max(8, Math.min(maxColumns, Number.isInteger(item?.columns) ? item.columns : 8)),
       cells: Object.fromEntries(Object.entries(item?.cells ?? {}).filter(([key, value]) =>
         validAddress.test(key) && typeof value === "string" && value.length <= maxCellLength)),
+      formats: Object.fromEntries(Object.entries(item?.formats ?? {}).filter(([key, value]) =>
+        validAddress.test(key) && Object.hasOwn(numberFormats, value))),
     }));
     const active = Number.isInteger(stored.active) ? Math.max(0, Math.min(stored.active, sheets.length - 1)) : 0;
     workbook = { active, sheets };
@@ -39,14 +42,31 @@ function save() {
 }
 
 function refreshValues() {
-  const valueAt = calculateSheet(currentSheet().cells);
+  const sheet = currentSheet();
+  const valueAt = calculateSheet(sheet.cells);
   for (const field of grid.querySelectorAll("input")) {
-    if (document.activeElement !== field) field.value = valueAt(field.dataset.cell);
+    if (document.activeElement !== field) field.value = displayCell(valueAt(field.dataset.cell), sheet.formats?.[field.dataset.cell]);
   }
+}
+
+function refreshFormula() {
+  $("sheet-selected").textContent = selectedAddress;
+  $("sheet-formula").value = currentSheet().cells[selectedAddress] ?? "";
+}
+
+function updateCell(address, value) {
+  const { cells } = currentSheet();
+  if (value) cells[address] = value;
+  else delete cells[address];
+  $("sheet-export").disabled = Object.keys(cells).length === 0;
+  refreshValues();
+  refreshFormula();
+  save();
 }
 
 function render() {
   const sheet = currentSheet();
+  if (Number(selectedAddress.slice(1)) > sheet.rows || selectedAddress.charCodeAt(0) - 64 > sheet.columns) selectedAddress = "A1";
   const header = document.createElement("thead");
   const heading = header.insertRow();
   heading.append(document.createElement("td"));
@@ -77,6 +97,7 @@ function render() {
   }
   grid.replaceChildren(header, body);
   refreshValues();
+  refreshFormula();
   $("sheet-tabs").replaceChildren(...workbook.sheets.map((_sheet, index) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -93,18 +114,41 @@ function render() {
 }
 
 grid.addEventListener("focusin", (event) => {
-  if (event.target.dataset.cell) event.target.value = currentSheet().cells[event.target.dataset.cell] ?? "";
+  if (!event.target.dataset.cell) return;
+  selectedAddress = event.target.dataset.cell;
+  event.target.value = currentSheet().cells[selectedAddress] ?? "";
+  refreshFormula();
 });
 grid.addEventListener("focusout", () => setTimeout(refreshValues, 0));
 grid.addEventListener("input", (event) => {
   const address = event.target.dataset.cell;
   if (!address) return;
-  const { cells } = currentSheet();
-  if (event.target.value) cells[address] = event.target.value;
-  else delete cells[address];
-  $("sheet-export").disabled = Object.keys(cells).length === 0;
-  refreshValues();
-  save();
+  selectedAddress = address;
+  updateCell(address, event.target.value);
+});
+$("sheet-formula").addEventListener("change", (event) => updateCell(selectedAddress, event.target.value));
+$("sheet-formula").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); event.currentTarget.blur(); }
+});
+for (const control of document.querySelectorAll("[data-sheet-format]")) {
+  control.addEventListener("click", () => {
+    const formats = currentSheet().formats ??= {};
+    const format = control.dataset.sheetFormat;
+    if (format === "general") delete formats[selectedAddress];
+    else formats[selectedAddress] = format;
+    refreshValues();
+    save();
+  });
+}
+$("sheet-autosum").addEventListener("click", () => {
+  const row = Number(selectedAddress.slice(1));
+  if (row === 1) { status("Select a cell below the values to sum."); return; }
+  const column = selectedAddress[0];
+  updateCell(selectedAddress, `=SUM(${column}1:${column}${row - 1})`);
+});
+$("sheet-gridlines").addEventListener("click", (event) => {
+  const hidden = grid.classList.toggle("sheets-no-gridlines");
+  event.currentTarget.setAttribute("aria-pressed", String(!hidden));
 });
 grid.addEventListener("keydown", (event) => {
   const address = event.target.dataset.cell;

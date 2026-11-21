@@ -488,6 +488,10 @@ a.nav-item{text-decoration:none}
 .sheets-actions,.sheets-tab-bar,.sheets-tab-bar [role="group"]{display:flex;flex-wrap:wrap;gap:8px}
 .sheets-actions button,.sheets-tab-bar button{min-height:36px}
 .sheets-help{margin:14px 0;color:var(--muted);font-size:12px}
+.sheet-formula-line{display:flex;align-items:center;gap:8px;margin:10px 0}
+.sheet-formula-line>span:first-child{min-width:48px;font-weight:650}
+.sheet-formula-line input{flex:1;min-width:0;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
+.sheets-grid .sheets-no-gridlines td{border-color:transparent}
 .sheets-grid{max-height:65vh;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .sheets-grid table{border-spacing:0;table-layout:fixed;width:max-content;min-width:100%}
 .sheets-grid :is(td,th){padding:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}

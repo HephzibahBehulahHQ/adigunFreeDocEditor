@@ -25,9 +25,21 @@
         <button id="sheet-add-row" type="button">Add row</button>
         <button id="sheet-add-column" type="button">Add column</button>
       </div></details>
+      <details name="sheet-commands" class="command-menu"><summary>Format</summary><div>
+        <button type="button" data-sheet-format="general">General</button>
+        <button type="button" data-sheet-format="number">Number (2 decimals)</button>
+        <button type="button" data-sheet-format="percent">Percentage</button>
+      </div></details>
+      <details name="sheet-commands" class="command-menu"><summary>Formulas</summary><div>
+        <button type="button" id="sheet-autosum">Sum cells above</button>
+      </div></details>
+      <details name="sheet-commands" class="command-menu"><summary>View</summary><div>
+        <button type="button" id="sheet-gridlines" aria-pressed="true">Show gridlines</button>
+      </div></details>
       <input id="sheet-file" type="file" accept=".csv,text/csv" hidden>
       <input id="workbook-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
     </div>
+    <label class="sheet-formula-line" for="sheet-formula"><span id="sheet-selected">A1</span><span class="sr-only">Selected cell value or formula</span><input id="sheet-formula" maxlength="4000" autocomplete="off"></label>
     <p class="sheets-help" id="sheets-help">Enter values or formulas such as =A1+B1 or =SUM(A1:A5). Formulas are calculated within the active sheet. CSV downloads contain values from that sheet.</p>
     <div class="sheets-grid" tabindex="0" role="region" aria-label="Editable spreadsheet">
       <table id="sheet-grid" aria-label="Cells" aria-describedby="sheets-help"></table>
