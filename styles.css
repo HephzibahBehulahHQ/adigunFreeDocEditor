@@ -421,6 +421,30 @@ button:disabled{cursor:not-allowed;opacity:.48}
 .ribbon-tabs::-webkit-scrollbar,.ribbon-tools::-webkit-scrollbar{display:none}
 
 .document-command-bar{display:flex;align-items:center;justify-content:space-between;min-width:0;background:var(--panel)}
+a.nav-item{text-decoration:none}
+.sheets-header{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px clamp(16px,4vw,40px);
+  background:var(--navy);color:var(--ivory);
+}
+.sheets-header h1{margin:0;font-size:18px}
+.sheets-header a{color:var(--ivory);text-underline-offset:4px}
+.sheets-header [role="status"]{margin-left:auto;font-size:12px}
+.sheets-workspace{padding:16px clamp(12px,3vw,36px)}
+.sheets-actions,.sheets-tab-bar,.sheets-tab-bar [role="group"]{display:flex;flex-wrap:wrap;gap:8px}
+.sheets-actions button,.sheets-tab-bar button{min-height:36px}
+.sheets-help{margin:14px 0;color:var(--muted);font-size:12px}
+.sheets-grid{max-height:65vh;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.sheets-grid table{border-spacing:0;table-layout:fixed;width:max-content;min-width:100%}
+.sheets-grid :is(td,th){padding:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.sheets-grid th,.sheets-grid thead td{padding:5px 10px;background:var(--canvas);color:var(--muted);font-size:11px}
+.sheets-grid thead{position:sticky;top:0;z-index:2}
+.sheets-grid tbody th{position:sticky;left:0;z-index:1}
+.sheets-grid input{display:block;width:100%;min-width:104px;min-height:30px;border:0;padding:4px 8px;background:transparent;color:var(--ink)}
+.sheets-grid input:focus{outline:2px solid var(--blue);outline-offset:-2px;background:var(--purple-soft)}
+.sheets-tab-bar{margin-top:10px}
+.sheets-tab-bar [aria-pressed="true"]{border-color:var(--purple);background:var(--purple-soft)}
+.sheets-actions button:disabled,.sheets-tab-bar button:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:700px){.sheets-actions button,.sheets-tab-bar button,.sheets-grid input{min-height:44px}}
 .editor-card.landing:has(.landing-home-header){width:100%;max-width:100%}
 .landing-page:has(.landing-home-header){max-width:100%;padding-block:24px 30px}
 .document-stage:has(.landing-home-header) .stage-heading,

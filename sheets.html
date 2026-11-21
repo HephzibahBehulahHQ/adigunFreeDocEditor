@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <title>Adigun Sheets</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="sheets-page">
+  <header class="sheets-header">
+    <a href="./index.html">← Documents</a>
+    <h1>Adigun Sheets</h1>
+    <span id="sheet-save" role="status">Stored on this device</span>
+  </header>
+  <main class="sheets-workspace">
+    <div class="sheets-actions" aria-label="Workbook actions">
+      <button id="sheet-open" class="button button-outline" type="button">Open CSV</button>
+      <button id="sheet-export" class="button button-outline" type="button">Download CSV</button>
+      <button id="sheet-add-row" class="button button-outline" type="button">Add row</button>
+      <button id="sheet-add-column" class="button button-outline" type="button">Add column</button>
+      <input id="sheet-file" type="file" accept=".csv,text/csv" hidden>
+    </div>
+    <p class="sheets-help" id="sheets-help">Enter values or formulas such as =A1+B1 or =SUM(A1:A5). Formulas are calculated within the active sheet. CSV downloads contain values from that sheet.</p>
+    <div class="sheets-grid" tabindex="0" role="region" aria-label="Editable spreadsheet">
+      <table id="sheet-grid" aria-label="Cells" aria-describedby="sheets-help"></table>
+    </div>
+    <div class="sheets-tab-bar" aria-label="Workbook sheets">
+      <div id="sheet-tabs" role="group" aria-label="Select sheet"></div>
+      <button id="sheet-add" type="button" class="button button-outline">＋ Sheet</button>
+    </div>
+  </main>
+  <script type="module" src="./sheets.js"></script>
+</body>
+</html>
