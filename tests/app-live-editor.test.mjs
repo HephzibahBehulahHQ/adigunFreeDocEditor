@@ -465,6 +465,8 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 30));
   assert.equal(titleField.value, savedBeforeSearch.title, "the recent file opens under its saved title");
   assert.equal(host.querySelector(".ProseMirror").textContent, "Keep this document.", "the recent file retains its saved content");
+  assert.equal(host.childElementCount, 1, "mounting a saved file leaves only the editable root in the document host");
+  assert.equal(host.textContent, "Keep this document.", "the saved content is displayed once");
 } finally {
   dom.window.close();
 }
