@@ -468,8 +468,8 @@ a.nav-item{text-decoration:none}
 .suite-switcher a:hover,.suite-switcher [aria-current]{background:var(--lavender,#eae3fb);color:#261652}
 .suite-switcher a:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 .suite-product{font-weight:500}
-.topbar>.suite-switcher{flex:0 0 100%;padding-bottom:4px}
-.topbar:has(>.suite-switcher){flex-wrap:wrap}
+.document-top-strip>.suite-switcher{grid-column:1/-1;order:-1;padding:3px clamp(8px,2vw,24px);background:var(--panel);border-bottom:1px solid var(--line)}
+.workspace.mode-no-document-title .document-top-strip>.suite-switcher{display:none}
 .slides-workspace{max-width:1450px;margin:auto;padding:16px clamp(12px,3vw,36px)}
 .slides-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .slides-actions button{min-height:38px}
@@ -579,6 +579,16 @@ a.nav-item{text-decoration:none}
 .pdf-source label{display:grid;gap:4px;font-size:12px;color:var(--muted)}
 .pdf-source :is(input,select){width:100%;padding:7px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
 #pdf-preview{width:100%;min-height:68vh;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.pdf-stage{min-width:0}
+.pdf-reader{overflow:hidden;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.pdf-reader header{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--line)}
+.pdf-reader header label{margin-left:auto;font-size:12px}
+.pdf-reader-scroll{height:68vh;overflow:auto;padding:14px;background:#e6e9f1}
+.pdf-reader-page{position:relative;margin-inline:auto;background:white;box-shadow:0 2px 9px #10182b26}
+.pdf-reader-page canvas{display:block;width:100%;height:100%}
+.pdf-reader-text{position:absolute;inset:0;overflow:hidden;line-height:1;text-size-adjust:none}
+.pdf-reader-text :is(span,br){position:absolute;color:transparent;white-space:pre;cursor:text;transform-origin:0 0}
+.pdf-reader-text ::selection{background:#4b84d759;color:transparent}
 .pdf-navigation{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .pdf-navigation header,.pdf-navigation form{display:flex;align-items:end;justify-content:space-between;gap:8px}
 .pdf-navigation label{min-width:0;flex:1;display:grid;gap:3px;font-size:13px}

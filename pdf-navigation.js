@@ -11,15 +11,65 @@ export function bindPdfNavigation(sources, preview) {
   const go = $("pdf-jump");
   const search = $("pdf-search");
   const toggle = $("pdf-navigation-toggle");
+  const reader = $("pdf-reader");
+  const scroll = $("pdf-reader-scroll");
+  const zoom = $("pdf-reader-zoom");
+  const browserPreview = $("pdf-preview");
   let session;
   let generation = 0;
+  let rendering;
+
+  function cancelPageRender() {
+    rendering?.canvasTask?.cancel();
+    rendering?.textTask?.cancel();
+    rendering = undefined;
+  }
 
   function stop() {
     generation++;
+    cancelPageRender();
     if (!session) return;
     session.observer?.disconnect();
     void session.task.destroy().catch(() => {});
     session = undefined;
+  }
+
+  async function drawPage(view) {
+    cancelPageRender();
+    const job = {};
+    rendering = job;
+    const index = view.index;
+    try {
+      const page = await view.document.getPage(index + 1);
+      if (rendering !== job) return;
+      const original = page.getViewport({ scale: 1 });
+      const widthScale = Math.max(0.15, (scroll.clientWidth - 28) / original.width);
+      const heightScale = Math.max(0.15, (scroll.clientHeight - 28) / original.height);
+      const scale = zoom.value === "fit" ? Math.min(widthScale, heightScale) :
+        zoom.value === "width" ? widthScale : Number(zoom.value);
+      const viewport = page.getViewport({ scale });
+      const pageSurface = document.createElement("div");
+      pageSurface.className = "pdf-reader-page";
+      pageSurface.style.width = viewport.width + "px";
+      pageSurface.style.height = viewport.height + "px";
+      pageSurface.style.setProperty("--scale-factor", viewport.scale);
+      const canvas = document.createElement("canvas");
+      const density = Math.min(window.devicePixelRatio || 1, 3000 / Math.max(viewport.width, viewport.height));
+      canvas.width = Math.max(1, Math.floor(viewport.width * density));
+      canvas.height = Math.max(1, Math.floor(viewport.height * density));
+      canvas.setAttribute("aria-hidden", "true");
+      const textLayer = document.createElement("div");
+      textLayer.className = "pdf-reader-text";
+      pageSurface.append(canvas, textLayer);
+      job.canvasTask = page.render({ canvasContext: canvas.getContext("2d"), viewport, transform: [density, 0, 0, density, 0, 0], background: "white" });
+      await job.canvasTask.promise;
+      if (rendering !== job) return;
+      scroll.replaceChildren(pageSurface);
+      job.textTask = window.pdfjsLib.renderTextLayer({ textContentSource: page.streamTextContent(), container: textLayer, viewport });
+      await job.textTask.promise;
+    } catch (error) {
+      if (rendering === job) status.textContent = error.message || "The page could not be displayed.";
+    }
   }
 
   function showPage(index) {
@@ -27,7 +77,16 @@ export function bindPdfNavigation(sources, preview) {
     for (const button of thumbnails.querySelectorAll("[aria-current]")) button.removeAttribute("aria-current");
     thumbnails.children[index]?.firstElementChild.setAttribute("aria-current", "page");
     go.elements.page.value = index + 1;
+    session.index = index;
     preview(session.item.file, index + 1);
+    browserPreview.hidden = true;
+    reader.hidden = false;
+    $("pdf-reader-page").textContent = `${index + 1} of ${session.document.numPages}`;
+    $("pdf-reader-prev").disabled = index === 0;
+    $("pdf-reader-next").disabled = index + 1 >= session.document.numPages;
+    scroll.replaceChildren();
+    scroll.scrollTo(0, 0);
+    void drawPage(session);
   }
 
   function pageLink(text, index) {
@@ -113,6 +172,9 @@ export function bindPdfNavigation(sources, preview) {
   }
 
   function close() {
+    if (!reader.hidden) browserPreview.hidden = !browserPreview.hasAttribute("src");
+    reader.hidden = true;
+    scroll.replaceChildren();
     panel.hidden = true;
     toggle.setAttribute("aria-expanded", "false");
     stop();
@@ -127,6 +189,12 @@ export function bindPdfNavigation(sources, preview) {
   });
   $("pdf-navigation-close").addEventListener("click", () => { close(); toggle.focus(); });
   source.addEventListener("change", () => void load());
+  $("pdf-reader-prev").addEventListener("click", () => showPage(session.index - 1));
+  $("pdf-reader-next").addEventListener("click", () => showPage(session.index + 1));
+  zoom.addEventListener("change", () => { if (session?.document) void drawPage(session); });
+  new ResizeObserver(() => {
+    if (!reader.hidden && session?.document && ["fit", "width"].includes(zoom.value)) void drawPage(session);
+  }).observe(scroll);
   go.addEventListener("submit", (event) => {
     event.preventDefault();
     showPage(go.elements.page.valueAsNumber - 1);
