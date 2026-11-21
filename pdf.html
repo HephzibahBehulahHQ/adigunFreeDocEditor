@@ -33,6 +33,9 @@
       <details name="pdf-commands" class="command-menu"><summary>Scan &amp; OCR</summary><div>
         <button id="pdf-ocr" type="button" disabled>Recognize text</button>
       </div></details>
+      <details name="pdf-commands" class="command-menu"><summary>Redact</summary><div>
+        <button id="pdf-redact" type="button" disabled>Mark areas for redaction</button>
+      </div></details>
       <input id="pdf-files" type="file" accept=".pdf,application/pdf" multiple hidden>
     </div>
     <p class="sheets-help">Enter page numbers or ranges such as 4, 1-2. Export follows the file order and the page order you enter. Leave the selection blank for all pages.</p>
@@ -55,6 +58,31 @@
       <div class="slides-actions">
         <button class="button button-outline" type="submit">Recognize</button>
         <button class="button button-outline" type="button" data-download disabled>Download text</button>
+        <button class="button button-outline" type="button" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="pdf-redact-dialog" class="pdf-tool-dialog pdf-redact-dialog" aria-labelledby="pdf-redact-title">
+    <h2 id="pdf-redact-title">Redact a PDF</h2>
+    <p>Drag over text or images to black them out, or enter the area as percentages from the top left. Switching source PDFs clears the marks.</p>
+    <p>The redacted copy contains flattened page images. Text selection, links, forms and original metadata are removed.</p>
+    <form>
+      <div class="pdf-redact-fields">
+        <label>Source PDF <select name="source"></select></label>
+        <label>Page <select name="page"></select></label>
+      </div>
+      <canvas aria-label="Page preview with marked regions" hidden></canvas>
+      <div class="pdf-redact-fields">
+        <label>Left % <input name="left" type="number" min="0" max="99.9" step="0.1" value="0" required></label>
+        <label>Top % <input name="top" type="number" min="0" max="99.9" step="0.1" value="0" required></label>
+        <label>Width % <input name="width" type="number" min="0.1" max="100" step="0.1" value="20" required></label>
+        <label>Height % <input name="height" type="number" min="0.1" max="100" step="0.1" value="10" required></label>
+      </div>
+      <p role="status"></p>
+      <div class="slides-actions">
+        <button class="button button-outline" type="submit">Mark area</button>
+        <button class="button button-outline" type="button" data-undo disabled>Undo last mark on page</button>
+        <button class="button button-outline" type="button" data-export disabled>Download redacted copy</button>
         <button class="button button-outline" type="button" data-close>Close</button>
       </div>
     </form>
