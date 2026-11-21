@@ -79,7 +79,7 @@ async function run() {
   assert.equal(storageClasses.has("available"), false);
   assert.match(markup, /id="local-storage-status" role="status" aria-live="polite"/);
   assert.match(markup, /id="local-storage-label">Checking local storage…/);
-  assert.match(source, /openDatabase\(\)\.then\(\(\) => \{ setStorageAvailability\(true\);/);
+  assert.match(source, /openDatabase\(\)\.then\(\(\) => \{\s+setStorageAvailability\(true\);/);
   assert.match(source, /\.catch\(\(\) => \{ setStorageAvailability\(false\); setSaveStatus\("Local save unavailable"\)/);
   assert.match(fs.readFileSync(path.join(root, "styles.css"), "utf8"), /.sidebar-footer.unavailable .privacy-dot\{background:#e45f52\}/);
 

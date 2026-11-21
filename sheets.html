@@ -15,12 +15,16 @@
   </header>
   <main class="sheets-workspace">
     <div class="sheets-actions" aria-label="Workbook actions">
-      <button id="sheet-open" class="button button-outline" type="button">Open CSV</button>
-      <button id="workbook-open" class="button button-outline" type="button">Open Excel</button>
-      <button id="workbook-export" class="button button-outline" type="button">Download Excel</button>
-      <button id="sheet-export" class="button button-outline" type="button">Download CSV</button>
-      <button id="sheet-add-row" class="button button-outline" type="button">Add row</button>
-      <button id="sheet-add-column" class="button button-outline" type="button">Add column</button>
+      <details name="sheet-commands" class="command-menu"><summary>File</summary><div>
+        <button id="sheet-open" type="button">Open CSV</button>
+        <button id="workbook-open" type="button">Open Excel</button>
+        <button id="workbook-export" type="button">Download Excel</button>
+        <button id="sheet-export" type="button">Download CSV</button>
+      </div></details>
+      <details name="sheet-commands" class="command-menu"><summary>Insert</summary><div>
+        <button id="sheet-add-row" type="button">Add row</button>
+        <button id="sheet-add-column" type="button">Add column</button>
+      </div></details>
       <input id="sheet-file" type="file" accept=".csv,text/csv" hidden>
       <input id="workbook-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
     </div>

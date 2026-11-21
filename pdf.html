@@ -15,8 +15,17 @@
   </header>
   <main class="slides-workspace">
     <div class="slides-actions" aria-label="PDF actions">
-      <button id="pdf-add" class="button button-outline" type="button">Add PDFs</button>
-      <button id="pdf-export" class="button button-outline" type="button" disabled>Download selected pages</button>
+      <details name="pdf-commands" class="command-menu"><summary>File</summary><div>
+        <button id="pdf-add" type="button">Open PDFs</button>
+        <button id="pdf-export" type="button" disabled>Download selected pages</button>
+      </div></details>
+      <details name="pdf-commands" class="command-menu"><summary>Convert</summary><div>
+        <a href="./index.html#convert">Convert a file</a>
+      </div></details>
+      <details name="pdf-commands" class="command-menu"><summary>Organize Pages</summary><div>
+        <button id="pdf-preview-output" type="button" disabled>Preview selected pages</button>
+        <button id="pdf-reset-pages" type="button" disabled>Reset page ranges and rotation</button>
+      </div></details>
       <input id="pdf-files" type="file" accept=".pdf,application/pdf" multiple hidden>
     </div>
     <p class="sheets-help">Enter page numbers or ranges such as 4, 1-2. Export follows the file order and the page order you enter. Leave the selection blank for all pages.</p>

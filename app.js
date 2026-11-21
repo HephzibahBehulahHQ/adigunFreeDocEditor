@@ -173,6 +173,10 @@
   }
 
   const toolsets = {
+    file: [
+      [{ label: "New document", action: "file-new", icon: "New document" }, { label: "Open a file", action: "file-open", icon: "Open a file" }, { label: "Save now", action: "file-save", icon: "Save now" }],
+      [{ label: "Download Word", action: "file-docx", icon: "Download Word" }, { label: "Download HTML", action: "file-html", icon: "Download HTML" }],
+    ],
     home: [
       [{ label: "Font family", select: "font", options: [["", "Font"], ...supportedFontFamilies.map((family) => [family, family])] }, { label: "Text style", select: "block", options: [["p", "Normal"], ["h1", "Heading 1"], ["h2", "Heading 2"], ["h3", "Heading 3"], ["h4", "Heading 4"], ["h5", "Heading 5"], ["h6", "Heading 6"]] }, { label: "Font size", select: "size", options: [["11pt", "11"], ["14pt", "14"], ["18pt", "18"], ["24pt", "24"]] }],
       [{ label: "Text color", select: "text-color", options: [["", "Text color"], ...textColorOptions] }, { label: "Highlight color", select: "highlight-color", options: [["", "Highlight"], ...highlightColorOptions] }],
@@ -4380,6 +4384,11 @@
 
   function runTool(action, button) {
     switch (action) {
+      case "file-new": $("#new-document").click(); break;
+      case "file-open": $("#open-document").click(); break;
+      case "file-save": $("#save-document").click(); break;
+      case "file-docx": $("#export-docx").click(); break;
+      case "file-html": $("#export-html").click(); break;
       case "style-preset": runCommand("formatBlock", `<${button.dataset.stylePreset}>`); break;
       case "clipboard-copy": case "clipboard-cut": case "clipboard-paste": void runClipboardAction(action); break;
       case "format-painter": paintFormatting(); break;
@@ -6184,7 +6193,12 @@
   }, { passive: true });
   renderRibbon(); setupAssistantDrag(); countWords();
   if (window.matchMedia("(max-width: 700px)").matches) toggleAssistant(false);
-  openDatabase().then(() => { setStorageAvailability(true); setSaveStatus("Saved"); return restoreOpenDocumentTabs(); }).catch(() => { setStorageAvailability(false); setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
+  openDatabase().then(() => {
+    setStorageAvailability(true);
+    setSaveStatus("Saved");
+    if (location.hash === "#convert") document.querySelector('.nav-item[data-view="convert"]').click();
+    else return restoreOpenDocumentTabs();
+  }).catch(() => { setStorageAvailability(false); setSaveStatus("Local save unavailable"); notify("Local saving is unavailable in this browser."); showLanding(); });
 })();
 
 
