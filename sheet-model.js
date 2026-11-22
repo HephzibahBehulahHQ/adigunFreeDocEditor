@@ -309,7 +309,7 @@ export function calculateSheet(cells) {
 }
 
 const numericLiteral = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
-const formulaError = /^#(?:CYCLE|ERROR|VALUE|REF|DIV\/0)!$/;
+const formulaError = /^#(?:(?:CYCLE|ERROR|VALUE|REF|DIV\/0)!|N\/A)$/;
 const emptyReference = Symbol("empty reference");
 function formulaText(value) {
   if (value === emptyReference) return "";
@@ -334,6 +334,32 @@ function compareFormulaValues(left, right) {
     right = right.toUpperCase();
   }
   return left === right ? 0 : left < right ? -1 : 1;
+}
+
+function lookupPattern(text) {
+  const tokens = Array.from(text.toUpperCase().matchAll(/~[~?*]|[?*]|[\s\S]/gu), ([token]) => token);
+  return (value) => {
+    if (typeof value !== "string") return false;
+    const letters = Array.from(value.toUpperCase());
+    let letter = 0;
+    let token = 0;
+    let star = -1;
+    let retry = 0;
+    while (letter < letters.length) {
+      const next = tokens[token];
+      if (next === "*") {
+        star = token++;
+        retry = letter;
+      } else if (next === "?" || next === letters[letter] || next === "~" + letters[letter]) {
+        token++;
+        letter++;
+      } else if (star >= 0) {
+        token = star + 1;
+        letter = ++retry;
+      } else return false;
+    }
+    return tokens.slice(token).every((remaining) => remaining === "*");
+  };
 }
 const textFunctions = new Map([
   ["LEN", (text) => text.length],
@@ -411,6 +437,53 @@ function evaluateFormula(expression, scalarAt, numeric, valueAt) {
     const sheet = separator < 0 ? undefined : token.slice(0, separator).replace(/^'|'$/g, "").replaceAll("''", "'");
     return { address, sheet };
   }
+  function readRange() {
+    const start = reference(tokens[index]);
+    if (!start) throw new Error("#REF!");
+    index++;
+    const end = take(":") ? reference(tokens[index++]) : start;
+    if (!end || (end.sheet && end.sheet.toUpperCase() !== start.sheet?.toUpperCase())) throw new Error("#REF!");
+    const rows = [start, end].map(({ address }) => Number(address.slice(1)) - 1);
+    const columns = [start, end].map(({ address }) => address.charCodeAt(0) - 65);
+    return {
+      sheet: start.sheet,
+      top: Math.min(...rows), bottom: Math.max(...rows),
+      left: Math.min(...columns), right: Math.max(...columns),
+    };
+  }
+  function readLookup() {
+    const key = comparison();
+    if (!take(",")) throw new Error("#VALUE!");
+    const range = readRange();
+    if (!take(",")) throw new Error("#VALUE!");
+    const position = comparison();
+    const matchMode = take(",") ? comparison() : () => true;
+    if (!take(")")) throw new Error("#VALUE!");
+    return () => {
+      const column = Math.trunc(numeric(position())) - 1;
+      if (column < 0 || !Number.isFinite(column)) throw new Error("#VALUE!");
+      const { left, right, top, bottom, sheet } = range;
+      if (left + column > right) throw new Error("#REF!");
+      const sought = key();
+      const approximate = logicalValue(matchMode());
+      const matchesText = !approximate && typeof sought === "string" ? lookupPattern(sought) : null;
+      let found = -1;
+      for (let row = top; row <= bottom; row++) {
+        const candidate = scalarAt(cellAddress(row, left), sheet);
+        if (candidate === emptyReference) continue;
+        if (approximate) {
+          if (typeof candidate !== typeof sought) continue;
+          if (compareFormulaValues(candidate, sought) > 0) break;
+          found = row;
+        } else if (matchesText ? matchesText(candidate) : compareFormulaValues(candidate, sought) === 0) {
+          found = row;
+          break;
+        }
+      }
+      if (found < 0) throw new Error("#N/A");
+      return scalarAt(cellAddress(found, left + column), sheet);
+    };
+  }
   function term() {
     if (tokens[index] === "-" || tokens[index] === "+") {
       const sign = tokens[index++] === "-" ? -1 : 1;
@@ -437,6 +510,7 @@ function evaluateFormula(expression, scalarAt, numeric, valueAt) {
       return () => token === "TRUE";
     }
     if (!take("(")) throw new Error("Unknown formula.");
+    if (token === "VLOOKUP") return readLookup();
     if (token === "IF") {
       const condition = comparison();
       if (!take(",")) throw new Error("#VALUE!");
@@ -462,20 +536,12 @@ function evaluateFormula(expression, scalarAt, numeric, valueAt) {
       const start = reference(tokens[index]);
       if (start && tokens[index + 1] === ":") {
         if (scalar) throw new Error("#VALUE!");
-        const end = reference(tokens[index + 2]);
-        if (!end) {
-          if (tokens[index + 2]?.toUpperCase() === "#REF!") throw new Error("#REF!");
-          throw new Error("Invalid range.");
-        }
-        if (end.sheet && end.sheet.toUpperCase() !== start.sheet?.toUpperCase()) throw new Error("Invalid range.");
-        const { address: first, sheet } = start;
-        const last = end.address;
-        index += 3;
+        const { top, bottom, left, right, sheet } = readRange();
         argumentsFor.push(() => {
           const values = [];
-          for (let row = Math.min(+first.slice(1), +last.slice(1)); row <= Math.max(+first.slice(1), +last.slice(1)); row++) {
-            for (let column = Math.min(first.charCodeAt(0), last.charCodeAt(0)); column <= Math.max(first.charCodeAt(0), last.charCodeAt(0)); column++) {
-              const value = valueAt(String.fromCharCode(column) + row, sheet);
+          for (let row = top; row <= bottom; row++) {
+            for (let column = left; column <= right; column++) {
+              const value = valueAt(cellAddress(row, column), sheet);
               if (value === "" || typeof value === "boolean") continue;
               if (token === "COUNT" && (!numericLiteral.test(String(value).trim()) || !Number.isFinite(Number(value)))) continue;
               values.push(numeric(value));
