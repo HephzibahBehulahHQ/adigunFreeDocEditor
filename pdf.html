@@ -48,6 +48,7 @@
       </div></details>
       <details name="pdf-commands" class="command-menu"><summary>Edit</summary><div>
         <button id="pdf-text-open" type="button" disabled>Add text</button>
+        <button id="pdf-crop-open" type="button" disabled>Crop page</button>
       </div></details>
       <details name="pdf-commands" class="command-menu"><summary>Scan &amp; OCR</summary><div>
         <button id="pdf-ocr" type="button" disabled>Recognize text</button>
@@ -88,6 +89,28 @@
       </div>
     </div>
   </main>
+  <dialog id="pdf-crop-dialog" class="pdf-tool-dialog pdf-redact-dialog" aria-labelledby="pdf-crop-title">
+    <h2 id="pdf-crop-title">Crop PDF page</h2>
+    <p>Crop changes the visible page boundary. Hidden content remains in the file. Use Redact to remove sensitive content.</p>
+    <form>
+      <div class="pdf-redact-fields">
+        <label>Source PDF <select name="source"></select></label>
+        <label>Page <select name="page"></select></label>
+      </div>
+      <div class="pdf-redact-fields">
+        <label>Left % <input type="number" name="left" min="0" max="99" step="0.1" required></label>
+        <label>Top % <input type="number" name="top" min="0" max="99" step="0.1" required></label>
+        <label>Right % <input type="number" name="right" min="0" max="99" step="0.1" required></label>
+        <label>Bottom % <input type="number" name="bottom" min="0" max="99" step="0.1" required></label>
+      </div>
+      <canvas aria-label="Page preview with cropped margins shaded" hidden></canvas>
+      <p role="status"></p>
+      <div class="slides-actions">
+        <button class="button button-outline" type="button" data-close>Close</button>
+        <button class="button button-outline" type="submit" disabled>Download cropped copy</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="pdf-text-dialog" class="pdf-tool-dialog pdf-redact-dialog" aria-labelledby="pdf-text-title">
     <h2 id="pdf-text-title">Add text to PDF</h2>
     <p data-signature-info hidden>This places a typed signature on the page. Certificate signing requires a separate signing application.</p>
