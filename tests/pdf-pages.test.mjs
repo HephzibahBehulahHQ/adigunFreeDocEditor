@@ -33,7 +33,7 @@ assert.equal(ink.lookup(pdf.PDFName.of("AP"), pdf.PDFDict).get(pdf.PDFName.of("N
 assert.equal(reopenedInk.getPage(0).node.Annots().size(), 2);
 const pageWithReplies = reopenedInk.getPage(0);
 const inkReference = pageWithReplies.node.Annots().get(0);
-const popup = reopenedInk.context.register(reopenedInk.context.obj({ Subtype: "Popup", Parent: inkReference }));
+const popup = reopenedInk.context.register(reopenedInk.context.obj({ Subtype: "Popup", Parent: inkReference, Rect: [50, 50, 100, 120] }));
 pageWithReplies.node.addAnnot(popup);
 const threaded = reopenedInk.context.register(reopenedInk.context.obj({ Subtype: "Text", Contents: pdf.PDFHexString.fromText("Parent") }));
 pageWithReplies.node.addAnnot(threaded);
@@ -41,11 +41,28 @@ const reply = reopenedInk.context.register(reopenedInk.context.obj({ Subtype: "T
 pageWithReplies.node.addAnnot(reply);
 const currentComments = readPdfComments(reopenedInk, pdf);
 assert.deepEqual(currentComments.map((comment) => comment.original.removable), [true, false, false]);
+assert.deepEqual(currentComments.map((comment) => comment.original.movable), [true, false, false]);
+assert.throws(() => addPdfComments(reopenedInk, [{ ...currentComments[0], center: [0, 0] }], pdf), /inside the page/);
+addPdfComments(reopenedInk, [{ ...currentComments[0], center: [63.5, 82.5] }], pdf);
+assert.equal(ink.lookup(pdf.PDFName.of("Rect")).toString(), "[ 48 68 79 97 ]");
+assert.equal(ink.lookup(pdf.PDFName.of("InkList")).toString(), "[ [ 50 70 60 95 77 72 ] ]");
+assert.equal(reopenedInk.context.lookup(popup).lookup(pdf.PDFName.of("Rect")).toString(), "[ 80 90 130 160 ]");
+assert.equal(ink.lookup(pdf.PDFName.of("AP"), pdf.PDFDict).get(pdf.PDFName.of("N")), originalAppearance);
+assert.throws(() => addPdfComments(reopenedInk, [{ ...currentComments[1], center: [50, 50] }], pdf), /threaded/);
 assert.throws(() => addPdfComments(reopenedInk, [{ ...currentComments[1], removed: true }], pdf), /threaded/);
 addPdfComments(reopenedInk, [{ ...currentComments[0], removed: true }], pdf);
 assert.deepEqual(Array.from({ length: pageWithReplies.node.Annots().size() }, (_, index) => pageWithReplies.node.Annots().get(index)),
   [pageWithReplies.node.Annots().get(0), threaded, reply]);
 assert.equal(pageWithReplies.node.Annots().lookup(0), stamp);
+
+const highlightDocument = await pdf.PDFDocument.create();
+const highlightPage = highlightDocument.addPage([200, 400]);
+addPdfComments(highlightDocument, [{
+  pageIndex: 0, kind: "highlight", text: "", quad: [[20, 40], [50, 40], [20, 30], [50, 30]],
+}], pdf);
+addPdfComments(highlightDocument, [{ ...readPdfComments(highlightDocument, pdf)[0], center: [85, 115] }], pdf);
+const highlight = highlightPage.node.Annots().lookup(0, pdf.PDFDict);
+assert.equal(highlight.lookup(pdf.PDFName.of("QuadPoints")).toString(), "[ 70 120 100 120 70 110 100 110 ]");
 
 const margins = { left: 10, top: 20, right: 30, bottom: 25 };
 assert.deepEqual(cropBoxFromMargins({
