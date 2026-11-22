@@ -78,6 +78,10 @@
         <button type="button" id="sheet-find">Find in this sheet</button>
         <button type="button" id="sheet-pivot-refresh" disabled>Refresh PivotTable</button>
       </div></details>
+      <details name="sheet-commands" class="command-menu"><summary>Review</summary><div>
+        <button type="button" id="sheet-protection" aria-describedby="sheet-protection-status">Protect sheet</button>
+        <p id="sheet-protection-status" role="status"></p>
+      </div></details>
       <input id="sheet-file" type="file" accept=".csv,text/csv" hidden>
       <input id="workbook-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
     </div>

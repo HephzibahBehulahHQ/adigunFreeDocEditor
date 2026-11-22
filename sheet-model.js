@@ -4,6 +4,25 @@ export const maxCellLength = 4000;
 export const numberFormats = { general: 0, number: 4, percent: 10, decimal: 2, date: 14 };
 export const conditionalColors = { yellow: "FFF3B8", green: "D6F3DE", red: "FFDDE3" };
 export const spreadsheetFonts = ["Arial", "Calibri", "Georgia", "Times New Roman", "Courier New"];
+export const protectionCredentials = ["password", "algorithmName", "hashValue", "saltValue", "spinCount"];
+const protectionOptions = ["objects", "scenarios", "formatCells", "formatColumns", "formatRows",
+  "insertColumns", "insertRows", "insertHyperlinks", "deleteColumns", "deleteRows",
+  "selectLockedCells", "sort", "autoFilter", "pivotTables", "selectUnlockedCells"];
+
+export function normalizeSheetProtection(input) {
+  if (!input || typeof input !== "object") return null;
+  const protection = {};
+  for (const name of protectionCredentials) {
+    if (typeof input[name] === "string" && input[name].length > 0 && input[name].length <= 2048) {
+      protection[name] = input[name];
+    }
+  }
+  for (const name of protectionOptions) {
+    if (typeof input[name] === "boolean") protection[name] = input[name];
+  }
+  return protection;
+}
+
 export function normalizePrintSettings(input) {
   const settings = input ?? {};
   const validRange = normalizeConditionalRule({ range: settings.range, operator: "equal", threshold: 0, color: "yellow" });
