@@ -142,7 +142,7 @@ assert.ok(numberingXml.includes('<w:num w:numId="7"><w:abstractNumId w:val="1"/>
 assert.ok(numberingXml.includes('<w:num w:numId="8"><w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="5"/></w:lvlOverride></w:num>'), "subsequent ordered lists keep their own starts after signed list-item resets");
 const zipBlob = makeStoredZip(result.files);
 
-zipBlob.arrayBuffer().then((arrayBuffer) => {
+zipBlob.arrayBuffer().then(async (arrayBuffer) => {
   const buffer = Buffer.from(arrayBuffer);
   const entries = new Map();
   const view = new DataView(arrayBuffer);
@@ -202,6 +202,28 @@ zipBlob.arrayBuffer().then((arrayBuffer) => {
   assert.doesNotMatch(conversionDocumentXml, /w:(?:header|footer)Reference/);
   assert.equal(Object.hasOwn(conversionPackage.files, "word/header1.xml"), false);
   assert.equal(Object.hasOwn(conversionPackage.files, "word/footer1.xml"), false);
+  const contentsRoot = importDom.window.document.createElement("div");
+  contentsRoot.innerHTML = '<ol data-generated-toc="true"><li>Stale entry</li></ol><h1>Plan &amp; scope</h1><h3>Details</h3><h3>Details</h3><ol><li>Ordinary list</li></ol>';
+  const contentsPackage = makeWordPackage(contentsRoot, { paper: "letter", orientation: "portrait", margins: "normal" }).files;
+  const contentsXml = contentsPackage["word/document.xml"];
+  assert.match(contentsXml, /fldCharType="begin" w:dirty="true"[\s\S]+TOC \\o "1-6" \\h \\z[\s\S]+fldCharType="separate"[\s\S]+fldCharType="end"/);
+  for (const id of [1, 2, 3]) {
+    assert.ok(contentsXml.includes('<w:hyperlink w:anchor="AdigunContents' + id + '"'));
+    assert.ok(contentsXml.includes('<w:bookmarkStart w:id="' + id + '" w:name="AdigunContents' + id + '"/>'));
+    assert.ok(contentsXml.includes('<w:bookmarkEnd w:id="' + id + '"/>'));
+  }
+  assert.doesNotMatch(contentsXml, /Stale entry/);
+  const mammothModule = { exports: {} };
+  const mammothBundle = fs.readFileSync(path.join(__dirname, "../assets/vendor/mammoth.browser.min.js"), "utf8");
+  new Function("module", "exports", mammothBundle)(mammothModule, mammothModule.exports);
+  const mammoth = mammothModule.exports;
+  const generatedBytes = await makeStoredZip(contentsPackage).arrayBuffer();
+  const converted = await mammoth.convertToHtml({ arrayBuffer: generatedBytes }, {
+    styleMap: Array.from({ length: 9 }, (_, index) => "p.TOC" + (index + 1) + " => ol.adigun-imported-contents > li:fresh"),
+  });
+  const restored = sanitizeDocxHtml(converted.value).html;
+  assert.match(restored, /<ol data-generated-toc="true"><li>Plan &amp; scope<\/li><li>Details<\/li><li>Details<\/li><\/ol>/);
+  assert.match(restored, /<ol><li>Ordinary list<\/li><\/ol>/);
   process.stdout.write("DOCX export tests passed: page fields, conversion page setup, PNG media, DrawingML, formatting, dimensions, alt text and vertical table merges.\n");
 }).catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1; });
 

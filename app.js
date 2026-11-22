@@ -3375,6 +3375,15 @@
       if (tag === "ol") {
         const start = parseOrderedListOrdinal(node.getAttribute("start"));
         if (start !== null && start !== 1) element.setAttribute("start", String(start));
+        if (node.classList.contains("adigun-imported-contents")) {
+          element.setAttribute("data-generated-toc", "true");
+          for (const item of node.children) {
+            const entry = document.createElement("li");
+            entry.textContent = item.textContent;
+            element.append(entry);
+          }
+          return element;
+        }
       }
       if (tag === "li") {
         const value = parseOrderedListOrdinal(node.getAttribute("value"));
@@ -3528,7 +3537,10 @@
         const archiveEntry = inspectDocxArchive(arrayBuffer);
         const revisionCounts = await readDocxRevisionCounts(arrayBuffer, archiveEntry);
         const converted = await window.mammoth.convertToHtml({ arrayBuffer }, {
-          styleMap: ["br[type='page'] => hr.adigun-imported-page-break:fresh"],
+          styleMap: [
+            "br[type='page'] => hr.adigun-imported-page-break:fresh",
+            ...Array.from({ length: 9 }, (_, index) => "p.TOC" + (index + 1) + " => ol.adigun-imported-contents > li:fresh"),
+          ],
         });
         const sanitized = sanitizeDocxHtml(recoverWordFootnotes(converted.value));
         const revisionMapping = mapDocxRevisionsToHtml(sanitized.html, revisionCounts?.paragraphs);
@@ -5001,6 +5013,30 @@
     if (landscapePaper) tablePageWidth = letterPaper ? 15840 : 16838;
     const tableMarginTwips = exportLayout.margins === "narrow" ? 720 : exportLayout.margins === "wide" ? 2880 : 1440;
     const tableContentWidth = tablePageWidth - tableMarginTwips * 2;
+    const contents = source.querySelectorAll?.('ol[data-generated-toc="true"]') ?? [];
+    const headingBookmarks = new Map();
+    if (contents.length) {
+      for (const heading of source.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
+        const text = heading.textContent.trim();
+        if (!text || heading.closest('ol[data-generated-toc="true"]')) continue;
+        const id = headingBookmarks.size + 1;
+        headingBookmarks.set(heading, { id, name: "AdigunContents" + id, text, level: Number(heading.tagName.slice(1)) });
+      }
+    }
+
+    function addContents(output) {
+      const start = '<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>' +
+        '<w:r><w:instrText xml:space="preserve"> TOC \\o "1-6" \\h \\z </w:instrText></w:r>' +
+        '<w:r><w:fldChar w:fldCharType="separate"/></w:r>';
+      const end = '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
+      const entries = [...headingBookmarks.values()];
+      for (const [index, { name, text, level }] of entries.entries()) {
+        output.push('<w:p><w:pPr><w:pStyle w:val="TOC' + level + '"/></w:pPr>' +
+          (index === 0 ? start : "") + '<w:hyperlink w:anchor="' + name + '" w:history="1">' +
+          '<w:r><w:t xml:space="preserve">' + wordXmlText(text) + "</w:t></w:r></w:hyperlink>" +
+          (index === entries.length - 1 ? end : "") + "</w:p>");
+      }
+    }
 
     function addParagraph(element, listKind = "", listLevel = 0, output = body, listNumId = 0) {
       const tag = element.tagName.toLowerCase();
@@ -5022,7 +5058,10 @@
       }
       const marks = tag === "th" || element.closest("th") ? { bold: true } : {};
       const runs = [...element.childNodes].map((node) => serializeInline(node, marks)).join("") || "<w:r><w:t></w:t></w:r>";
-      output.push("<w:p>" + (paragraphProperties.length ? "<w:pPr>" + paragraphProperties.join("") + "</w:pPr>" : "") + runs + "</w:p>");
+      const bookmark = headingBookmarks.get(element);
+      const start = bookmark ? '<w:bookmarkStart w:id="' + bookmark.id + '" w:name="' + bookmark.name + '"/>' : "";
+      const end = bookmark ? '<w:bookmarkEnd w:id="' + bookmark.id + '"/>' : "";
+      output.push("<w:p>" + (paragraphProperties.length ? "<w:pPr>" + paragraphProperties.join("") + "</w:pPr>" : "") + start + runs + end + "</w:p>");
     }
 
     function tableXml(table) {
@@ -5117,6 +5156,10 @@
       let activeListNumId = listNumId;
       for (const child of [...node.children]) {
         const tag = child.tagName.toLowerCase();
+        if (tag === "ol" && child.getAttribute("data-generated-toc") === "true" && headingBookmarks.size) {
+          addContents(output);
+          continue;
+        }
         if (tag === "ul" || tag === "ol") { walkBlocks(child, tag, listLevel, output, listNumberingId(child, listLevel)); continue; }
         if (tag === "li") {
           const inlineChildren = [...child.children].filter((item) => ["ul", "ol"].includes(item.tagName.toLowerCase()));
@@ -5214,6 +5257,12 @@
     const coreProperties = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${wordXmlText(title())}</dc:title><dc:creator>adigunFreeDocEditor</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
     const appProperties = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>adigunFreeDocEditor</Application></Properties>';
     const files = { "[Content_Types].xml": contentTypes, "_rels/.rels": rootRelationships, "word/document.xml": documentXml, "word/styles.xml": stylesXml, "word/numbering.xml": numberingXml, "word/_rels/document.xml.rels": documentRelationships, "docProps/core.xml": coreProperties, "docProps/app.xml": appProperties };
+    if (headingBookmarks.size) {
+      const contentsStyles = Array.from({ length: 6 }, (_, index) =>
+        '<w:style w:type="paragraph" w:styleId="TOC' + (index + 1) + '"><w:name w:val="toc ' + (index + 1) +
+        '"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="' + (index * 240) + '"/></w:pPr></w:style>').join("");
+      files["word/styles.xml"] = stylesXml.replace("</w:styles>", contentsStyles + "</w:styles>");
+    }
     if (footnotes.length) {
       files["[Content_Types].xml"] = contentTypes.replace("</Types>", '<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/></Types>');
       const entries = footnotes.map((note, index) => {
