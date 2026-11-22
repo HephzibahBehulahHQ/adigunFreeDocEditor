@@ -12,9 +12,10 @@ assert.equal(shiftCellFormula("=SUM(A1:B2)+$A1+A$1+'Q1 data'!$B$2", 2, 1), "=SUM
 assert.equal(shiftCellFormula("=Z1", 0, 1), "=#REF!");
 assert.equal(renameSheetReferences("=Input!A1+'Input old'!A2", new Map([["INPUT", "Input old"], ["INPUT OLD", "Owner's data"]])), "='Input old'!A1+'Owner''s data'!A2");
 assert.equal(calculateSheet({ A1: "=SUM(#REF!:B2)" })("A1"), "#REF!");
-const unsorted = { rows: 6, columns: 3, cells: { A1: "Rank", B1: "Name", A2: "10", B2: "North", C2: "=A2*2", A3: "2", B3: "West", C3: "=A3*2", B4: "Blank rank" } };
+const unsorted = { rows: 6, columns: 3, cells: { A1: "Rank", B1: "Name", A2: "10", B2: "North", C2: "=A2*2", A3: "2", B3: "West", C3: "=A3*2", B4: "Blank rank" }, unlockedCells: { B2: true } };
 const sorted = sortSheetRange(unsorted, { range: "A1:C4", column: "A", direction: "asc" }, calculateSheet(unsorted.cells));
 assert.deepEqual(sorted.cells, { A1: "Rank", B1: "Name", A2: "2", B2: "West", C2: "=A2*2", A3: "10", B3: "North", C3: "=A3*2", B4: "Blank rank" });
+assert.deepEqual(sorted.unlockedCells, { B3: true });
 const duplicated = { rows: 6, columns: 3, cells: { A1: "Name", B1: "Region", A2: "River", B2: "North", A3: "river", B3: "NORTH", A4: "Canal", B4: "South", C3: "Keep" } };
 const cleaned = removeDuplicateRecords(duplicated, "A1:B4", calculateSheet(duplicated.cells));
 assert.equal(cleaned.duplicates, 1);
@@ -155,14 +156,17 @@ try {
   assert.equal(importWorkbook(stale, zip, dom.window.DOMParser).sheets[1].pivot, undefined);
   const protectedSheets = [
     { name: "Schedule", cells: { A1: "Keep" }, protection: { objects: true, scenarios: true } },
-    { name: "Locked", cells: { A1: "=1+2" }, protection: { password: "ABCD", formatCells: false } },
+    { name: "Locked", cells: { A1: "=1+2", B1: "Editable" }, unlockedCells: { B1: true, C1: true },
+      formats: { B1: "number" }, protection: { password: "ABCD", formatCells: false } },
     { name: "Editable", cells: { A1: "Change" }, hidden: true },
   ];
   const structureProtection = { lockStructure: true, workbookPassword: "ABCD", lockWindows: false };
   const protectedBytes = exportWorkbook(protectedSheets, zip, false, [], undefined, structureProtection);
-  const workbookXml = zip.strFromU8(zip.unzipSync(protectedBytes)["xl/workbook.xml"]);
+  const protectedParts = zip.unzipSync(protectedBytes);
+  const workbookXml = zip.strFromU8(protectedParts["xl/workbook.xml"]);
   assert.match(workbookXml, /<workbookProtection workbookPassword="ABCD" lockStructure="1" lockWindows="0"\/><bookViews>/);
-  const protectedXml = zip.strFromU8(zip.unzipSync(protectedBytes)["xl/worksheets/sheet2.xml"]);
+  const protectedXml = zip.strFromU8(protectedParts["xl/worksheets/sheet2.xml"]);
+  assert.match(zip.strFromU8(protectedParts["xl/styles.xml"]), /applyProtection="1"><protection locked="0"\/><\/xf>/);
   assert.match(protectedXml, /<\/sheetData><sheetProtection sheet="1" password="ABCD" formatCells="0"\/>/);
   const protectedWorkbook = importWorkbook(protectedBytes, zip, dom.window.DOMParser);
   assert.deepEqual(protectedWorkbook.protection, structureProtection);
@@ -170,6 +174,8 @@ try {
   assert.deepEqual(reopenedProtection.map((sheet) => sheet.protection),
     [protectedSheets[0].protection, protectedSheets[1].protection, null]);
   assert.equal(reopenedProtection[1].cells.A1, "=1+2");
+  assert.deepEqual(reopenedProtection[1].unlockedCells, { B1: true, C1: true });
+  assert.equal(reopenedProtection[1].formats.B1, "number");
   const namedBytes = exportWorkbook(namedSheets, zip, false, namedRanges);
   const longSheet = { name: "Long", cells: { A9998: "7", A9999: "=A9998+3" } };
   const [reopenedLong] = importWorkbook(exportWorkbook([longSheet], zip), zip, dom.window.DOMParser).sheets;
