@@ -81,6 +81,7 @@
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Review</summary><div>
         <button type="button" id="sheet-cell-note">Cell note</button>
+        <button type="button" id="sheet-notes-open" aria-controls="sheet-notes-panel" aria-expanded="false">Workbook notes</button>
         <button type="button" id="sheet-protection" aria-describedby="sheet-protection-status">Protect sheet</button>
         <button type="button" id="sheet-unlocked-range">Unlock selected cells</button>
         <p id="sheet-protection-status" role="status"></p>
@@ -112,6 +113,11 @@
         </form>
         <p id="sheet-chart-message" role="status"></p>
         <ol id="sheet-chart-values" class="sheet-chart-values" aria-label="Chart values"></ol>
+      </aside>
+      <aside id="sheet-notes-panel" class="sheet-chart-panel" aria-labelledby="sheet-notes-title" hidden>
+        <header><h2 id="sheet-notes-title">Workbook notes</h2><button id="sheet-notes-close" class="button button-outline" type="button">Close</button></header>
+        <p id="sheet-notes-message" role="status"></p>
+        <ul id="sheet-notes-list" class="sheet-notes-list"></ul>
       </aside>
       <aside id="sheet-rule-panel" class="sheet-chart-panel" aria-labelledby="sheet-rule-title" hidden>
         <header><h2 id="sheet-rule-title">Conditional formatting</h2><button id="sheet-rule-close" class="button button-outline" type="button">Close</button></header>
