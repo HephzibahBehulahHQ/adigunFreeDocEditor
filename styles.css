@@ -600,7 +600,7 @@ button.slide-object[aria-pressed="true"],button.slide-object:focus-visible{outli
 #sheet-find-form :is(h2,label,p){width:100%;margin:0}
 #sheet-find-query{max-width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:5px}
 .sheets-grid .sheets-no-gridlines td{border-color:transparent}
-.sheets-grid{max-height:65vh;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.sheets-grid{max-height:65vh;overflow:auto;overflow-anchor:none;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .sheet-work-area{display:grid;gap:12px}
 .sheet-work-area:has(.sheet-chart-panel:not([hidden])){grid-template-columns:minmax(0,1fr) minmax(240px,300px)}
 .sheet-chart-panel{max-height:65vh;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
@@ -652,6 +652,8 @@ button.slide-object[aria-pressed="true"],button.slide-object:focus-visible{outli
 .sheets-grid .sheet-freeze-row tbody tr:first-child th{z-index:2;background:var(--canvas)}
 .sheets-grid input{display:block;width:100%;min-width:104px;min-height:30px;border:0;padding:4px 8px;background:transparent;color:var(--ink)}
 .sheets-grid input[data-cell]{font-family:Calibri,Arial,sans-serif}
+#sheet-grid input[data-cell]{height:var(--sheet-row-height);box-sizing:border-box}
+#sheet-grid tr[data-row-spacer] td{padding:0;border:0}
 .sheets-grid input:focus{outline:2px solid var(--blue);outline-offset:-2px;background:var(--purple-soft)}
 .sheets-tab-bar{margin-top:10px}
 .sheets-tab-bar [aria-pressed="true"]{border-color:var(--purple);background:var(--purple-soft)}

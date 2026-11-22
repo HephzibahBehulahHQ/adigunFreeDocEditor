@@ -7,8 +7,14 @@ const storageKey = "adigun-sheets-v1";
 const maxSheets = 12;
 const defaultWorkbookName = "Untitled workbook";
 const blankSheet = () => ({ rows: 20, columns: 8, cells: {}, formats: {} });
-const validAddress = /^[A-Z](?:[1-9]\d?|100)$/;
+const validAddress = /^[A-Z](?:[1-9]\d{0,3})$/;
 const grid = $("sheet-grid");
+const gridViewport = grid.parentElement;
+const renderedRows = new Map();
+let visibleRows = [];
+let rowOffsets = [];
+let rowValueAt;
+let pendingGridFrame;
 let workbook = { name: defaultWorkbookName, active: 0, sheets: [blankSheet()] };
 let selectedAddress = "A1";
 let selectedRange = null;
@@ -154,9 +160,8 @@ function save() {
   }
 }
 
-function refreshValues() {
+function paintRows(valueAt) {
   const sheet = currentSheet();
-  const valueAt = workbookValues();
   const fillAt = conditionalFill(sheet.conditionalRule);
   for (const field of grid.querySelectorAll("input")) {
     const address = field.dataset.cell;
@@ -179,10 +184,27 @@ function refreshValues() {
     if (style?.fill) field.style.setProperty("--cell-fill", "#" + style.fill);
     else field.style.removeProperty("--cell-fill");
   }
+}
+
+function refreshValues() {
+  const sheet = currentSheet();
+  const valueAt = workbookValues();
+  rowValueAt = valueAt;
   const hidden = hiddenFilterRows(sheet.filter, valueAt);
-  for (const [index, row] of [...grid.tBodies[0].rows].entries()) {
-    row.hidden = hidden.has(index + 1) && !row.contains(document.activeElement);
+  const focusedRow = Number(document.activeElement?.dataset.cell?.slice(1)) - 1;
+  visibleRows = Array.from({ length: sheet.rows }, (_, index) => index)
+    .filter((row) => !hidden.has(row + 1) || row === focusedRow);
+  const standardHeight = matchMedia("(max-width:700px)").matches ? 45 : 31;
+  const heights = new Map();
+  for (const [address, style] of Object.entries(sheet.styles ?? {})) {
+    if (!style.size) continue;
+    const row = Number(address.slice(1)) - 1;
+    heights.set(row, Math.max(heights.get(row) ?? standardHeight, Math.ceil(style.size * 1.6) + 9));
   }
+  rowOffsets = [0];
+  for (const row of visibleRows) rowOffsets.push(rowOffsets.at(-1) + (heights.get(row) ?? standardHeight));
+  syncRows(true);
+  paintRows(valueAt);
   $("sheet-filter-clear").disabled = Boolean(sheet.protection) || !sheet.filter;
   refreshSelection(valueAt);
   refreshChart(valueAt);
@@ -497,31 +519,123 @@ function render() {
     heading.append(label);
   }
   const body = document.createElement("tbody");
-  for (let row = 0; row < sheet.rows; row++) {
-    const line = body.insertRow();
-    const label = document.createElement("th");
-    label.scope = "row";
-    label.textContent = row + 1;
-    line.append(label);
-    for (let column = 0; column < sheet.columns; column++) {
-      const cell = line.insertCell();
-      const field = document.createElement("input");
-      const address = cellAddress(row, column);
-      field.dataset.cell = address;
-      field.setAttribute("aria-label", address);
-      field.maxLength = maxCellLength;
-      field.readOnly = protectedSheet;
-      field.autocomplete = "off";
-      field.spellcheck = false;
-      cell.append(field);
-    }
-  }
+  renderedRows.clear();
   grid.replaceChildren(header, body);
   grid.style.setProperty("--sheet-heading-height", header.offsetHeight + "px");
   grid.classList.toggle("sheet-freeze-row", Boolean(sheet.freezeFirstRow));
   $("sheet-freeze-row").setAttribute("aria-pressed", String(Boolean(sheet.freezeFirstRow)));
   refreshValues();
   refreshFormula();
+  renderSheetTabs(sheet);
+}
+
+function createGridRow(row, sheet) {
+  const line = document.createElement("tr");
+  const label = document.createElement("th");
+  label.scope = "row";
+  label.textContent = row + 1;
+  line.append(label);
+  for (let column = 0; column < sheet.columns; column++) {
+    const cell = line.insertCell();
+    const field = document.createElement("input");
+    const address = cellAddress(row, column);
+    field.dataset.cell = address;
+    field.setAttribute("aria-label", address);
+    field.maxLength = maxCellLength;
+    field.readOnly = Boolean(sheet.protection);
+    field.autocomplete = "off";
+    field.spellcheck = false;
+    cell.append(field);
+  }
+  return line;
+}
+
+function syncRows(force = false) {
+  const sheet = currentSheet();
+  const body = grid.tBodies[0];
+  const overscan = 220;
+  const top = Math.max(0, gridViewport.scrollTop - overscan);
+  const bottom = gridViewport.scrollTop + gridViewport.clientHeight + overscan;
+  const focusedRow = Number(document.activeElement?.dataset.cell?.slice(1)) - 1;
+  const selectedRow = Number(selectedAddress.slice(1)) - 1;
+  const needed = new Set();
+  for (const [index, row] of visibleRows.entries()) {
+    if (rowOffsets[index + 1] >= top && rowOffsets[index] <= bottom ||
+        row === focusedRow || row === selectedRow || (row === 0 && sheet.freezeFirstRow)) needed.add(row);
+  }
+  if (!force && needed.size === renderedRows.size && [...needed].every((row) => renderedRows.has(row))) return false;
+  for (const [row, element] of renderedRows) {
+    if (needed.has(row)) continue;
+    element.remove();
+    renderedRows.delete(row);
+  }
+  for (const spacer of body.querySelectorAll("[data-row-spacer]")) spacer.remove();
+  let cursor = body.firstElementChild;
+  let position = 0;
+  function spacer(height) {
+    if (!height) return;
+    const element = document.createElement("tr");
+    element.dataset.rowSpacer = "";
+    element.setAttribute("aria-hidden", "true");
+    const cell = element.insertCell();
+    cell.colSpan = sheet.columns + 1;
+    cell.style.height = `${height}px`;
+    body.insertBefore(element, cursor);
+  }
+  for (const [index, row] of visibleRows.entries()) {
+    if (!needed.has(row)) continue;
+    spacer(rowOffsets[index] - position);
+    let element = renderedRows.get(row);
+    if (!element) {
+      element = createGridRow(row, sheet);
+      renderedRows.set(row, element);
+      body.insertBefore(element, cursor);
+    } else {
+      cursor = element.nextElementSibling;
+    }
+    element.style.setProperty("--sheet-row-height", `${rowOffsets[index + 1] - rowOffsets[index] - 1}px`);
+    element.setAttribute("aria-rowindex", row + 2);
+    position = rowOffsets[index + 1];
+  }
+  spacer(rowOffsets.at(-1) - position);
+  grid.setAttribute("aria-rowcount", sheet.rows + 1);
+  return true;
+}
+
+function repaintWindow() {
+  if (!syncRows()) return;
+  paintRows(rowValueAt);
+  refreshSelection(rowValueAt);
+}
+
+gridViewport.addEventListener("scroll", () => {
+  if (pendingGridFrame) return;
+  pendingGridFrame = requestAnimationFrame(() => {
+    pendingGridFrame = undefined;
+    repaintWindow();
+  });
+});
+window.addEventListener("resize", () => refreshValues());
+
+function gridField(address) {
+  return grid.querySelector(`[data-cell="${address}"]`);
+}
+
+function revealField(address) {
+  const row = Number(address.slice(1)) - 1;
+  const index = visibleRows.indexOf(row);
+  if (index < 0) return null;
+  const top = rowOffsets[index];
+  const bottom = rowOffsets[index + 1];
+  const usableHeight = gridViewport.clientHeight - grid.tHead.offsetHeight;
+  const frozenHeight = currentSheet().freezeFirstRow ? rowOffsets[1] : 0;
+  if (row !== 0 && top < gridViewport.scrollTop + frozenHeight) gridViewport.scrollTop = top - frozenHeight;
+  else if (bottom > gridViewport.scrollTop + usableHeight) gridViewport.scrollTop = bottom - usableHeight;
+  if (!gridField(address)) repaintWindow();
+  return gridField(address);
+}
+
+function renderSheetTabs(sheet) {
   $("sheet-tabs").replaceChildren(...workbook.sheets.map((_sheet, index) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -749,7 +863,7 @@ function pasteCells(address, text) {
     if (row + rows.length > maxRows || column + width > maxColumns) throw new Error("The pasted range exceeds the workbook grid.");
     applyCellChanges(rows.flatMap((fields, offset) => fields.map((value, index) => [cellAddress(row + offset, column + index), value])));
     render();
-    grid.querySelector(`[data-cell="${address}"]`).focus();
+    revealField(address)?.focus();
   } catch (error) { status(error.message); }
 }
 grid.addEventListener("paste", (event) => {
@@ -842,12 +956,14 @@ $("sheet-selected").addEventListener("keydown", (event) => {
   }
   const label = named?.range ?? query;
   const [first, last = first, extra] = label.split(":");
-  const field = (address) => validAddress.test(address) && grid.querySelector(`[data-cell="${address}"]`);
-  if (!field(first) || !field(last) || extra !== undefined || field(first).closest("tr").hidden) {
+  const sheet = currentSheet();
+  const valid = (address) => validAddress.test(address) && Number(address.slice(1)) <= sheet.rows &&
+    address.charCodeAt(0) - 65 < sheet.columns;
+  if (extra !== undefined || !valid(first) || !valid(last) || !visibleRows.includes(Number(first.slice(1)) - 1)) {
     status("Enter a visible cell, range, or named range.");
     return;
   }
-  field(first).focus();
+  revealField(first)?.focus();
   selectRange(first, last);
 });
 
@@ -983,19 +1099,22 @@ $("sheet-find-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const query = $("sheet-find-query").value.trim().toLocaleLowerCase();
   if (!query) return;
-  const inputs = [...grid.querySelectorAll("[data-cell]")];
-  const offset = inputs.findIndex((input) => input.dataset.cell === selectedAddress) + 1;
   const sheet = currentSheet();
+  const visible = new Set(visibleRows);
+  const position = (address) => (Number(address.slice(1)) - 1) * maxColumns + address.charCodeAt(0) - 65;
+  const addresses = Object.keys(sheet.cells).filter((address) => visible.has(Number(address.slice(1)) - 1))
+    .sort((left, right) => position(left) - position(right));
+  const next = addresses.findIndex((address) => position(address) > position(selectedAddress));
+  const offset = next < 0 ? 0 : next;
   const valueAt = workbookValues();
-  const match = [...inputs.slice(offset), ...inputs.slice(0, offset)].find(({ dataset }) => {
-    const address = dataset.cell;
+  const match = [...addresses.slice(offset), ...addresses.slice(0, offset)].find((address) => {
     return [sheet.cells[address] ?? "", displayCell(valueAt(address), sheet.formats?.[address], undefined, workbook.date1904)]
       .some((value) => String(value).toLocaleLowerCase().includes(query));
   });
   if (!match) { $("sheet-find-status").textContent = "No matching cells."; return; }
   findDialog.close();
-  match.focus();
-  status(`Found in ${match.dataset.cell}`);
+  revealField(match)?.focus();
+  status(`Found in ${match}`);
 });
 grid.addEventListener("keydown", (event) => {
   const field = event.target;
@@ -1005,7 +1124,7 @@ grid.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && ["z", "y"].includes(key)) {
     event.preventDefault();
     $(key === "y" || event.shiftKey ? "sheet-redo" : "sheet-undo").click();
-    grid.querySelector(`[data-cell="${selectedAddress}"]`)?.focus();
+    revealField(selectedAddress)?.focus();
     return;
   }
   if (event.ctrlKey || event.metaKey) return;
@@ -1030,11 +1149,11 @@ grid.addEventListener("keydown", (event) => {
   if (destinationColumn < 0 || destinationColumn >= sheet.columns) return;
   const rowStep = horizontal ? 0 : direction;
   for (let destinationRow = row + rowStep; destinationRow >= 0 && destinationRow < sheet.rows; destinationRow += rowStep) {
-    const next = grid.querySelector(`[data-cell="${cellAddress(destinationRow, destinationColumn)}"]`);
-    if (next.closest("tr").hidden) {
+    if (!visibleRows.includes(destinationRow)) {
       if (horizontal) break;
       continue;
     }
+    const next = revealField(cellAddress(destinationRow, destinationColumn));
     if (extend) {
       selectRange(address, next.dataset.cell);
       next.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -1049,7 +1168,7 @@ $("sheet-add").addEventListener("click", () => {
   workbook.active = workbook.sheets.push({ ...blankSheet(), name }) - 1;
   save();
   render();
-  grid.querySelector('[data-cell="A1"]').focus();
+  revealField("A1")?.focus();
 });
 $("sheet-add-row").addEventListener("click", () => {
   recordEdit();

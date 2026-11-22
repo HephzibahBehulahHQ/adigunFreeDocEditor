@@ -151,7 +151,7 @@ function readValidation(worksheet) {
     const options = validationOptions(formula.slice(1, -1).split(","));
     if (!options.length) continue;
     for (const address of (rule.getAttribute("sqref") ?? "").split(/\s+/)) {
-      const match = /^([A-Z])([1-9]\d?|100)(?::([A-Z])([1-9]\d?|100))?$/.exec(address);
+      const match = /^([A-Z])([1-9]\d{0,3})(?::([A-Z])([1-9]\d{0,3}))?$/.exec(address);
       if (!match) continue;
       const [, firstColumn, firstRow, lastColumn = firstColumn, lastRow = firstRow] = match;
       for (let row = Number(firstRow) - 1; row < Number(lastRow); row++) {
@@ -364,8 +364,8 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       const hasStyle = style && Object.keys(style).length;
       if (!raw && (!format || format === "general") && !hasStyle) continue;
       if (!formula && /^[=']/.test(raw)) raw = "'" + raw;
-      if (!/^[A-Z](?:[1-9]\d?|100)$/.test(address) || raw.length > maxCellLength) {
-        throw new Error("Workbook cells exceed the 100-row, 26-column, or cell-length limit.");
+      if (!/^[A-Z](?:[1-9]\d{0,3})$/.test(address) || raw.length > maxCellLength) {
+        throw new Error("Workbook cells exceed the 9,999-row, 26-column, or cell-length limit.");
       }
       if (raw) cells[address] = raw;
       if (format && format !== "general") formats[address] = format;
@@ -402,7 +402,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
   const sheetNames = new Map(sheets.map(({ name }, index) => [(name || `Sheet ${index + 1}`).toUpperCase(), name || `Sheet ${index + 1}`]));
   const namedRanges = normalizeNamedRanges([...workbook.getElementsByTagNameNS(mainNs, "definedName")].flatMap((item) => {
     if (item.hasAttribute("localSheetId") || ["1", "true"].includes(item.getAttribute("hidden"))) return [];
-    const match = /^(?:'((?:[^']|'')+)'|([\w.]+))!(\$[A-Z]\$(?:[1-9]\d?|100)(?::\$[A-Z]\$(?:[1-9]\d?|100))?)$/i.exec(item.textContent.trim());
+    const match = /^(?:'((?:[^']|'')+)'|([\w.]+))!(\$[A-Z]\$(?:[1-9]\d{0,3})(?::\$[A-Z]\$(?:[1-9]\d{0,3}))?)$/i.exec(item.textContent.trim());
     if (!match) return [];
     const sheet = sheetNames.get((match[1]?.replaceAll("''", "'") ?? match[2]).toUpperCase());
     return [{ name: item.getAttribute("name"), sheet, range: match[3] }];
