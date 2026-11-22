@@ -912,8 +912,7 @@
       link.download = filename + ".pptx";
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      const browserOnly = slides.some((slide) => slide.animations?.some(({ effect }) => effect === "drift"));
-      status(browserOnly ? "PowerPoint exported. Drift plays in the browser only." : "PowerPoint exported");
+      status("PowerPoint exported");
     } catch {
       status("The PowerPoint file could not be exported.");
     } finally { button.disabled = false; }
