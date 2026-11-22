@@ -622,6 +622,8 @@ button.slide-object[aria-pressed="true"],button.slide-object:focus-visible{outli
 .sheets-actions button,.sheets-tab-bar button{min-height:36px}
 .sheets-help{margin:14px 0;color:var(--muted);font-size:12px}
 .sheet-formula-line{display:flex;align-items:center;gap:8px;margin:10px 0}
+#sheet-grid td[data-cell-note]{position:relative}
+#sheet-grid td[data-cell-note]::after{content:"";position:absolute;top:0;right:0;border-top:7px solid #b42318;border-left:7px solid transparent;pointer-events:none}
 .sheet-formula-line #sheet-selected{flex:0 1 100px;font-weight:650}
 .sheet-status-bar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;padding:8px 0;color:var(--muted);font-size:13px}
 #sheet-grid .sheet-range-cell input{background:#ede8ff}

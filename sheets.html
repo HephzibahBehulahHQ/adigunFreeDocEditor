@@ -80,6 +80,7 @@
         <button type="button" id="sheet-pivot-refresh" disabled>Refresh PivotTable</button>
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Review</summary><div>
+        <button type="button" id="sheet-cell-note">Cell note</button>
         <button type="button" id="sheet-protection" aria-describedby="sheet-protection-status">Protect sheet</button>
         <button type="button" id="sheet-unlocked-range">Unlock selected cells</button>
         <p id="sheet-protection-status" role="status"></p>
@@ -286,6 +287,19 @@
       <div class="sheets-actions">
         <button class="button button-outline" type="submit">Apply filter</button>
         <button class="button button-outline" type="button" data-close>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="sheet-note-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-note-title">
+    <h2 id="sheet-note-title">Cell note</h2>
+    <form>
+      <label>Note for <output id="sheet-note-address"></output>
+        <textarea name="note" rows="5" maxlength="4000"></textarea>
+      </label>
+      <div class="tool-actions">
+        <button type="button" data-close>Close</button>
+        <button type="button" id="sheet-remove-note">Remove note</button>
+        <button type="submit">Save note</button>
       </div>
     </form>
   </dialog>
