@@ -241,29 +241,29 @@
           if (event.button !== 0 || event.shiftKey) return;
           const bounds = layer.getBoundingClientRect();
           const { clientX, clientY } = event;
-          let move = object;
+          const members = groupMembers(objects, index);
+          let moves = null;
           node.setPointerCapture(event.pointerId);
           const pointerMove = (position) => {
-            [move] = normalizeObjects([{
-              ...object,
-              x: object.x + (position.clientX - clientX) * 100 / bounds.width,
-              y: object.y + (position.clientY - clientY) * 100 / bounds.height,
-            }]);
-            placeObject(node, move);
+            if (!bounds.width || !bounds.height) return;
+            moves = moveMembers(objects, members,
+              (position.clientX - clientX) * 100 / bounds.width,
+              (position.clientY - clientY) * 100 / bounds.height);
+            for (const [member, move] of moves) placeObject(layer.children[member], move);
             if (index === selectedObject && layer.lastElementChild?.classList.contains("slide-resize-frame")) {
-              placeObject(layer.lastElementChild, move);
+              placeObject(layer.lastElementChild, moves.get(index));
             }
           };
           const finish = (position) => {
             node.removeEventListener("pointermove", pointerMove);
             node.removeEventListener("pointerup", finish);
             node.removeEventListener("pointercancel", finish);
-            if (position.type === "pointerup" && move !== object) {
-              objects[index] = move;
+            if (position.type === "pointerup" && moves) {
+              for (const [member, move] of moves) objects[member] = move;
               save();
               selectObject(index, true);
             } else {
-              placeObject(node, object);
+              for (const member of members) placeObject(layer.children[member], objects[member]);
               if (index === selectedObject && layer.lastElementChild?.classList.contains("slide-resize-frame")) {
                 placeObject(layer.lastElementChild, object);
               }
@@ -275,6 +275,26 @@
         });
       }
       return node;
+    }));
+  }
+
+  function groupMembers(objects, index) {
+    const group = objects[index]?.group;
+    return group ? objects.flatMap((object, position) => object.group === group ? [position] : []) : [index];
+  }
+
+  function moveMembers(objects, members, dx, dy) {
+    const selection = members.map((index) => objects[index]);
+    const limit = (offset, position, size) => Math.min(
+      Math.min(...selection.map((object) => 100 - object[position] - object[size])),
+      Math.max(-Math.min(...selection.map((object) => object[position])), Math.round(offset * 10) / 10),
+    );
+    const x = limit(dx, "x", "width");
+    const y = limit(dy, "y", "height");
+    return new Map(members.map((index) => {
+      const object = objects[index];
+      const [moved] = normalizeObjects([{ ...object, x: object.x + x, y: object.y + y }]);
+      return [index, moved];
     }));
   }
 
@@ -364,12 +384,15 @@
     objectPanel.hidden = !object;
     objectForm.hidden = multiple;
     $("slide-object-alignment").hidden = !multiple;
-    $("slide-object-heading").textContent = multiple ? "Align objects" : "Object properties";
+    const grouped = multiple && [...selectedObjects].some((index) => objects[index]?.group);
+    $("slide-object-heading").textContent = grouped ? "Grouped objects" : multiple ? "Align objects" : "Object properties";
     drawObjects(objectLayer, objects, true);
     if (multiple) {
       $("slide-object-selection-count").textContent = `${selectedObjects.size} objects selected`;
-      for (const control of document.querySelectorAll('[data-align-objects^="distribute"]')) {
-        control.disabled = selectedObjects.size < 3;
+      $("slide-group-objects").hidden = grouped;
+      $("slide-ungroup-objects").hidden = !grouped;
+      for (const control of document.querySelectorAll("[data-align-objects]")) {
+        control.disabled = grouped || (control.dataset.alignObjects.startsWith("distribute") && selectedObjects.size < 3);
       }
       return;
     }
@@ -387,8 +410,14 @@
   function selectObject(index, focus = false, extend = false) {
     if (index !== null) animationPanel.hidden = true;
     if (!extend) selectedObjects.clear();
-    if (extend && selectedObjects.has(index)) selectedObjects.delete(index);
-    else if (index !== null) selectedObjects.add(index);
+    if (index !== null) {
+      const objects = deck.slides[deck.active].objects ?? [];
+      const remove = extend && selectedObjects.has(index);
+      for (const member of groupMembers(objects, index)) {
+        if (remove) selectedObjects.delete(member);
+        else selectedObjects.add(member);
+      }
+    }
     selectedObject = selectedObjects.has(index) ? index : [...selectedObjects].at(-1) ?? null;
     renderObjects();
     if (focus) objectLayer.children[index]?.focus();
@@ -451,6 +480,29 @@
     selectObject(null);
     objectLayer.children[index]?.focus();
   });
+  $("slide-group-objects").addEventListener("click", () => {
+    if (selectedObjects.size < 2) return;
+    const slide = deck.slides[deck.active];
+    const before = [...slide.objects];
+    const members = before.filter((_, index) => selectedObjects.has(index));
+    if (members.some((object) => object.group)) return;
+    const used = new Set(before.map((object) => object.group));
+    const group = Array.from({ length: 25 }, (_, index) => index + 1).find((id) => !used.has(id));
+    for (const object of members) object.group = group;
+    const last = Math.max(...selectedObjects);
+    slide.objects = before.flatMap((object, index) =>
+      index === last ? members : selectedObjects.has(index) ? [] : [object]);
+    remapEffects(slide, before);
+    save();
+    selectObject(slide.objects.indexOf(members.at(-1)), true);
+  });
+  $("slide-ungroup-objects").addEventListener("click", () => {
+    const objects = deck.slides[deck.active].objects;
+    for (const index of selectedObjects) delete objects[index].group;
+    save();
+    renderObjects();
+    $("slide-group-objects").focus();
+  });
 
   objectLayer.addEventListener("keydown", (event) => {
     const offsets = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
@@ -462,9 +514,9 @@
     event.preventDefault();
     const [horizontal, vertical] = offsets[event.key];
     const step = event.shiftKey ? 5 : 1;
-    const [moved] = normalizeObjects([{ ...object, x: object.x + horizontal * step, y: object.y + vertical * step }]);
-    if (moved.x === object.x && moved.y === object.y) return;
-    objects[index] = moved;
+    const moves = moveMembers(objects, groupMembers(objects, index), horizontal * step, vertical * step);
+    if (moves.get(index).x === object.x && moves.get(index).y === object.y) return;
+    for (const [member, moved] of moves) objects[member] = moved;
     save();
     selectObject(index, true);
   });

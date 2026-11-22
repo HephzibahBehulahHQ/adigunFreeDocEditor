@@ -51,8 +51,20 @@
         fill: object.kind !== "text" && /^[a-f0-9]{6}$/i.test(object.fill ?? "") ? object.fill.toUpperCase() : "D9D1FC",
       };
       if (object.kind === "image") normalized.src = object.src;
+      if (Number.isInteger(object.group) && object.group >= 1 && object.group <= 25) normalized.group = object.group;
       return normalized;
     });
+  }
+  function groupXml(members, id) {
+    const left = Math.min(...members.map(({ object }) => object.x));
+    const top = Math.min(...members.map(({ object }) => object.y));
+    const right = Math.max(...members.map(({ object }) => object.x + object.width));
+    const bottom = Math.max(...members.map(({ object }) => object.y + object.height));
+    const origin = `x="${Math.round(slideWidth * left / 100)}" y="${Math.round(slideHeight * top / 100)}"`;
+    const extent = `cx="${Math.round(slideWidth * (right - left) / 100)}" cy="${Math.round(slideHeight * (bottom - top) / 100)}"`;
+    return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="Adigun group"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm><a:off ${origin}/><a:ext ${extent}/><a:chOff ${origin}/><a:chExt ${extent}/></a:xfrm></p:grpSpPr>
+      ${members.map(({ markup }) => markup).join("")}</p:grpSp>`;
   }
   function objectTransform(object) {
     const unitX = (value) => Math.round(slideWidth * value / 100);
@@ -120,7 +132,10 @@
     const media = new Set();
     for (let i = 0; i < slides.length; i++) {
       const pictureLinks = [];
-      const objects = normalizeObjects(slides[i].objects).map((object, index) => {
+      const entries = normalizeObjects(slides[i].objects).map((object, index) => ({
+        object, markup: serializeObject(object, index),
+      }));
+      function serializeObject(object, index) {
         if (object.kind !== "image") return objectXml(object, index, slides[i].theme);
         const image = imageData(object.src);
         if (!image) throw new Error("A slide image is damaged or unsupported.");
@@ -130,6 +145,18 @@
         files["ppt/media/" + name] = image.bytes;
         pictureLinks.push(`<Relationship Id="${id}" Type="${rns}/image" Target="../media/${name}"/>`);
         return imageXml(object, index, id);
+      }
+      const groups = new Map();
+      for (const entry of entries) {
+        if (!entry.object.group) continue;
+        const members = groups.get(entry.object.group) ?? [];
+        members.push(entry);
+        groups.set(entry.object.group, members);
+      }
+      const objects = entries.map((entry) => {
+        const members = groups.get(entry.object.group);
+        if (!members || members.length < 2) return entry.markup;
+        return members.at(-1) === entry ? groupXml(members, 29 + entry.object.group) : "";
       }).join("");
       const markup = slideXml(slides[i]).replace("</p:spTree>", objects + "</p:spTree>")
         .replace("</p:sld>", transitionXml(slides[i].transition) + "</p:sld>");
@@ -283,10 +310,29 @@
       const slide = parse(path);
       const objects = [];
       const images = pictures(slide, path);
+      const groups = new Map();
+      function restoreObject(shape, object) {
+        const group = shape.parentElement;
+        if (group?.localName === "grpSp" &&
+            group.parentElement?.localName === "spTree" &&
+            group.getElementsByTagNameNS("*", "cNvPr")[0]?.getAttribute("name") === "Adigun group") {
+          const transform = group.getElementsByTagNameNS("*", "xfrm")[0];
+          const part = (name, attr) => Number(transform?.getElementsByTagNameNS("*", name)[0]?.getAttribute(attr));
+          if (!Number(transform?.getAttribute("rot")) && !["1", "true"].includes(transform?.getAttribute("flipH")) &&
+              !["1", "true"].includes(transform?.getAttribute("flipV")) &&
+              part("ext", "cx") === part("chExt", "cx") && part("ext", "cy") === part("chExt", "cy")) {
+            if (!groups.has(group)) groups.set(group, groups.size + 1);
+            object.group = groups.get(group);
+            object.x += (part("off", "x") - part("chOff", "x")) * 100 / inputWidth;
+            object.y += (part("off", "y") - part("chOff", "y")) * 100 / inputHeight;
+          }
+        }
+        objects.push(object);
+      }
       const shapes = [...slide.getElementsByTagName("*")].flatMap((shape) => {
         if (shape.localName === "pic") {
           const picture = images.get(shape);
-          if (picture) objects.push(picture);
+          if (picture) restoreObject(shape, picture);
           return [];
         }
         if (shape.localName !== "sp") return [];
@@ -294,7 +340,7 @@
         const name = shape.getElementsByTagNameNS("*", "cNvPr")[0]?.getAttribute("name");
         const object = authoredObject(shape, name);
         if (object) {
-          objects.push(object);
+          restoreObject(shape, object);
           return [];
         }
         return [{ text: paragraphs(shape), isTitle: ["title", "ctrTitle"].includes(placeholder) || name === "Title" }];
