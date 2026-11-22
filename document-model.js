@@ -125,9 +125,9 @@
   }
 
   function readSectionLayout(value) {
-    if (typeof value !== "string" || value.length > 250) return null;
+    if (typeof value !== "string" || value.length > 2800) return null;
     try {
-      const { paper, orientation, customMarginsMm } = JSON.parse(value);
+      const { paper, orientation, customMarginsMm, header, footer, pageNumbers } = JSON.parse(value);
       if (!["a4", "letter"].includes(paper) || !["portrait", "landscape"].includes(orientation)) return null;
       const sides = ["top", "right", "bottom", "left"];
       if (!sides.every((side) => Number.isFinite(customMarginsMm?.[side]) &&
@@ -137,7 +137,11 @@
       if (customMarginsMm.left + customMarginsMm.right >= (landscape ? height : width) - 10 ||
           customMarginsMm.top + customMarginsMm.bottom >= (landscape ? width : height) - 10) return null;
       return { paper, orientation, margins: "custom",
-        customMarginsMm: Object.fromEntries(sides.map((side) => [side, customMarginsMm[side]])) };
+        customMarginsMm: Object.fromEntries(sides.map((side) => [side, customMarginsMm[side]])),
+        ...(typeof header === "string" && { header: header.slice(0,180) }),
+        ...(typeof footer === "string" && { footer: footer.slice(0,180) }),
+        ...(typeof pageNumbers === "boolean" && { pageNumbers }),
+      };
     } catch { return null; }
   }
 

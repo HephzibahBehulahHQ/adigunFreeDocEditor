@@ -959,7 +959,7 @@
         flush();
         const requested = documentModel.readSectionLayout(node.getAttribute("data-section-layout"));
         if (requested) {
-          sectionLayout = requested;
+          sectionLayout = { ...currentPageFurniture(), ...sectionLayout, ...requested };
           const geometry = sectionCanvasGeometry(sectionLayout);
           capacity = Math.max(32, geometry.height - geometry.padding.top - geometry.padding.bottom);
         }
@@ -990,7 +990,7 @@
     flush();
     if (!pages.length) pages.push({ items: [], layout: null });
     const oldSheets = existing.filter((child) => child.classList?.contains("document-sheet"));
-    updatePageNumberLabels(oldSheets, pages.length);
+    updatePageNumberLabels(oldSheets, pages.length, pages);
     const unchanged = oldSheets.length === pages.length && pages.every(({ items }, index) =>
       items.length === oldSheets[index].childNodes.length && items.every((node, childIndex) => node === oldSheets[index].childNodes[childIndex]));
     if (unchanged) {
@@ -1029,7 +1029,7 @@
       items.forEach((node) => sheet.append(node));
       fragment.append(sheet);
     });
-    updatePageNumberLabels([...fragment.children], pages.length);
+    updatePageNumberLabels([...fragment.children], pages.length, pages);
     editor.replaceChildren(fragment);
     if (pages.some(({ layout }) => layout)) scheduleEditorPagination();
     restoreEditorSelection(savedSelection);
@@ -3161,18 +3161,19 @@
         if (Number(attr(columns, wordNs, "w", "num")) > 1 || columns?.getElementsByTagNameNS(wordNs, "col").length) unsupported = true;
       }
 
-      const referenceIds = { header: [], footer: [] };
-      for (const section of sections) {
+      const inherited = {};
+      const referenceIds = sections.map((section) => {
         for (const kind of ["header", "footer"]) {
-          for (const reference of Array.from(section.getElementsByTagNameNS(wordNs, kind + "Reference"))) {
+          for (const reference of section.getElementsByTagNameNS(wordNs, kind + "Reference")) {
             const type = attr(reference, wordNs, "w", "type") || "default";
             if (type !== "default") { unsupported = true; continue; }
-            const relationshipId = attr(reference, wordRelNs, "r", "id");
-            if (relationshipId) referenceIds[kind].push(relationshipId);
+            const id = attr(reference, wordRelNs, "r", "id");
+            if (id) inherited[kind] = id;
           }
         }
-      }
-      if (!referenceIds.header.length && !referenceIds.footer.length) return { ...empty, layout, layouts, unsupported };
+        return { ...inherited };
+      });
+      if (!referenceIds.some(({ header, footer }) => header || footer)) return { ...empty, layout, layouts, unsupported };
 
       const relationshipsName = "word/_rels/document.xml.rels";
       const relationshipsEntry = archive?.partEntries?.[relationshipsName];
@@ -3200,18 +3201,7 @@
         }
         return segments.join("/");
       };
-      const partTargets = {};
-      for (const kind of ["header", "footer"]) {
-        const ids = [...new Set(referenceIds[kind])];
-        if (ids.length > 1) { unsupported = true; continue; }
-        if (!ids.length) continue;
-        const relationship = relationships.get(ids[0]);
-        if (!relationship || !relationship.type.endsWith("/" + kind)) return { ...empty, layout, layouts, unsupported, unreadable: true };
-        const partName = resolvePartName(relationship.target);
-        if (!partName || !archive.partEntries?.[partName]) return { ...empty, layout, layouts, unsupported, unreadable: true };
-        partTargets[kind] = partName;
-      }
-      const readTextPart = async (kind, partName) => {
+      const readTextPart = async (partName) => {
         const partText = await readDocxZipPartText(buffer, archive.partEntries[partName], partName);
         if (!partText) return { text: "", pageNumbers: false, unsupported: false, unreadable: true };
         const parsed = parser.parseFromString(partText, "application/xml");
@@ -3267,19 +3257,40 @@
         if (text.length > 180) unsupportedField = true;
         return { text: text.slice(0, 180), pageNumbers, unsupported: unsupportedField, unreadable: false };
       };
-      let header = { text: "", pageNumbers: false, unsupported: false, unreadable: false };
-      let footer = { text: "", pageNumbers: false, unsupported: false, unreadable: false };
-      if (partTargets.header) header = await readTextPart("header", partTargets.header);
-      if (partTargets.footer) footer = await readTextPart("footer", partTargets.footer);
-      unsupported ||= header.unsupported || footer.unsupported;
+      const partCache = new Map();
+      let unreadable = false;
+      async function readRunningPart(kind, id) {
+        if (!id) return { text: "", pageNumbers: false };
+        const relationship = relationships.get(id);
+        const target = relationship?.type.endsWith("/" + kind) ? resolvePartName(relationship.target) : "";
+        if (!target || !archive.partEntries?.[target]) {
+          unreadable = true;
+          return { text: "", pageNumbers: false };
+        }
+        if (!partCache.has(target)) partCache.set(target, await readTextPart(target));
+        const part = partCache.get(target);
+        unsupported ||= part.unsupported;
+        unreadable ||= part.unreadable;
+        return part;
+      }
+
+      const decorated = [];
+      for (const [index, references] of referenceIds.entries()) {
+        const header = await readRunningPart("header", references.header);
+        const footer = await readRunningPart("footer", references.footer);
+        decorated.push({
+          ...layouts[index],
+          header: header.text,
+          footer: footer.pageNumbers && footer.text.endsWith(" ·") ? footer.text.slice(0, -2).trim() : footer.text,
+          pageNumbers: footer.pageNumbers || header.pageNumbers,
+        });
+      }
       return {
+        ...decorated[0],
         layout,
-        layouts,
-        header: header.text,
-        footer: footer.pageNumbers && footer.text.endsWith(" ·") ? footer.text.slice(0, -2).trim() : footer.text,
-        pageNumbers: footer.pageNumbers || header.pageNumbers,
+        layouts: decorated.map((section, index) => layouts[index] ? section : null),
         unsupported,
-        unreadable: header.unreadable || footer.unreadable,
+        unreadable,
       };
     } catch {
       return { layout: null, header: "", footer: "", pageNumbers: false, unsupported: false, unreadable: true };
@@ -4985,6 +4996,10 @@
     return { top: vertical, right: horizontal, bottom: vertical, left: horizontal };
   }
 
+  function currentPageFurniture() {
+    return { header: pageHeaderText, footer: pageFooterText, pageNumbers: pageNumbersEnabled };
+  }
+
   const sectionSetup = $("#section-setup-dialog");
   const sectionForm = sectionSetup.querySelector("form");
   const sectionMarginSides = ["top", "right", "bottom", "left"];
@@ -4999,12 +5014,13 @@
     sectionEditor = liveEditor;
     sectionPosition = nextSectionPosition = undefined;
     let index = 1;
-    let layout = { paper: paperSize, orientation: pageOrientation, margins: pageMargins, customMarginsMm: pageCustomMarginsMm };
+    let layout = { paper: paperSize, orientation: pageOrientation, margins: pageMargins,
+      customMarginsMm: pageCustomMarginsMm, ...currentPageFurniture() };
     doc.descendants((node, position) => {
       if (node.type.name !== "horizontalRule" || !node.attrs.sectionBreak) return;
       if (position < selection.from) {
         sectionPosition = position;
-        layout = documentModel.readSectionLayout(node.attrs.sectionLayout) || layout;
+        layout = { ...layout, ...documentModel.readSectionLayout(node.attrs.sectionLayout) };
         index++;
       } else if (nextSectionPosition === undefined) nextSectionPosition = position;
     });
@@ -5012,6 +5028,9 @@
     originalSectionLayout = layout;
     fields.paper.value = layout.paper;
     fields.orientation.value = layout.orientation;
+    fields.header.value = layout.header;
+    fields.footer.value = layout.footer;
+    fields.pageNumbers.checked = layout.pageNumbers;
     const margins = marginsForLayout(layout);
     for (const side of sectionMarginSides) fields[side].value = margins[side];
     sectionForm.querySelector("[data-section-number]").textContent = `Section ${index}`;
@@ -5025,7 +5044,8 @@
     if (liveEditor !== sectionEditor) return;
     const fields = sectionForm.elements;
     const customMarginsMm = Object.fromEntries(sectionMarginSides.map((side) => [side, fields[side].valueAsNumber]));
-    const candidate = { paper: fields.paper.value, orientation: fields.orientation.value, customMarginsMm };
+    const candidate = { paper: fields.paper.value, orientation: fields.orientation.value, customMarginsMm,
+      header: fields.header.value.trim(), footer: fields.footer.value.trim(), pageNumbers: fields.pageNumbers.checked };
     const layout = documentModel.readSectionLayout(JSON.stringify(candidate));
     if (!layout) {
       sectionForm.querySelector("[role=status]").textContent = "Leave at least 10 mm of space for document content.";
@@ -5036,12 +5056,15 @@
     const current = marker(sectionPosition);
     if (sectionPosition !== undefined && !current?.attrs.sectionBreak) return;
     const next = marker(nextSectionPosition);
-    if (next?.attrs.sectionBreak && !next.attrs.sectionLayout) {
-      const inherited = { ...originalSectionLayout, customMarginsMm: marginsForLayout(originalSectionLayout) };
-      tr.setNodeMarkup(nextSectionPosition, undefined, { ...next.attrs, sectionLayout: JSON.stringify(inherited) });
+    if (next?.attrs.sectionBreak) {
+      const nextLayout = documentModel.readSectionLayout(next.attrs.sectionLayout);
+      if (!nextLayout || nextLayout.header === undefined || nextLayout.footer === undefined || nextLayout.pageNumbers === undefined) {
+        const inherited = { ...originalSectionLayout, customMarginsMm: marginsForLayout(originalSectionLayout), ...nextLayout };
+        tr.setNodeMarkup(nextSectionPosition, undefined, { ...next.attrs, sectionLayout: JSON.stringify(inherited) });
+      }
     }
     if (current) tr.setNodeMarkup(sectionPosition, undefined, { ...current.attrs, sectionLayout: JSON.stringify(layout) });
-    else applyPageLayout({ ...layout, header: pageHeaderText, footer: pageFooterText, pageNumbers: pageNumbersEnabled });
+    else applyPageLayout(layout);
     if (tr.docChanged) liveEditor.view.dispatch(tr);
     sectionSetup.close();
     scheduleEditorPagination();
@@ -5127,16 +5150,17 @@
     saveDocument();
   }
 
-  function updatePageNumberLabels(sheets, total = sheets.length) {
+  function updatePageNumberLabels(sheets, total = sheets.length, pages = []) {
     sheets.forEach((sheet, index) => {
-      sheet.classList.toggle("page-numbered", pageNumbersEnabled);
-      if (pageNumbersEnabled) sheet.dataset.pageNumber = `${index + 1} / ${total}`;
+      const { header, footer, pageNumbers } = pages[index]?.layout || currentPageFurniture();
+      sheet.classList.toggle("page-numbered", pageNumbers);
+      if (pageNumbers) sheet.dataset.pageNumber = `${index + 1} / ${total}`;
       else delete sheet.dataset.pageNumber;
-      if (pageHeaderText) sheet.dataset.pageHeader = pageHeaderText;
+      if (header) sheet.dataset.pageHeader = header;
       else delete sheet.dataset.pageHeader;
-      if (pageFooterText) sheet.dataset.pageFooter = `${pageFooterText}${pageNumbersEnabled ? " · " : ""}`;
+      if (footer) sheet.dataset.pageFooter = `${footer}${pageNumbers ? " · " : ""}`;
       else delete sheet.dataset.pageFooter;
-      sheet.setAttribute("aria-label", `Page ${index + 1}${pageNumbersEnabled ? ` of ${total}` : ""}${pageHeaderText ? `, header ${pageHeaderText}` : ""}${pageFooterText ? `, footer ${pageFooterText}` : ""}`);
+      sheet.setAttribute("aria-label", `Page ${index + 1}${pageNumbers ? ` of ${total}` : ""}${header ? `, header ${header}` : ""}${footer ? `, footer ${footer}` : ""}`);
     });
   }
 
@@ -5640,26 +5664,37 @@
       ? '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">' + exportedComments.map((comment) => '<w15:commentEx w15:paraId="' + comment.lastParagraphId + '" w15:done="' + (comment.resolved ? "1" : "0") + '"/>').join("") + "</w15:commentsEx>"
       : "";
 
-    const hasHeader = Boolean(exportLayout.header);
-    const hasFooter = Boolean(exportLayout.footer || exportLayout.pageNumbers);
-    const headerRelationshipId = hasHeader ? `rId${nextRelationship++}` : "";
-    const footerRelationshipId = hasFooter ? `rId${nextRelationship++}` : "";
-    const headerReference = hasHeader ? `<w:headerReference w:type="default" r:id="${headerRelationshipId}"/>` : "";
-    const footerReference = hasFooter ? `<w:footerReference w:type="default" r:id="${footerRelationshipId}"/>` : "";
+    const runningParts = { header: new Map(), footer: new Map() };
+    function runningPartReference(kind, text, numbered = false) {
+      const parts = runningParts[kind];
+      if (!text && !numbered && !parts.size) return "";
+      const key = JSON.stringify([text, numbered]);
+      if (!parts.has(key)) {
+        const partName = kind + (parts.size + 1) + ".xml";
+        const id = `rId${nextRelationship++}`;
+        const tag = kind === "header" ? "hdr" : "ftr";
+        const content = text ? `<w:r><w:t xml:space="preserve">${wordXmlText(text)}${numbered ? " · " : ""}</w:t></w:r>` : "";
+        const number = numbered ? '<w:fldSimple w:instr="PAGE"><w:r><w:t>1</w:t></w:r></w:fldSimple>' : "";
+        const markup = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:${tag} xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr>${content}${number}</w:p></w:${tag}>`;
+        relationships.push(`<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${kind}" Target="${partName}"/>`);
+        parts.set(key, { partName, id, markup });
+      }
+      return `<w:${kind}Reference w:type="default" r:id="${parts.get(key).id}"/>`;
+    }
     const commentsRelationshipId = exportedComments.length ? `rId${nextRelationship++}` : "";
     const commentsExtendedRelationshipId = exportedComments.length ? `rId${nextRelationship++}` : "";
     const endnoteProperties = wordNotes.endnote.length ? '<w:endnotePr><w:numFmt w:val="lowerRoman"/></w:endnotePr>' : "";
     const sectionProperties = (layout, type) => {
       const { width, height, top, right, bottom, left } = sectionPageSize(layout);
       const orientation = layout.orientation === "landscape" ? ' w:orient="landscape"' : "";
-      return `<w:sectPr>${headerReference}${footerReference}${endnoteProperties}${type}<w:pgSz w:w="${width}" w:h="${height}"${orientation}/><w:pgMar w:top="${top}" w:right="${right}" w:bottom="${bottom}" w:left="${left}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>`;
+      return `<w:sectPr>${runningPartReference("header", layout.header || "")}${runningPartReference("footer", layout.footer || "", Boolean(layout.pageNumbers))}${endnoteProperties}${type}<w:pgSz w:w="${width}" w:h="${height}"${orientation}/><w:pgMar w:top="${top}" w:right="${right}" w:bottom="${bottom}" w:left="${left}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>`;
     };
     const nextPage = '<w:type w:val="nextPage"/>';
     let currentSectionLayout = exportLayout;
     const blocks = body.map((block) => {
       if (!nextSections.has(block)) return block;
       const properties = sectionProperties(currentSectionLayout, nextPage);
-      currentSectionLayout = nextSections.get(block) || currentSectionLayout;
+      currentSectionLayout = { ...currentSectionLayout, ...nextSections.get(block) };
       return `<w:p><w:pPr>${properties}</w:pPr></w:p>`;
     });
     const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${blocks.join("")}${sectionProperties(currentSectionLayout, nextSections.size ? nextPage : "")}</w:body></w:document>`;
@@ -5668,10 +5703,8 @@
     const numberingLevels = (format) => Array.from({ length: 9 }, (_, level) => `<w:lvl w:ilvl="${level}"><w:start w:val="1"/><w:numFmt w:val="${format}"/><w:lvlText w:val="${format === "bullet" ? bulletGlyphs[level % bulletGlyphs.length] : `%${level + 1}.`}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${(level + 1) * 720}" w:hanging="360"/></w:pPr></w:lvl>`).join("");
     const listNumberingXml = listNumberingInstances.map(({ id, abstractNumId, start, level }) => `<w:num w:numId="${id}"><w:abstractNumId w:val="${abstractNumId}"/>${start !== 1 ? `<w:lvlOverride w:ilvl="${level}"><w:startOverride w:val="${start}"/></w:lvlOverride>` : ""}</w:num>`).join("");
     const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="multilevel"/>${numberingLevels("bullet")}</w:abstractNum><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="multilevel"/>${numberingLevels("decimal")}</w:abstractNum>${listNumberingXml}</w:numbering>`;
-    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>${exportedComments.length ? '<Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/commentsExtended.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"/>' : ""}${hasHeader ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : ""}${hasFooter ? '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' : ""}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`;
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>${exportedComments.length ? '<Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/commentsExtended.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"/>' : ""}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`;
     const rootRelationships = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>';
-    if (hasHeader) relationships.push(`<Relationship Id="${headerRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>`);
-    if (hasFooter) relationships.push(`<Relationship Id="${footerRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`);
     if (commentsRelationshipId) relationships.push(`<Relationship Id="${commentsRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/>`);
     if (commentsExtendedRelationshipId) relationships.push(`<Relationship Id="${commentsExtendedRelationshipId}" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="commentsExtended.xml"/>`);
     for (const [kind, notes] of Object.entries(wordNotes)) {
@@ -5702,8 +5735,13 @@
       files["word/comments.xml"] = commentsXml;
       files["word/commentsExtended.xml"] = commentsExtendedXml;
     }
-    if (hasHeader) files["word/header1.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t xml:space="preserve">${wordXmlText(exportLayout.header)}</w:t></w:r></w:p></w:hdr>`;
-    if (hasFooter) files["word/footer1.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr>${exportLayout.footer ? `<w:r><w:t xml:space="preserve">${wordXmlText(exportLayout.footer)}${exportLayout.pageNumbers ? " · " : ""}</w:t></w:r>` : ""}${exportLayout.pageNumbers ? '<w:fldSimple w:instr="PAGE"><w:r><w:t>1</w:t></w:r></w:fldSimple>' : ""}</w:p></w:ftr>`;
+    for (const [kind, parts] of Object.entries(runningParts)) {
+      for (const { partName, markup } of parts.values()) {
+        files[`word/${partName}`] = markup;
+        files["[Content_Types].xml"] = files["[Content_Types].xml"].replace("</Types>",
+          `<Override PartName="/word/${partName}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.${kind}+xml"/></Types>`);
+      }
+    }
     for (const image of images) files[`word/media/${image.fileName}`] = image.bytes;
     return { files, unsupported: [...unsupported], exportedCommentCount: exportedComments.length, omittedCommentCount };
   }

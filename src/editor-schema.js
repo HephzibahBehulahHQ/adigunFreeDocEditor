@@ -195,6 +195,21 @@ const DocumentSheet = Node.create({
         parseHTML: (element) => element.getAttribute("aria-label"),
         renderHTML: (attrs) => attrs.pageLabel ? { "aria-label": attrs.pageLabel } : {},
       },
+      pageHeader: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-page-header"),
+        renderHTML: ({ pageHeader }) => pageHeader ? { "data-page-header": pageHeader } : {},
+      },
+      pageFooter: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-page-footer"),
+        renderHTML: ({ pageFooter }) => pageFooter ? { "data-page-footer": pageFooter } : {},
+      },
+      pageNumber: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-page-number"),
+        renderHTML: ({ pageNumber }) => pageNumber ? { "data-page-number": pageNumber, class: "page-numbered" } : {},
+      },
       sectionPage: {
         default: null,
         parseHTML: (element) => element.getAttribute("data-section-page"),
