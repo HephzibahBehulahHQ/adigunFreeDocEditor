@@ -138,6 +138,11 @@ const ModelAttributes = Extension.create({
             parseHTML: (element) => element.getAttribute("data-section-break") === "nextPage",
             renderHTML: (attrs) => attrs.sectionBreak ? { "data-section-break": "nextPage" } : {},
           },
+          sectionLayout: {
+            default: null,
+            parseHTML: (element) => element.getAttribute("data-section-layout"),
+            renderHTML: (attrs) => attrs.sectionLayout ? { "data-section-layout": attrs.sectionLayout } : {},
+          },
         },
       },
     ];
@@ -189,6 +194,26 @@ const DocumentSheet = Node.create({
         default: null,
         parseHTML: (element) => element.getAttribute("aria-label"),
         renderHTML: (attrs) => attrs.pageLabel ? { "aria-label": attrs.pageLabel } : {},
+      },
+      sectionPage: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-section-page"),
+        renderHTML: ({ sectionPage }) => /^(a4|letter)-(portrait|landscape)$/.test(sectionPage)
+          ? { "data-section-page": sectionPage } : {},
+      },
+      sectionGeometry: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-section-geometry"),
+        renderHTML: ({ sectionGeometry }) => sectionGeometry ? { "data-section-geometry": sectionGeometry } : {},
+      },
+      sectionStyle: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("style"),
+        renderHTML: ({ sectionStyle }) => {
+          const style = String(sectionStyle || "").split(";").filter((rule) =>
+            /^\s*--(?:section-(?:height|print-height|padding|print-padding)|page-image-max-height):\s*(?:[\d.]+(?:px|mm)\s*)+$/.test(rule)).join(";");
+          return style ? { style } : {};
+        },
       },
     };
   },
@@ -404,6 +429,7 @@ function modelNodeToEditor(node, marks = []) {
   if (tag === "br") return [{ type: "hardBreak", ...(marks.length ? { marks } : {}) }];
   if (tag === "hr") return [{ type: "horizontalRule", attrs: {
     pageBreak: attrs["data-page-break"] === "true", sectionBreak: attrs["data-section-break"] === "nextPage",
+    sectionLayout: attrs["data-section-layout"] || null,
   } }];
   if (tag === "p") return [{ type: "paragraph", attrs: modelAttrsToEditor(attrs), content: childrenToEditor(children, marks) }];
   if (/^h[1-6]$/.test(tag)) return [{ type: "heading", attrs: { ...modelAttrsToEditor(attrs), level: Number(tag.slice(1)) }, content: childrenToEditor(children, marks) }];
@@ -502,6 +528,7 @@ function editorNodeToModel(node) {
   if (node.type === "horizontalRule") return { type: "element", tag: "hr", attrs: {
     ...(node.attrs.pageBreak && { "data-page-break": "true" }),
     ...(node.attrs.sectionBreak && { "data-section-break": "nextPage" }),
+    ...(node.attrs.sectionLayout && { "data-section-layout": node.attrs.sectionLayout }),
   }, children: [] };
 
   const children = (node.content || []).map(editorNodeToModel);

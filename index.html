@@ -358,6 +358,26 @@
         <div class="settings-foot"><span>Page break is available while a document is being edited.</span><button class="button button-primary" value="close">Done</button></div>
       </form>
     </dialog>
+    <dialog class="settings-dialog" id="section-setup-dialog" aria-labelledby="section-setup-title">
+      <h2 id="section-setup-title">Section setup</h2>
+      <form>
+        <p data-section-number></p>
+        <label>Paper <select name="paper"><option value="a4">A4</option><option value="letter">US Letter</option></select></label>
+        <label>Orientation <select name="orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
+        <fieldset>
+          <legend>Margins (mm)</legend>
+          <label>Top <input name="top" type="number" min="0" max="100" step="0.1" required></label>
+          <label>Right <input name="right" type="number" min="0" max="100" step="0.1" required></label>
+          <label>Bottom <input name="bottom" type="number" min="0" max="100" step="0.1" required></label>
+          <label>Left <input name="left" type="number" min="0" max="100" step="0.1" required></label>
+        </fieldset>
+        <p role="status"></p>
+        <div class="slides-actions">
+          <button class="button button-outline" type="submit">Apply section setup</button>
+          <button class="button button-outline" type="button" data-close>Cancel</button>
+        </div>
+      </form>
+    </dialog>
     <dialog class="settings-dialog" id="equation-dialog" aria-labelledby="equation-title">
       <h2 id="equation-title">Equation</h2>
       <form>

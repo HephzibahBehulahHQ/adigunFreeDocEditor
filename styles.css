@@ -96,10 +96,11 @@
 @page adigun-a4-landscape{size:A4 landscape;margin:0}
 @page adigun-letter-landscape{size:letter landscape;margin:0}
 @media print{
-  .editing-document :is(.sidebar,.document-top-strip,.document-command-bar,.ribbon-tools,.stage-heading,.document-outline,.document-ruler,.page-meta,.page-footer,.adigun-window,#review-comments),
+  .editing-document :is(.skip-link,.sidebar,.document-top-strip,.document-command-bar,.ribbon-tools,.stage-heading,.document-outline,.document-ruler,.page-meta,.page-footer,.adigun-window,#review-comments),
   body:has(.editing-document) :is(.toast,dialog){display:none!important}
+  .editing-document input[type="file"]{display:none!important}
   .app-shell.editing-document,
-  .editing-document :is(.workspace,.document-stage,.editor-layout,.editor-card,.editor-card .document-page){display:block!important;min-height:0!important;width:100%!important;max-width:none!important;margin:0!important;padding:0!important;background:white!important;border:0!important;overflow:visible!important;box-shadow:none!important;transform:none!important;zoom:1!important}
+  .editing-document :is(.workspace,.document-stage,.editor-layout,.editor-card,.editor-card .document-host,.editor-card .document-page){display:block!important;min-height:0!important;width:100%!important;max-width:none!important;margin:0!important;padding:0!important;background:white!important;border:0!important;overflow:visible!important;box-shadow:none!important;transform:none!important;zoom:1!important}
   .editing-document .document-page{color:#182035}
   .editing-document .document-page .document-sheet{page:adigun-a4;min-height:296.5mm!important;width:100%!important;max-width:none!important;margin:0!important;box-shadow:none!important;outline:none!important;padding:25.4mm!important;transform:none!important}
   .editing-document .paper-letter .document-page .document-sheet{page:adigun-letter;min-height:278.9mm!important}
@@ -108,6 +109,11 @@
   .editing-document .margin-narrow .document-page .document-sheet{padding:12.7mm!important}
   .editing-document .margin-wide .document-page .document-sheet{padding:25.4mm 50.8mm!important}
   .editing-document .margin-custom .document-page .document-sheet{padding:var(--page-margin-top) var(--page-margin-right) var(--page-margin-bottom) var(--page-margin-left)!important}
+  .editing-document .editor-card .document-page .document-sheet[data-section-page]{min-height:var(--section-print-height)!important;padding:var(--section-print-padding)!important}
+  .editing-document .editor-card .document-page .document-sheet[data-section-page="a4-portrait"]{page:adigun-a4}
+  .editing-document .editor-card .document-page .document-sheet[data-section-page="a4-landscape"]{page:adigun-a4-landscape}
+  .editing-document .editor-card .document-page .document-sheet[data-section-page="letter-portrait"]{page:adigun-letter}
+  .editing-document .editor-card .document-page .document-sheet[data-section-page="letter-landscape"]{page:adigun-letter-landscape}
   .editing-document .document-sheet+.document-sheet{break-before:page}
   .editing-document .document-sheet hr[data-page-break="true"],
   .editing-document .document-sheet .ProseMirror-separator,
@@ -124,6 +130,11 @@
 .editor-card.margin-narrow .document-sheet{padding:48px}
 .editor-card.margin-wide .document-sheet{padding:96px 192px}
 .editor-card.margin-custom .document-sheet{padding:var(--page-margin-top,25.4mm) var(--page-margin-right,25.4mm) var(--page-margin-bottom,25.4mm) var(--page-margin-left,25.4mm)}
+@media screen {
+  .editor-card .document-page .document-sheet[data-section-page]{min-height:var(--section-height);padding:var(--section-padding)}
+}
+#section-setup-dialog fieldset{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0;border:1px solid var(--line)}
+#section-setup-dialog input{max-width:100%}
 .custom-margin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
 .custom-margin-grid label{display:flex;flex-direction:column;gap:5px;color:var(--ink);font-size:11px}
 .custom-margin-grid input{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit}

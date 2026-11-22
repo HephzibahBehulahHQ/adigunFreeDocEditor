@@ -88,6 +88,7 @@ function parseXml(xml) {
       }
       const node = {
         nodeType: 1, nodeName: qName, localName, namespaceURI: namespaces[prefix] || "",
+        parentElement: stack.at(-1).node.nodeType === 1 ? stack.at(-1).node : null,
         childNodes: [],
         getAttribute(name) { return Object.hasOwn(attributes, name) ? attributes[name] : null; },
         getAttributeNS(ns, name) { return Object.hasOwn(attrNamespaces, (ns || "") + "|" + name) ? attrNamespaces[(ns || "") + "|" + name] : null; },

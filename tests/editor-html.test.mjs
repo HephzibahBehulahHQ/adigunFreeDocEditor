@@ -35,7 +35,9 @@ const fixture = modelApi.normalize({
       element("tfoot", {}, [element("tr", {}, [element("td", {}, [element("p", {}, [text("Footer")])])])]),
     ]),
     element("hr", { "data-page-break": "true" }),
-    element("hr", { "data-section-break": "nextPage" }),
+    element("hr", { "data-section-break": "nextPage", "data-section-layout": JSON.stringify({
+      paper: "letter", orientation: "landscape", customMarginsMm: { top: 15, right: 25, bottom: 20, left: 35 },
+    }) }),
   ],
 });
 
