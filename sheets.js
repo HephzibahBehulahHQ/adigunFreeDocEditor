@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRange, normalizeNamedRanges, normalizeSheetProtection, numberFormats, protectionCredentials, parseChartRange, parseCsv, parseSheetFilter, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, spreadsheetFonts, toCsv, validationOptions } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRange, normalizeNamedRanges, normalizeSheetProtection, normalizeWorkbookProtection, numberFormats, protectionCredentials, parseChartRange, parseCsv, parseSheetFilter, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, spreadsheetFonts, toCsv, validationOptions, workbookProtectionCredentials } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 import { bindSheetPrinting } from "./sheet-print.js";
 
@@ -46,7 +46,7 @@ try {
     if (sheets[active].hidden) active = Math.max(0, sheets.findIndex((sheet) => !sheet.hidden));
     sheets[active].hidden = false;
     workbook = { name: typeof stored.name === "string" && stored.name.trim() ? stored.name.slice(0, 100) : defaultWorkbookName, active, sheets, date1904: stored.date1904 === true,
-      namedRanges: normalizeNamedRanges(stored.namedRanges) };
+      namedRanges: normalizeNamedRanges(stored.namedRanges), protection: normalizeWorkbookProtection(stored.protection) };
   }
 } catch {
   status("Local workbook could not be read.");
@@ -94,8 +94,19 @@ function restoreEdit(from, to) {
 $("sheet-undo").addEventListener("click", () => restoreEdit(undoStack, redoStack));
 $("sheet-redo").addEventListener("click", () => restoreEdit(redoStack, undoStack));
 
+function structureLocked() {
+  return workbook.protection?.lockStructure === true;
+}
+
+function canChangeStructure() {
+  if (!structureLocked()) return true;
+  status("Unprotect the workbook structure to change its worksheets.");
+  return false;
+}
+
 const pivotDialog = $("sheet-pivot-dialog");
 $("sheet-pivot").addEventListener("click", () => {
+  if (!canChangeStructure()) return;
   if (workbook.sheets.length >= maxSheets) { status("The workbook already contains 12 sheets."); return; }
   $("pivot-status").textContent = "";
   pivotDialog.showModal();
@@ -103,6 +114,7 @@ $("sheet-pivot").addEventListener("click", () => {
 $("pivot-cancel").addEventListener("click", () => pivotDialog.close());
 $("sheet-pivot-form").addEventListener("submit", (event) => {
   event.preventDefault();
+  if (!canChangeStructure()) return;
   const pivot = Object.fromEntries(["range", "group", "measure", "aggregate"].map((key) => [key, $("pivot-" + key).value]));
   pivot.source = workbook.active;
   try {
@@ -417,6 +429,23 @@ function updateCell(address, value, mergeTyping = false) {
 
 const protectionButton = $("sheet-protection");
 const protectionStatus = $("sheet-protection-status");
+const workbookProtection = $("workbook-protection");
+
+function workbookNeedsPassword() {
+  return workbookProtectionCredentials.some((key) => key.startsWith("workbook") && workbook.protection?.[key]);
+}
+
+workbookProtection.addEventListener("click", () => {
+  if (workbookNeedsPassword()) return;
+  recordEdit();
+  const protection = { ...workbook.protection };
+  if (structureLocked()) delete protection.lockStructure;
+  else protection.lockStructure = true;
+  workbook.protection = normalizeWorkbookProtection(protection);
+  save();
+  render();
+  workbookProtection.focus();
+});
 const protectedCommands = ["sheet-cut", "sheet-paste", "sheet-clear-cells", "sheet-chart-open", "sheet-style-open",
   "sheet-rule-open", "sheet-autosum", "sheet-print-settings", "sheet-validation", "sheet-filter",
   "sheet-sort", "sheet-deduplicate", "sheet-split"];
@@ -502,7 +531,16 @@ function render() {
     button.addEventListener("click", () => { workbook.active = index; save(); render(); $("sheet-tabs").children[index].focus(); });
     return button;
   }));
-  $("sheet-add").disabled = workbook.sheets.length >= maxSheets;
+  const lockedStructure = structureLocked();
+  workbookProtection.textContent = lockedStructure ? "Unprotect workbook structure" : "Protect workbook structure";
+  workbookProtection.disabled = workbookNeedsPassword();
+  $("workbook-protection-status").textContent = workbookNeedsPassword()
+    ? "Use Excel to change this workbook’s password protection."
+    : lockedStructure ? "Sheet names, order, and visibility are locked." : "";
+  for (const id of ["sheet-manage", "sheet-pivot", "sheet-open", "sheet-open-preview", "workbook-open"]) {
+    $(id).disabled = lockedStructure;
+  }
+  $("sheet-add").disabled = lockedStructure || workbook.sheets.length >= maxSheets;
   $("sheet-add-row").disabled = protectedSheet || sheet.rows >= maxRows;
   $("sheet-add-column").disabled = protectedSheet || sheet.columns >= maxColumns;
   $("sheet-export").disabled = Object.keys(sheet.cells).length === 0;
@@ -978,6 +1016,7 @@ grid.addEventListener("keydown", (event) => {
   }
 });
 $("sheet-add").addEventListener("click", () => {
+  if (!canChangeStructure()) return;
   recordEdit();
   const name = uniqueName(`Sheet ${workbook.sheets.length + 1}`);
   workbook.active = workbook.sheets.push({ ...blankSheet(), name }) - 1;
@@ -1003,6 +1042,7 @@ let csvPreviewRequested = false;
 let csvSource = "";
 let csvRows;
 function appendCsv(rows) {
+  if (structureLocked()) throw new Error("Unprotect the workbook structure before importing a CSV.");
   if (workbook.sheets.length >= maxSheets) throw new Error("The workbook already contains 12 sheets.");
   const sheet = { ...blankSheet(), name: uniqueName(`Sheet ${workbook.sheets.length + 1}`) };
   sheet.rows = Math.max(sheet.rows, rows.length);
@@ -1056,6 +1096,7 @@ $("sheet-file").addEventListener("change", async (event) => {
   csvPreviewRequested = false;
   event.target.value = "";
   if (!file) return;
+  if (!canChangeStructure()) return;
   if (workbook.sheets.length >= maxSheets) { status("The workbook already contains 12 sheets."); return; }
   if (file.size > 1024 * 1024) { status("Choose a CSV file under 1 MB."); return; }
   try {
@@ -1078,9 +1119,15 @@ $("workbook-file").addEventListener("change", async (event) => {
   if (!file) return;
   if (file.size > 4 * 1024 * 1024) { status("Choose an XLSX file under 4 MB."); return; }
   try {
-    const { sheets, date1904, namedRanges } = importWorkbook(new Uint8Array(await file.arrayBuffer()), window.fflate);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (!canChangeStructure()) return;
+    const { sheets, date1904, namedRanges, protection } = importWorkbook(bytes, window.fflate);
     const emptyWorkbook = workbook.sheets.length === 1 && !Object.keys(workbook.sheets[0].cells).length && !workbook.namedRanges?.length;
     const existing = emptyWorkbook ? [] : workbook.sheets;
+    if (existing.length && (protection || workbook.protection)) {
+      status("Open the protected XLSX in a new workbook to retain its protection settings.");
+      return;
+    }
     if (existing.length && date1904 !== Boolean(workbook.date1904)) {
       status("This file uses a different date system. Open it in a new workbook.");
       return;
@@ -1112,7 +1159,7 @@ $("workbook-file").addEventListener("change", async (event) => {
     workbook = {
       name: existing.length ? workbook.name : file.name.replace(/\.xlsx$/i, "").slice(0, 100),
       active: existing.length + Math.max(0, firstVisible), sheets: [...existing, ...sheets], date1904,
-      namedRanges: [...existingNames, ...importedNames],
+      namedRanges: [...existingNames, ...importedNames], protection,
     };
     save();
     render();
@@ -1138,7 +1185,8 @@ $("workbook-export").addEventListener("click", () => {
   try {
     const name = workbook.name.trim().replace(/[\\/:*?"<>|]/g, "-") || defaultWorkbookName;
     const staticPivots = [];
-    const bytes = exportWorkbook(workbook.sheets, window.fflate, workbook.date1904, workbook.namedRanges, (name) => staticPivots.push(name));
+    const bytes = exportWorkbook(workbook.sheets, window.fflate, workbook.date1904, workbook.namedRanges,
+      (name) => staticPivots.push(name), workbook.protection);
     download(bytes, xlsxMime, name + ".xlsx");
     if (staticPivots.length) status(`Exported. Static pivot summaries: ${staticPivots.join(", ")}. Refresh the summaries and check the source headers before exporting again.`);
   } catch {
@@ -1196,6 +1244,7 @@ function finishManagement(index) {
 }
 
 $("sheet-manage").addEventListener("click", () => {
+  if (!canChangeStructure()) return;
   manageStatus.textContent = "";
   renderManagement(workbook.active);
   manageDialog.showModal();
@@ -1204,6 +1253,7 @@ managedSheet.addEventListener("change", () => renderManagement());
 manageForm.querySelector("[data-close]").addEventListener("click", () => manageDialog.close());
 manageForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  if (!canChangeStructure()) return;
   const index = Number(managedSheet.value);
   const previous = sheetName(index);
   const name = manageForm.elements.label.value.trim();
@@ -1227,6 +1277,7 @@ manageForm.addEventListener("submit", (event) => {
 });
 
 function sheetMutation(action) {
+  if (!canChangeStructure()) return;
   const index = Number(managedSheet.value);
   const sheet = workbook.sheets[index];
   const current = currentSheet();

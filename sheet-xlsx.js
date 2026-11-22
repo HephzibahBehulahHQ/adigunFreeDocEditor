@@ -1,4 +1,4 @@
-import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRanges, normalizePrintSettings, normalizeSheetProtection, numberFormats, protectionCredentials, parseSheetFilter, validationOptions } from "./sheet-model.js";
+import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRanges, normalizePrintSettings, normalizeSheetProtection, normalizeWorkbookProtection, numberFormats, protectionCredentials, workbookProtectionCredentials, parseSheetFilter, validationOptions } from "./sheet-model.js";
 import { readWorksheetChart, writeWorksheetChart } from "./sheet-chart-xlsx.js";
 import { readWorksheetPivot, writeWorksheetPivot } from "./sheet-pivot-xlsx.js";
 
@@ -16,6 +16,18 @@ const conditionNames = Object.keys(conditionalColors);
 function xml(value) {
   return String(value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, "")
     .replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
+}
+
+function protectionAttributes(protection) {
+  return Object.entries(protection).map(([name, value]) =>
+    ` ${name}="${typeof value === "boolean" ? Number(value) : xml(value)}"`).join("");
+}
+
+function readProtection(node, credentials, normalize) {
+  if (!node) return null;
+  const attributes = Array.from(node.attributes, ({ name, value }) =>
+    [name, credentials.includes(name) ? value : { "1": true, true: true, "0": false, false: false }[value]]);
+  return normalize(Object.fromEntries(attributes));
 }
 
 function createStyleBook() {
@@ -111,8 +123,7 @@ function makeWorksheet({ cells, formats = {}, styles = {}, freezeFirstRow, valid
   const pageProperties = print ? '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' : "";
   const protectedSheet = normalizeSheetProtection(protection);
   const protectionMarkup = protectedSheet
-    ? '<sheetProtection sheet="1"' + Object.entries(protectedSheet)
-      .map(([name, value]) => ` ${name}="${typeof value === "boolean" ? Number(value) : xml(value)}"`).join("") + "/>"
+    ? `<sheetProtection sheet="1"${protectionAttributes(protectedSheet)}/>`
     : "";
   return `<worksheet xmlns="${mainNs}"${relationship}>${pageProperties}${views}<sheetData>${data}</sheetData>${protectionMarkup}${filterMarkup}${conditional}${validations}${pageOptions}${drawing}</worksheet>`;
 }
@@ -154,7 +165,7 @@ function readValidation(worksheet) {
   return validation;
 }
 
-export function exportWorkbook(sheets, zip, date1904 = false, namesInput, onPivotFallback) {
+export function exportWorkbook(sheets, zip, date1904 = false, namesInput, onPivotFallback, protection) {
   const files = {};
   const workbookSheets = [];
   const sheetNames = [];
@@ -221,9 +232,11 @@ export function exportWorkbook(sheets, zip, date1904 = false, namesInput, onPivo
   });
   const definitions = [...printNames, ...namedRanges];
   const definedNames = definitions.length ? `<definedNames>${definitions.join("")}</definedNames>` : "";
+  const workbookProtection = normalizeWorkbookProtection(protection);
+  const protectionMarkup = workbookProtection ? `<workbookProtection${protectionAttributes(workbookProtection)}/>` : "";
   const workbookProperties = date1904 ? '<workbookPr date1904="1"/>' : "";
   const pivotCacheList = pivotCaches.length ? `<pivotCaches>${pivotCaches.join("")}</pivotCaches>` : "";
-  files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}">${workbookProperties}${workbookViews}<sheets>${workbookSheets.join("")}</sheets>${definedNames}${pivotCacheList}</workbook>`;
+  files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}">${workbookProperties}${protectionMarkup}${workbookViews}<sheets>${workbookSheets.join("")}</sheets>${definedNames}${pivotCacheList}</workbook>`;
   files["xl/_rels/workbook.xml.rels"] = `<Relationships xmlns="${packageNs}">${rels.join("")}</Relationships>`;
   files["_rels/.rels"] = `<Relationships xmlns="${packageNs}"><Relationship Id="rId1" Type="${officeNs}/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
   files["[Content_Types].xml"] = `<Types xmlns="${contentNs}"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="${workbookType}"/>${overrides.join("")}</Types>`;
@@ -285,6 +298,8 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     return conditionNames.find((name) => "FF" + conditionalColors[name] === color);
   });
   const workbook = parse("xl/workbook.xml");
+  const protection = readProtection(workbook.getElementsByTagNameNS(mainNs, "workbookProtection")[0],
+    workbookProtectionCredentials, normalizeWorkbookProtection);
   const date1904 = ["1", "true"].includes(workbook.getElementsByTagNameNS(mainNs, "workbookPr")[0]?.getAttribute("date1904"));
   const definitions = [...workbook.getElementsByTagNameNS("*", "sheet")];
   const printNames = [...workbook.getElementsByTagNameNS(mainNs, "definedName")].filter((item) =>
@@ -374,8 +389,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const hidden = ["hidden", "veryHidden"].includes(definition.getAttribute("state"));
     const protectionNode = worksheet.getElementsByTagNameNS(mainNs, "sheetProtection")[0];
     const protection = ["1", "true"].includes(protectionNode?.getAttribute("sheet"))
-      ? normalizeSheetProtection(Object.fromEntries(Array.from(protectionNode.attributes, ({ name, value }) =>
-        [name, protectionCredentials.includes(name) ? value : { "1": true, true: true, "0": false, false: false }[value]])))
+      ? readProtection(protectionNode, protectionCredentials, normalizeSheetProtection)
       : null;
     return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print, protection };
   });
@@ -393,5 +407,5 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const sheet = sheetNames.get((match[1]?.replaceAll("''", "'") ?? match[2]).toUpperCase());
     return [{ name: item.getAttribute("name"), sheet, range: match[3] }];
   }));
-  return { sheets, date1904, namedRanges };
+  return { sheets, date1904, namedRanges, protection };
 }

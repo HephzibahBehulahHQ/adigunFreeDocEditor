@@ -154,12 +154,17 @@ try {
   const protectedSheets = [
     { name: "Schedule", cells: { A1: "Keep" }, protection: { objects: true, scenarios: true } },
     { name: "Locked", cells: { A1: "=1+2" }, protection: { password: "ABCD", formatCells: false } },
-    { name: "Editable", cells: { A1: "Change" } },
+    { name: "Editable", cells: { A1: "Change" }, hidden: true },
   ];
-  const protectedBytes = exportWorkbook(protectedSheets, zip);
+  const structureProtection = { lockStructure: true, workbookPassword: "ABCD", lockWindows: false };
+  const protectedBytes = exportWorkbook(protectedSheets, zip, false, [], undefined, structureProtection);
+  const workbookXml = zip.strFromU8(zip.unzipSync(protectedBytes)["xl/workbook.xml"]);
+  assert.match(workbookXml, /<workbookProtection workbookPassword="ABCD" lockStructure="1" lockWindows="0"\/><bookViews>/);
   const protectedXml = zip.strFromU8(zip.unzipSync(protectedBytes)["xl/worksheets/sheet2.xml"]);
   assert.match(protectedXml, /<\/sheetData><sheetProtection sheet="1" password="ABCD" formatCells="0"\/>/);
-  const reopenedProtection = importWorkbook(protectedBytes, zip, dom.window.DOMParser).sheets;
+  const protectedWorkbook = importWorkbook(protectedBytes, zip, dom.window.DOMParser);
+  assert.deepEqual(protectedWorkbook.protection, structureProtection);
+  const reopenedProtection = protectedWorkbook.sheets;
   assert.deepEqual(reopenedProtection.map((sheet) => sheet.protection),
     [protectedSheets[0].protection, protectedSheets[1].protection, null]);
   assert.equal(reopenedProtection[1].cells.A1, "=1+2");
