@@ -1,8 +1,30 @@
 import assert from "node:assert/strict";
 import * as pdf from "pdf-lib";
-import { buildPdf, parsePages } from "../pdf-pages.js";
+import { buildPdf, compressPdf, parsePages } from "../pdf-pages.js";
 import { cropBoxFromMargins } from "../pdf-crop.js";
 import { addPdfComments, readPdfComments } from "../pdf-comments.js";
+
+const compressible = await pdf.PDFDocument.create();
+const compressionPage = compressible.addPage([300, 400]);
+compressionPage.drawText("Selectable text");
+const commands = "q Q\n".repeat(2000);
+const raw = compressible.context.stream(commands);
+const rawRef = compressible.context.register(raw);
+compressionPage.node.addContentStream(rawRef);
+const compressionField = compressible.getForm().createTextField("Field");
+compressionField.addToPage(compressionPage, { x: 50, y: 50, width: 100, height: 25 });
+compressionField.setText("Preserved value");
+const originalCompression = await compressible.save();
+const smaller = await compressPdf(originalCompression, pdf);
+assert.ok(smaller && smaller.length < originalCompression.length / 2);
+const reopenedCompression = await pdf.PDFDocument.load(smaller);
+const compressedStream = reopenedCompression.context.lookup(rawRef, pdf.PDFRawStream);
+assert.equal(compressedStream.dict.get(pdf.PDFName.of("Filter")).toString(), "/FlateDecode");
+assert.equal(new TextDecoder().decode(pdf.decodePDFRawStream(compressedStream).decode()), commands);
+assert.equal(reopenedCompression.getForm().getTextField("Field").getText(), "Preserved value");
+assert.equal(await compressPdf(smaller, pdf), null);
+compressible.catalog.set(pdf.PDFName.of("Perms"), compressible.context.obj({}));
+await assert.rejects(compressPdf(await compressible.save(), pdf), /unsigned PDF/);
 
 const inkDocument = await pdf.PDFDocument.create();
 inkDocument.addPage([200, 400]);
