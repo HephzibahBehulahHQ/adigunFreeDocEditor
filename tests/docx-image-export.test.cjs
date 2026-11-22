@@ -218,7 +218,7 @@ zipBlob.arrayBuffer().then(async (arrayBuffer) => {
   assert.doesNotMatch(withoutHeaderFooter.files["word/document.xml"], /w:(?:header|footer)Reference/);
   const conversionPackage = makeWordPackage(root, { paper: "letter", orientation: "landscape", margins: "narrow", pageNumbers: false, header: "", footer: "" });
   const conversionDocumentXml = conversionPackage.files["word/document.xml"];
-  assert.match(conversionDocumentXml, /<w:pgSz w:w="15840" w:h="12240"\/>/);
+  assert.match(conversionDocumentXml, /<w:pgSz w:w="15840" w:h="12240" w:orient="landscape"\/>/);
   assert.match(conversionDocumentXml, /<w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/);
   assert.doesNotMatch(conversionDocumentXml, /w:(?:header|footer)Reference/);
   assert.equal(Object.hasOwn(conversionPackage.files, "word/header1.xml"), false);

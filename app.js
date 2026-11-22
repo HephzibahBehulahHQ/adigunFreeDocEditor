@@ -199,6 +199,7 @@
     ],
     layout: [
       [{ label: "Insert next-page section break", action: "section-break", icon: "↧ Section break" }],
+      [{ label: "Current section setup", action: "section-setup", icon: "▯ Section setup" }],
       [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"], ["custom", "Custom"]] }, { label: "Custom margins", action: "custom-margins", icon: "↔ Custom margins" }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }, { label: "Header & footer", action: "page-header-footer", icon: "↕ Header / footer" }, { label: "Page numbers", action: "page-numbers", icon: "＃ Pages" }],
     ],
     references: [
@@ -842,6 +843,35 @@
     table.replaceWith(...fragments);
     return fragments;
   }
+  function sectionCanvasGeometry(layout) {
+    const [short, long] = layout.paper === "letter" ? [215.9, 279.4] : [210, 297];
+    const [width, height] = layout.orientation === "landscape" ? [long, short] : [short, long];
+    const factor = editor.clientWidth / width;
+    const margins = layout.customMarginsMm;
+    return { height: height * factor, millimeters: height,
+      padding: Object.fromEntries(Object.entries(margins).map(([side, value]) => [side, value * factor])) };
+  }
+
+  function decorateSectionPage(sheet, layout) {
+    const key = layout ? JSON.stringify(layout) + ":" + editor.clientWidth : "";
+    if ((sheet.dataset.sectionGeometry || "") === key) return false;
+    if (!layout) {
+      delete sheet.dataset.sectionGeometry;
+      delete sheet.dataset.sectionPage;
+      for (const property of ["--section-height", "--section-print-height", "--section-padding", "--section-print-padding", "--page-image-max-height"]) sheet.style.removeProperty(property);
+      return true;
+    }
+    const geometry = sectionCanvasGeometry(layout);
+    sheet.dataset.sectionGeometry = key;
+    sheet.dataset.sectionPage = layout.paper + "-" + layout.orientation;
+    sheet.style.setProperty("--section-height", `${geometry.height}px`);
+    sheet.style.setProperty("--section-print-height", `${geometry.millimeters - 0.5}mm`);
+    sheet.style.setProperty("--section-padding", Object.values(geometry.padding).map((value) => `${value}px`).join(" "));
+    sheet.style.setProperty("--section-print-padding", Object.values(layout.customMarginsMm).map((value) => `${value}mm`).join(" "));
+    sheet.style.setProperty("--page-image-max-height", `${Math.max(32, geometry.height - geometry.padding.top - geometry.padding.bottom - 32)}px`);
+    return true;
+  }
+
   function paginateEditor() {
     if (editor.contentEditable !== "true" || $("#editor-card").classList.contains("landing")) return;
     const savedSelection = captureEditorSelection();
@@ -850,19 +880,26 @@
     const minHeight = parseFloat(getComputedStyle(editor).getPropertyValue("--paper-min-height")) || editor.clientHeight || 900;
     const probe = existing.find((child) => child.classList?.contains("document-sheet"));
     const style = probe ? getComputedStyle(probe) : getComputedStyle(editor);
-    const capacity = Math.max(120, minHeight - parseFloat(style.paddingTop || 0) - parseFloat(style.paddingBottom || 0));
+    let capacity = Math.max(120, minHeight - parseFloat(style.paddingTop || 0) - parseFloat(style.paddingBottom || 0));
+    let sectionLayout = null;
     const imageMaxHeight = Math.max(96, capacity - 32);
-    existing.filter((child) => child.classList?.contains("document-sheet")).forEach((sheet) => sheet.style.setProperty("--page-image-max-height", `${imageMaxHeight}px`));
+    existing.filter((child) => child.classList?.contains("document-sheet") && !child.dataset.sectionPage).forEach((sheet) => sheet.style.setProperty("--page-image-max-height", `${imageMaxHeight}px`));
     const pages = [];
     let page = [];
     let used = 0;
-    const flush = () => { if (page.length) pages.push(page); page = []; used = 0; };
+    const flush = () => { if (page.length) pages.push({ items: page, layout: sectionLayout }); page = []; used = 0; };
     for (const node of nodes) {
       const isBreak = node.nodeType === Node.ELEMENT_NODE && node.matches('hr[data-page-break="true"]');
       if (isBreak) {
         if (!page.length) page = [];
         page.push(node);
         flush();
+        const requested = documentModel.readSectionLayout(node.getAttribute("data-section-layout"));
+        if (requested) {
+          sectionLayout = requested;
+          const geometry = sectionCanvasGeometry(sectionLayout);
+          capacity = Math.max(32, geometry.height - geometry.padding.top - geometry.padding.bottom);
+        }
         continue;
       }
       const rectHeight = node.nodeType === Node.ELEMENT_NODE ? node.getBoundingClientRect().height : 0;
@@ -888,26 +925,50 @@
       used += blockHeight;
     }
     flush();
-    if (!pages.length) pages.push([]);
+    if (!pages.length) pages.push({ items: [], layout: null });
     const oldSheets = existing.filter((child) => child.classList?.contains("document-sheet"));
     updatePageNumberLabels(oldSheets, pages.length);
-    const unchanged = oldSheets.length === pages.length && pages.every((items, index) =>
+    const unchanged = oldSheets.length === pages.length && pages.every(({ items }, index) =>
       items.length === oldSheets[index].childNodes.length && items.every((node, childIndex) => node === oldSheets[index].childNodes[childIndex]));
-    if (unchanged) { renderPageNavigation(); return; }
+    if (unchanged) {
+      let geometryChanged = false;
+      if (liveEditor) {
+        const { doc, tr } = liveEditor.state;
+        doc.forEach((node, offset, index) => {
+          if (node.type.name !== "documentSheet") return;
+          const template = document.createElement("div");
+          decorateSectionPage(template, pages[index]?.layout);
+          const sectionGeometry = template.dataset.sectionGeometry || null;
+          if (node.attrs.sectionGeometry === sectionGeometry) return;
+          tr.setNodeMarkup(offset, undefined, { ...node.attrs, sectionGeometry,
+            sectionPage: template.dataset.sectionPage || null, sectionStyle: template.getAttribute("style") });
+        });
+        if (tr.docChanged) {
+          tr.setMeta("addToHistory", false).setMeta("preventUpdate", true);
+          liveEditor.view.dispatch(tr);
+          geometryChanged = true;
+        }
+      } else oldSheets.forEach((sheet, index) => { if (decorateSectionPage(sheet, pages[index].layout)) geometryChanged = true; });
+      if (geometryChanged) scheduleEditorPagination();
+      renderPageNavigation();
+      return;
+    }
     $("#editor-card").classList.add("paper-layout");
     const fragment = document.createDocumentFragment();
-    pages.forEach((items, index) => {
+    pages.forEach(({ items, layout }, index) => {
       const sheet = document.createElement("div");
       sheet.className = "document-sheet";
       sheet.dataset.editorPage = "true";
       sheet.style.setProperty("--page-image-max-height", `${imageMaxHeight}px`);
       sheet.setAttribute("role", "group");
       sheet.setAttribute("aria-label", `Page ${index + 1}`);
+      decorateSectionPage(sheet, layout);
       items.forEach((node) => sheet.append(node));
       fragment.append(sheet);
     });
     updatePageNumberLabels([...fragment.children], pages.length);
     editor.replaceChildren(fragment);
+    if (pages.some(({ layout }) => layout)) scheduleEditorPagination();
     restoreEditorSelection(savedSelection);
     renderPageNavigation();
     renderOutline();
@@ -3003,7 +3064,8 @@
       const packageRelNs = "http://schemas.openxmlformats.org/package/2006/relationships";
       const attr = (node, ns, prefix, name) => node?.getAttributeNS(ns, name) || node?.getAttribute(prefix + ":" + name) || "";
       const near = (left, right) => Math.abs(left - right) <= 40;
-      const sections = Array.from(xml.getElementsByTagNameNS(wordNs, "sectPr"));
+      const sections = Array.from(xml.getElementsByTagNameNS(wordNs, "sectPr")).filter((section) =>
+        section.parentElement?.namespaceURI === wordNs && ["pPr", "body"].includes(section.parentElement.localName));
       if (!sections.length) return empty;
       const parseSection = (section) => {
         const size = section.getElementsByTagNameNS(wordNs, "pgSz")[0];
@@ -3022,22 +3084,18 @@
         const gutter = Number(attr(margins, wordNs, "w", "gutter") || 0);
         const sides = ["top", "right", "bottom", "left"].map((name) => Number(attr(margins, wordNs, "w", name)));
         if (gutter !== 0 || sides.some((value) => !Number.isFinite(value) || value < 0 || value > 5669) || sides[1] + sides[3] >= width - 567 || sides[0] + sides[2] >= height - 567) return null;
-        const presets = [["normal", 1440], ["narrow", 720], ["wide", 2160]];
+        const presets = [["normal", 1440], ["narrow", 720]];
         const match = presets.find(([, value]) => sides.every((side) => near(side, value)));
         const parsed = { paper, orientation: landscape ? "landscape" : "portrait", margins: match?.[0] || "custom" };
         if (!match) parsed.customMarginsMm = Object.fromEntries(["top", "right", "bottom", "left"].map((side, index) => [side, Math.round(sides[index] * 25.4 / 1440 * 10) / 10]));
         return parsed;
       };
       const layouts = sections.map(parseSection);
-      let layout = null;
-      let unsupported = false;
-      if (layouts.some((value) => !value)) unsupported = true;
-      else {
-        layout = layouts[0];
-        if (layouts.some((value) => value.paper !== layout.paper || value.orientation !== layout.orientation || value.margins !== layout.margins || (value.margins === "custom" && JSON.stringify(value.customMarginsMm) !== JSON.stringify(layout.customMarginsMm)))) {
-          layout = null;
-          unsupported = true;
-        }
+      const layout = layouts[0];
+      let unsupported = layouts.some((value) => !value);
+      for (const section of sections) {
+        const columns = section.getElementsByTagNameNS(wordNs, "cols")[0];
+        if (Number(attr(columns, wordNs, "w", "num")) > 1 || columns?.getElementsByTagNameNS(wordNs, "col").length) unsupported = true;
       }
 
       const referenceIds = { header: [], footer: [] };
@@ -3051,14 +3109,14 @@
           }
         }
       }
-      if (!referenceIds.header.length && !referenceIds.footer.length) return { ...empty, layout, unsupported };
+      if (!referenceIds.header.length && !referenceIds.footer.length) return { ...empty, layout, layouts, unsupported };
 
       const relationshipsName = "word/_rels/document.xml.rels";
       const relationshipsEntry = archive?.partEntries?.[relationshipsName];
       const relationshipsText = await readDocxZipPartText(buffer, relationshipsEntry, relationshipsName);
-      if (!relationshipsText) return { ...empty, layout, unsupported, unreadable: true };
+      if (!relationshipsText) return { ...empty, layout, layouts, unsupported, unreadable: true };
       const relationshipsXml = parser.parseFromString(relationshipsText, "application/xml");
-      if (relationshipsXml.getElementsByTagName("parsererror").length) return { ...empty, layout, unsupported, unreadable: true };
+      if (relationshipsXml.getElementsByTagName("parsererror").length) return { ...empty, layout, layouts, unsupported, unreadable: true };
       const relationships = new Map();
       for (const relationship of Array.from(relationshipsXml.getElementsByTagNameNS(packageRelNs, "Relationship"))) {
         const id = relationship.getAttribute("Id") || "";
@@ -3085,9 +3143,9 @@
         if (ids.length > 1) { unsupported = true; continue; }
         if (!ids.length) continue;
         const relationship = relationships.get(ids[0]);
-        if (!relationship || !relationship.type.endsWith("/" + kind)) return { ...empty, layout, unsupported, unreadable: true };
+        if (!relationship || !relationship.type.endsWith("/" + kind)) return { ...empty, layout, layouts, unsupported, unreadable: true };
         const partName = resolvePartName(relationship.target);
-        if (!partName || !archive.partEntries?.[partName]) return { ...empty, layout, unsupported, unreadable: true };
+        if (!partName || !archive.partEntries?.[partName]) return { ...empty, layout, layouts, unsupported, unreadable: true };
         partTargets[kind] = partName;
       }
       const readTextPart = async (kind, partName) => {
@@ -3153,6 +3211,7 @@
       unsupported ||= header.unsupported || footer.unsupported;
       return {
         layout,
+        layouts,
         header: header.text,
         footer: footer.pageNumbers && footer.text.endsWith(" ·") ? footer.text.slice(0, -2).trim() : footer.text,
         pageNumbers: footer.pageNumbers || header.pageNumbers,
@@ -3312,7 +3371,7 @@
     }
   }
 
-  async function prepareWordStructures(arrayBuffer, entry) {
+  async function prepareWordStructures(arrayBuffer, entry, layouts = []) {
     const original = { arrayBuffer, tokens: new Map(), omittedSections: 0 };
     const text = await readDocxZipPartText(arrayBuffer, entry, "word/document.xml");
     if (!text || !window.fflate || !/officeDocument\/2006\/math|sectPr/.test(text)) return original;
@@ -3355,7 +3414,10 @@
       const nextType = sections[index + 1]?.getElementsByTagNameNS(word, "type")[0]?.getAttributeNS(word, "val");
       if (nextType && nextType !== "nextPage") { original.omittedSections++; continue; }
       const marker = xml.createElementNS(word, "w:p");
-      marker.append(tokenRun({ kind: "section-break" }));
+      const nextLayout = layouts[index + 1];
+      const layout = nextLayout && JSON.stringify(nextLayout) !== JSON.stringify(layouts[index])
+        ? JSON.stringify({ ...nextLayout, customMarginsMm: marginsForLayout(nextLayout) }) : null;
+      marker.append(tokenRun({ kind: "section-break", layout }));
       section.remove();
       if (paragraph.children.length === 1 && !paragraph.firstElementChild.children.length) paragraph.replaceWith(marker);
       else paragraph.after(marker);
@@ -3386,6 +3448,8 @@
       if (tokens.get(node.data)?.kind === "section-break" && node.parentElement?.tagName === "P") {
         const marker = parsed.createElement("hr");
         marker.dataset.sectionBreak = "nextPage";
+        const layout = tokens.get(node.data).layout;
+        if (layout) marker.dataset.sectionLayout = layout;
         node.parentElement.replaceWith(marker);
         continue;
       }
@@ -3475,6 +3539,8 @@
       if (tag === "hr" && node.getAttribute("data-section-break") === "nextPage") {
         element.setAttribute("data-page-break", "true");
         element.setAttribute("data-section-break", "nextPage");
+        const sectionLayout = node.getAttribute("data-section-layout");
+        if (sectionLayout) element.setAttribute("data-section-layout", sectionLayout);
       }
       if (tag === "a") {
         const href = node.getAttribute("href") || "";
@@ -3647,7 +3713,8 @@
         const arrayBuffer = await file.arrayBuffer();
         const archiveEntry = inspectDocxArchive(arrayBuffer);
         const revisionCounts = await readDocxRevisionCounts(arrayBuffer, archiveEntry);
-        const structures = await prepareWordStructures(arrayBuffer, archiveEntry);
+        const importedPageLayout = await readDocxPageLayout(arrayBuffer, archiveEntry);
+        const structures = await prepareWordStructures(arrayBuffer, archiveEntry, importedPageLayout.layouts);
         const converted = await window.mammoth.convertToHtml({ arrayBuffer: structures.arrayBuffer }, {
           styleMap: [
             "br[type='page'] => hr.adigun-imported-page-break:fresh",
@@ -3658,7 +3725,6 @@
         const revisionMapping = mapDocxRevisionsToHtml(sanitized.html, revisionCounts?.paragraphs);
         const commentTargetText = new DOMParser().parseFromString("<main>" + revisionMapping.html + "</main>", "text/html").querySelector("main")?.textContent || "";
         const importedCommentData = await readDocxReviewComments(arrayBuffer, archiveEntry, commentTargetText);
-        const importedPageLayout = await readDocxPageLayout(arrayBuffer, archiveEntry);
         if (revisionMapping.html.length > 12 * 1024 * 1024) throw new Error("The editable document exceeds the 12 MB safety limit.");
         if (!(await flushActiveDocument())) { notify("Save the open document before importing another file."); return; }
         if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = undefined; }
@@ -4793,6 +4859,7 @@
       case "divider": runCommand("insertHTML", "<hr><p><br></p>"); break;
       case "page-break": runCommand("insertHTML", '<hr data-page-break="true"><p><br></p>'); notify("Manual page break inserted."); break;
       case "section-break": runCommand("insertHTML", '<hr data-page-break="true" data-section-break="nextPage"><p><br></p>'); notify("Next-page section break inserted."); break;
+      case "section-setup": openSectionSetup(); break;
       case "table": {
         const selection = window.getSelection();
         tableInsertionRange = selection && selection.rangeCount && editor.contains(selection.anchorNode) ? selection.getRangeAt(0).cloneRange() : null;
@@ -4849,6 +4916,76 @@
     }
     return normalized;
   }
+
+  function marginsForLayout(layout) {
+    if (layout.margins === "custom") return normalizeCustomMarginsMm(layout.customMarginsMm);
+    const vertical = layout.margins === "narrow" ? 12.7 : 25.4;
+    const horizontal = layout.margins === "wide" ? 50.8 : vertical;
+    return { top: vertical, right: horizontal, bottom: vertical, left: horizontal };
+  }
+
+  const sectionSetup = $("#section-setup-dialog");
+  const sectionForm = sectionSetup.querySelector("form");
+  const sectionMarginSides = ["top", "right", "bottom", "left"];
+  let sectionEditor;
+  let sectionPosition;
+  let nextSectionPosition;
+  let originalSectionLayout;
+
+  function openSectionSetup() {
+    if (!liveEditor) return;
+    const { doc, selection } = liveEditor.state;
+    sectionEditor = liveEditor;
+    sectionPosition = nextSectionPosition = undefined;
+    let index = 1;
+    let layout = { paper: paperSize, orientation: pageOrientation, margins: pageMargins, customMarginsMm: pageCustomMarginsMm };
+    doc.descendants((node, position) => {
+      if (node.type.name !== "horizontalRule" || !node.attrs.sectionBreak) return;
+      if (position < selection.from) {
+        sectionPosition = position;
+        layout = documentModel.readSectionLayout(node.attrs.sectionLayout) || layout;
+        index++;
+      } else if (nextSectionPosition === undefined) nextSectionPosition = position;
+    });
+    const fields = sectionForm.elements;
+    originalSectionLayout = layout;
+    fields.paper.value = layout.paper;
+    fields.orientation.value = layout.orientation;
+    const margins = marginsForLayout(layout);
+    for (const side of sectionMarginSides) fields[side].value = margins[side];
+    sectionForm.querySelector("[data-section-number]").textContent = `Section ${index}`;
+    sectionForm.querySelector("[role=status]").textContent = "";
+    sectionSetup.showModal();
+  }
+
+  sectionForm.querySelector("[data-close]").addEventListener("click", () => sectionSetup.close());
+  sectionForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (liveEditor !== sectionEditor) return;
+    const fields = sectionForm.elements;
+    const customMarginsMm = Object.fromEntries(sectionMarginSides.map((side) => [side, fields[side].valueAsNumber]));
+    const candidate = { paper: fields.paper.value, orientation: fields.orientation.value, customMarginsMm };
+    const layout = documentModel.readSectionLayout(JSON.stringify(candidate));
+    if (!layout) {
+      sectionForm.querySelector("[role=status]").textContent = "Leave at least 10 mm of space for document content.";
+      return;
+    }
+    const { doc, tr } = liveEditor.state;
+    const marker = (position) => position === undefined ? null : doc.nodeAt(position);
+    const current = marker(sectionPosition);
+    if (sectionPosition !== undefined && !current?.attrs.sectionBreak) return;
+    const next = marker(nextSectionPosition);
+    if (next?.attrs.sectionBreak && !next.attrs.sectionLayout) {
+      const inherited = { ...originalSectionLayout, customMarginsMm: marginsForLayout(originalSectionLayout) };
+      tr.setNodeMarkup(nextSectionPosition, undefined, { ...next.attrs, sectionLayout: JSON.stringify(inherited) });
+    }
+    if (current) tr.setNodeMarkup(sectionPosition, undefined, { ...current.attrs, sectionLayout: JSON.stringify(layout) });
+    else applyPageLayout({ ...layout, header: pageHeaderText, footer: pageFooterText, pageNumbers: pageNumbersEnabled });
+    if (tr.docChanged) liveEditor.view.dispatch(tr);
+    sectionSetup.close();
+    scheduleEditorPagination();
+    saveDocument();
+  });
 
   function applyPageMarginClasses(card = $("#editor-card")) {
     card.classList.toggle("margin-narrow", pageMargins === "narrow");
@@ -5187,7 +5324,7 @@
     }
 
     const body = [];
-    const nextSection = Symbol("next-page section");
+    const nextSections = new Map();
     const listNumberingInstances = [];
     const listNumberingIds = new WeakMap();
     function createListNumberingInstance(kind, level = 0, start = 1) {
@@ -5206,12 +5343,22 @@
       listNumberingIds.set(list, id);
       return id;
     }
-    const letterPaper = exportLayout.paper === "letter";
-    const landscapePaper = exportLayout.orientation === "landscape";
-    let tablePageWidth = letterPaper ? 12240 : 11906;
-    if (landscapePaper) tablePageWidth = letterPaper ? 15840 : 16838;
-    const tableMarginTwips = exportLayout.margins === "narrow" ? 720 : exportLayout.margins === "wide" ? 2880 : 1440;
-    const tableContentWidth = tablePageWidth - tableMarginTwips * 2;
+    function sectionPageSize(layout) {
+      const letter = layout.paper === "letter";
+      let width = letter ? 12240 : 11906;
+      let height = letter ? 15840 : 16838;
+      if (layout.orientation === "landscape") [width, height] = [height, width];
+      const margins = {};
+      for (const side of ["top", "right", "bottom", "left"]) {
+        margins[side] = layout.margins === "custom"
+          ? Math.round(Math.min(100, Math.max(0, Number(layout.customMarginsMm?.[side]) || 0)) * 1440 / 25.4)
+          : layout.margins === "narrow" ? 720
+            : layout.margins === "wide" && (side === "left" || side === "right") ? 2880 : 1440;
+      }
+      return { width, height, ...margins };
+    }
+    const baseGeometry = sectionPageSize(exportLayout);
+    let tableContentWidth = baseGeometry.width - baseGeometry.left - baseGeometry.right;
     const contents = source.querySelectorAll?.('ol[data-generated-toc="true"]') ?? [];
     const headingBookmarks = new Map();
     if (contents.length) {
@@ -5381,7 +5528,15 @@
         }
         if (tag === "table") { output.push(tableXml(child)); continue; }
         if (tag === "hr" && child.getAttribute("data-section-break") === "nextPage" && output === body) {
-          output.push(nextSection);
+          const marker = Symbol("next-page section");
+          const value = child.getAttribute("data-section-layout");
+          const override = value ? documentModel.readSectionLayout(value) : null;
+          nextSections.set(marker, override);
+          output.push(marker);
+          if (override) {
+            const { width, right, left } = sectionPageSize(override);
+            tableContentWidth = width - right - left;
+          }
           continue;
         }
         if (tag === "hr") { output.push(child.getAttribute("data-page-break") === "true" ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="808080"/></w:pBdr></w:pPr><w:r><w:t></w:t></w:r></w:p>'); continue; }
@@ -5424,16 +5579,6 @@
       ? '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">' + exportedComments.map((comment) => '<w15:commentEx w15:paraId="' + comment.lastParagraphId + '" w15:done="' + (comment.resolved ? "1" : "0") + '"/>').join("") + "</w15:commentsEx>"
       : "";
 
-    const isLetter = exportLayout.paper === "letter";
-    const landscape = exportLayout.orientation === "landscape";
-    let width = isLetter ? 12240 : 11906;
-    let height = isLetter ? 15840 : 16838;
-    if (landscape) [width, height] = [height, width];
-    const customMargins = exportLayout.margins === "custom" ? Object.fromEntries(["top", "right", "bottom", "left"].map((side) => [side, Math.round(Math.min(100, Math.max(0, Number(exportLayout.customMarginsMm?.[side]) || 0)) * 1440 / 25.4)])) : null;
-    const topMarginTwips = customMargins ? customMargins.top : exportLayout.margins === "narrow" ? 720 : 1440;
-    const rightMarginTwips = customMargins ? customMargins.right : exportLayout.margins === "narrow" ? 720 : exportLayout.margins === "wide" ? 2880 : 1440;
-    const bottomMarginTwips = customMargins ? customMargins.bottom : exportLayout.margins === "narrow" ? 720 : 1440;
-    const leftMarginTwips = customMargins ? customMargins.left : exportLayout.margins === "narrow" ? 720 : exportLayout.margins === "wide" ? 2880 : 1440;
     const hasHeader = Boolean(exportLayout.header);
     const hasFooter = Boolean(exportLayout.footer || exportLayout.pageNumbers);
     const headerRelationshipId = hasHeader ? `rId${nextRelationship++}` : "";
@@ -5443,10 +5588,20 @@
     const commentsRelationshipId = exportedComments.length ? `rId${nextRelationship++}` : "";
     const commentsExtendedRelationshipId = exportedComments.length ? `rId${nextRelationship++}` : "";
     const endnoteProperties = wordNotes.endnote.length ? '<w:endnotePr><w:numFmt w:val="lowerRoman"/></w:endnotePr>' : "";
-    const sectionProperties = (type) => `<w:sectPr>${headerReference}${footerReference}${endnoteProperties}${type}<w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="${topMarginTwips}" w:right="${rightMarginTwips}" w:bottom="${bottomMarginTwips}" w:left="${leftMarginTwips}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>`;
+    const sectionProperties = (layout, type) => {
+      const { width, height, top, right, bottom, left } = sectionPageSize(layout);
+      const orientation = layout.orientation === "landscape" ? ' w:orient="landscape"' : "";
+      return `<w:sectPr>${headerReference}${footerReference}${endnoteProperties}${type}<w:pgSz w:w="${width}" w:h="${height}"${orientation}/><w:pgMar w:top="${top}" w:right="${right}" w:bottom="${bottom}" w:left="${left}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>`;
+    };
     const nextPage = '<w:type w:val="nextPage"/>';
-    const blocks = body.map((block) => block === nextSection ? `<w:p><w:pPr>${sectionProperties(nextPage)}</w:pPr></w:p>` : block);
-    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${blocks.join("")}${sectionProperties(body.includes(nextSection) ? nextPage : "")}</w:body></w:document>`;
+    let currentSectionLayout = exportLayout;
+    const blocks = body.map((block) => {
+      if (!nextSections.has(block)) return block;
+      const properties = sectionProperties(currentSectionLayout, nextPage);
+      currentSectionLayout = nextSections.get(block) || currentSectionLayout;
+      return `<w:p><w:pPr>${properties}</w:pPr></w:p>`;
+    });
+    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${blocks.join("")}${sectionProperties(currentSectionLayout, nextSections.size ? nextPage : "")}</w:body></w:document>`;
     const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="20"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="18"/></w:rPr></w:style></w:styles>';
     const bulletGlyphs = ["•", "○", "▪"];
     const numberingLevels = (format) => Array.from({ length: 9 }, (_, level) => `<w:lvl w:ilvl="${level}"><w:start w:val="1"/><w:numFmt w:val="${format}"/><w:lvlText w:val="${format === "bullet" ? bulletGlyphs[level % bulletGlyphs.length] : `%${level + 1}.`}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${(level + 1) * 720}" w:hanging="360"/></w:pPr></w:lvl>`).join("");

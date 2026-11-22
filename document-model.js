@@ -100,6 +100,8 @@
     if (tag === "hr" && attributes["data-section-break"] === "nextPage") {
       result["data-page-break"] = "true";
       result["data-section-break"] = "nextPage";
+      const layout = readSectionLayout(attributes["data-section-layout"]);
+      if (layout) result["data-section-layout"] = JSON.stringify(layout);
     }
     if (tag === "thead" && attributes["data-page-header-copy"] === "true") result["data-page-header-copy"] = "true";
     if (tag === "ol") {
@@ -120,6 +122,23 @@
       if (["left", "center", "right", "justify"].includes(attributes.align)) result.align = attributes.align;
     }
     return result;
+  }
+
+  function readSectionLayout(value) {
+    if (typeof value !== "string" || value.length > 250) return null;
+    try {
+      const { paper, orientation, customMarginsMm } = JSON.parse(value);
+      if (!["a4", "letter"].includes(paper) || !["portrait", "landscape"].includes(orientation)) return null;
+      const sides = ["top", "right", "bottom", "left"];
+      if (!sides.every((side) => Number.isFinite(customMarginsMm?.[side]) &&
+          customMarginsMm[side] >= 0 && customMarginsMm[side] <= 100)) return null;
+      const [width, height] = paper === "letter" ? [215.9, 279.4] : [210, 297];
+      const landscape = orientation === "landscape";
+      if (customMarginsMm.left + customMarginsMm.right >= (landscape ? height : width) - 10 ||
+          customMarginsMm.top + customMarginsMm.bottom >= (landscape ? width : height) - 10) return null;
+      return { paper, orientation, margins: "custom",
+        customMarginsMm: Object.fromEntries(sides.map((side) => [side, customMarginsMm[side]])) };
+    } catch { return null; }
   }
 
   function normalizeNode(node) {
@@ -170,7 +189,10 @@
       const highlightColor = supportedColor(node.getAttribute("data-highlight-color") || node.style?.backgroundColor || node.style?.background);
       if (highlightColor) attrs["data-highlight-color"] = highlightColor;
     }
-    if (tag === "hr" && node.getAttribute("data-section-break") === "nextPage") attrs["data-section-break"] = "nextPage";
+    if (tag === "hr" && node.getAttribute("data-section-break") === "nextPage") {
+      attrs["data-section-break"] = "nextPage";
+      attrs["data-section-layout"] = node.getAttribute("data-section-layout");
+    }
     if (paragraphTags.has(tag)) attrs.align = node.style?.textAlign || "";
     if (!allowedTags.has(tag)) return [...node.childNodes].map(copyDomNode).filter(Boolean);
     const normalized = normalizeNode({ type: "element", tag, attrs, children: [...node.childNodes].map(copyDomNode).flat().filter(Boolean) });
@@ -317,6 +339,6 @@
     return safeModel.content.map(renderNode).join("");
   }
 
-  window.AdigunDocumentModel = Object.freeze({ format, version, fromDOM, fromHTML, normalize, toHTML });
+  window.AdigunDocumentModel = Object.freeze({ format, version, fromDOM, fromHTML, normalize, toHTML, readSectionLayout });
 })();
 
