@@ -6,7 +6,9 @@ const markTypes = {
   underline: { label: "Underline", subtype: "Underline", color: [0.2, 0.43, 0.7] },
   strike: { label: "Strikeout", subtype: "StrikeOut", color: [0.76, 0.19, 0.25] },
   box: { label: "Rectangle", subtype: "Square", color: [0.29, 0.2, 0.65] },
+  ink: { label: "Freehand ink", subtype: "Ink", color: [0.15, 0.32, 0.68] },
 };
+const inkWidth = 2;
 
 export function addPdfComments(pdf, entries, { PDFName, PDFHexString }) {
   for (const entry of entries) {
@@ -21,11 +23,22 @@ export function addPdfComments(pdf, entries, { PDFName, PDFHexString }) {
       properties.Rect = [x - 8, y - 8, x + 8, y + 8];
       properties.Name = PDFName.of("Comment");
     } else {
-      const xs = entry.quad.map(([x]) => x);
-      const ys = entry.quad.map(([, y]) => y);
-      const padding = entry.kind === "box" ? 2 : 1;
+      const points = entry.kind === "ink" ? entry.path : entry.quad;
+      const xs = points.map(([x]) => x);
+      const ys = points.map(([, y]) => y);
+      const padding = ["box", "ink"].includes(entry.kind) ? 2 : 1;
       properties.Rect = [Math.min(...xs) - padding, Math.min(...ys) - padding, Math.max(...xs) + padding, Math.max(...ys) + padding];
-      if (entry.kind === "box") properties.BS = { W: 2, S: "S" };
+      if (entry.kind === "ink") {
+        const [x0, y0, x1, y1] = properties.Rect;
+        const commands = points.map(([x, y], index) =>
+          `${(x - x0).toFixed(3)} ${(y - y0).toFixed(3)} ${index ? "l" : "m"}`).join("\n");
+        const appearance = pdf.context.flateStream(`q ${type.color.join(" ")} RG ${inkWidth} w 1 J 1 j\n${commands}\nS Q`, {
+          Type: "XObject", Subtype: "Form", BBox: [0, 0, x1 - x0, y1 - y0], Resources: {},
+        });
+        properties.InkList = [points.flat()];
+        properties.BS = { W: inkWidth, S: "S" };
+        properties.AP = { N: pdf.context.register(appearance) };
+      } else if (entry.kind === "box") properties.BS = { W: 2, S: "S" };
       else properties.QuadPoints = entry.quad.flat();
     }
     const annotation = pdf.context.obj(properties);
@@ -52,6 +65,7 @@ export function bindPdfComments(sources, preview) {
   let busy = false;
   let draft = false;
   let anchor;
+  let ink;
   const discard = () => !(draft || text.value.trim()) || window.confirm("Discard unsaved PDF comments?");
 
   function enableControls() {
@@ -62,14 +76,38 @@ export function bindPdfComments(sources, preview) {
   }
 
   function updateKind() {
-    area.hidden = kind.value === "note";
+    const drawing = kind.value === "ink";
+    area.hidden = kind.value === "note" || drawing;
+    form.querySelector("[data-position]").hidden = drawing;
+    form.querySelector("[data-ink-help]").hidden = !drawing;
+    add.hidden = drawing;
+    for (const field of [left, top]) field.disabled = busy || drawing;
     for (const field of [width, height]) field.disabled = busy || area.hidden;
     text.required = kind.value === "note";
+  }
+
+  function paintStroke(context, points) {
+    const color = markTypes.ink.color.map((value) => Math.round(value * 255));
+    context.save();
+    context.strokeStyle = `rgb(${color.join(",")})`;
+    context.lineWidth = inkWidth * canvas.width / viewport.width;
+    context.lineCap = context.lineJoin = "round";
+    context.beginPath();
+    for (const [index, [x, y]] of points.entries()) {
+      const method = index ? "lineTo" : "moveTo";
+      context[method](x * canvas.width, y * canvas.height);
+    }
+    context.stroke();
+    context.restore();
   }
 
   function drawMarks() {
     const context = canvas.getContext("2d");
     for (const comment of entries.filter((entry) => entry.pageIndex === page.selectedIndex)) {
+      if (comment.kind === "ink") {
+        paintStroke(context, comment.points);
+        continue;
+      }
       const x = comment.left * canvas.width;
       const y = comment.top * canvas.height;
       const w = comment.width * canvas.width;
@@ -96,6 +134,7 @@ export function bindPdfComments(sources, preview) {
   }
 
   async function draw() {
+    anchor = ink = undefined;
     busy = true;
     viewport = undefined;
     canvas.hidden = true;
@@ -181,6 +220,7 @@ export function bindPdfComments(sources, preview) {
   dialog.addEventListener("close", () => {
     void task?.destroy().catch(() => {});
     task = raster = viewport = undefined;
+    anchor = ink = undefined;
     canvas.width = canvas.height = 0;
     source.dataset.selected = "0";
   });
@@ -199,14 +239,43 @@ export function bindPdfComments(sources, preview) {
   canvas.addEventListener("pointerdown", (event) => {
     if (busy || kind.value === "note" || event.button !== 0 || !event.isPrimary) return;
     anchor = coordinates(event);
+    if (kind.value === "ink") ink = [anchor.map((value) => value / 100)];
     canvas.setPointerCapture(event.pointerId);
   });
-  canvas.addEventListener("pointercancel", () => { anchor = undefined; });
+  function extendInk(event) {
+    if (!ink || !viewport || busy || !event.isPrimary || ink.length >= 1200) return;
+    const last = ink.at(-1);
+    const next = coordinates(event).map((value) => value / 100);
+    if (Math.hypot((last[0] - next[0]) * viewport.width, (last[1] - next[1]) * viewport.height) < 0.5) return;
+    ink.push(next);
+    paintStroke(canvas.getContext("2d"), [last, next]);
+  }
+  canvas.addEventListener("pointermove", extendInk);
+  canvas.addEventListener("lostpointercapture", () => {
+    anchor = undefined;
+    if (!ink) return;
+    ink = undefined;
+    void draw();
+  });
   canvas.addEventListener("pointerup", (event) => {
     if (!anchor || !event.isPrimary) return;
     const [firstX, firstY] = anchor;
     anchor = undefined;
     if (busy) return;
+    if (ink) {
+      extendInk(event);
+      const points = ink;
+      ink = undefined;
+      if (points.length < 2) return;
+      entries.push({ kind: "ink", pageIndex: page.selectedIndex, points,
+        path: points.map(([x, y]) => viewport.convertToPdfPoint(x * viewport.width, y * viewport.height)),
+        text: text.value.trim() });
+      text.value = "";
+      draft = true;
+      status.textContent = "Ink added to this page.";
+      renderEntries();
+      return;
+    }
     const [x, y] = coordinates(event);
     left.value = Math.min(firstX, x).toFixed(1);
     top.value = Math.min(firstY, y).toFixed(1);
@@ -216,7 +285,7 @@ export function bindPdfComments(sources, preview) {
   });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (busy || !viewport || (kind.value === "note" && !text.value.trim())) return;
+    if (busy || !viewport || kind.value === "ink" || (kind.value === "note" && !text.value.trim())) return;
     const x = left.valueAsNumber / 100;
     const y = top.valueAsNumber / 100;
     const w = kind.value === "note" ? 0 : width.valueAsNumber / 100;

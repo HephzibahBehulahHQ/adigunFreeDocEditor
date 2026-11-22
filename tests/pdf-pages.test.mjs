@@ -2,6 +2,17 @@ import assert from "node:assert/strict";
 import * as pdf from "pdf-lib";
 import { buildPdf, parsePages } from "../pdf-pages.js";
 import { cropBoxFromMargins } from "../pdf-crop.js";
+import { addPdfComments } from "../pdf-comments.js";
+
+const inkDocument = await pdf.PDFDocument.create();
+inkDocument.addPage([200, 400]);
+const inkPath = [[20, 30], [30, 55], [47, 32]];
+addPdfComments(inkDocument, [{ pageIndex: 0, kind: "ink", text: "Review", path: inkPath }], pdf);
+const reopenedInk = await pdf.PDFDocument.load(await inkDocument.save());
+const ink = reopenedInk.getPage(0).node.Annots().lookup(0, pdf.PDFDict);
+assert.equal(ink.lookup(pdf.PDFName.of("Subtype")).asString(), "/Ink");
+assert.equal(ink.lookup(pdf.PDFName.of("InkList")).toString(), "[ [ 20 30 30 55 47 32 ] ]");
+assert.ok(ink.lookup(pdf.PDFName.of("AP"), pdf.PDFDict).lookup(pdf.PDFName.of("N"), pdf.PDFRawStream));
 
 const margins = { left: 10, top: 20, right: 30, bottom: 25 };
 assert.deepEqual(cropBoxFromMargins({
