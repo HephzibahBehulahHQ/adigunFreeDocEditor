@@ -72,6 +72,16 @@ const text = calculateWorkbook([
 assert.deepEqual(["A1", "A2", "A3", "A4", "A5", "A6"].map(text),
   ['WEST REGION id "001"', 20, 0, "5 units", "#REF!", "#VALUE!"]);
 assert.equal(shiftCellFormula('=A1+1E2&"B2"', 1, 1), '=B2+1E2&"B2"');
+const logical = calculateSheet({
+  A1: "10", A2: "ready", B1: '=IF(A1>=10,"Ready",1/0)', B2: '=IF(A2="READY",B1,missing!A1)',
+  B3: "=NOT(B1<>B2)", B4: "=IF(FALSE,B4,4)", B5: "=IF(FALSE,100)",
+  B6: '=IF(1+1&"x"="2x",TRUE(),FALSE())', B7: "=IF(TRUE,2,unsupported())",
+  B8: "=IF(FALSE,missing!A1,TRUE)+2", B9: "=IF(FALSE,#REF!,3)",
+});
+assert.deepEqual(Array.from({ length: 9 }, (_, index) => logical("B" + (index + 1))),
+  ["Ready", "Ready", true, 4, false, true, "#ERROR!", 3, 3]);
+assert.equal(displayCell(true, "number"), "TRUE");
+assert.equal(toCsv({ A1: "=TRUE", A2: "=FALSE" }), "TRUE\r\nFALSE");
 assert.deepEqual(parseCsv(toCsv({ A1: "2", B1: "=A1*3", A2: 'a,"b"', B2: "@external" })), [["2", "6"], ['a,"b"', "'@external"]]);
 console.log("Sheets calculations, CSV quoting, and input limits passed.");
 
@@ -80,12 +90,13 @@ vm.runInNewContext(fs.readFileSync(new URL("../assets/vendor/fflate.min.js", imp
 const zip = zipContext.fflate;
 const dom = new JSDOM();
 try {
-  const textSheets = [{ name: "Text", cells: { A1: "  Case ", A2: '=UPPER(TRIM(A1))&" & notes"', A3: '="#REF!"', A4: "=missing!A1" } }];
+  const textSheets = [{ name: "Text", cells: { A1: "  Case ", A2: '=UPPER(TRIM(A1))&" & notes"', A3: '="#REF!"', A4: "=missing!A1", A5: "=NOT(FALSE())" } }];
   const textBytes = exportWorkbook(textSheets, zip);
   const textXml = zip.strFromU8(zip.unzipSync(textBytes)["xl/worksheets/sheet1.xml"]);
   assert.match(textXml, /<c r="A2" t="str"><f>[^<]+<\/f><v>CASE &amp; notes<\/v><\/c>/);
   assert.match(textXml, /<c r="A3" t="str"><f>[^<]+<\/f><v>#REF!<\/v><\/c>/);
   assert.match(textXml, /<c r="A4" t="inlineStr">/);
+  assert.match(textXml, /<c r="A5" t="b"><f>NOT\(FALSE\(\)\)<\/f><v>1<\/v><\/c>/);
   assert.deepEqual(importWorkbook(textBytes, zip, dom.window.DOMParser)[0].cells, { ...textSheets[0].cells, A4: "'=missing!A1" });
   const sheets = [{ name: "Sales & costs", cells: { A1: "10", A2: "20", A3: "=SUM(A1:A2)", B1: "001", B2: "'=literal" }, formats: { A3: "number", C1: "percent" } }, { name: "Notes", cells: { A1: 'Quotes and <symbols> "work"' }, formats: {} }];
   const validation = { C4: ["Ready", "On hold"], C5: ["Ready", "On hold"] };

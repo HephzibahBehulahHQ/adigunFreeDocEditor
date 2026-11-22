@@ -189,6 +189,7 @@ export function chartValues(chart, valueAt) {
 }
 
 export function displayCell(value, format, locale) {
+  if (typeof value === "boolean") return formulaText(value);
   if (!Object.hasOwn(numberFormats, format) || format === "general") return value;
   const numeric = typeof value === "number" || (typeof value === "string" && /^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(value.trim()));
   if (!numeric || !Number.isFinite(Number(value))) return value;
@@ -310,7 +311,30 @@ export function calculateSheet(cells) {
 const numericLiteral = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 const formulaError = /^#(?:CYCLE|ERROR|VALUE|REF|DIV\/0)!$/;
 const emptyReference = Symbol("empty reference");
-const formulaText = (value) => value === emptyReference ? "" : String(value);
+function formulaText(value) {
+  if (value === emptyReference) return "";
+  return typeof value === "boolean" ? String(value).toUpperCase() : String(value);
+}
+
+function logicalValue(value) {
+  if (value === emptyReference) return false;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value !== 0;
+  throw new Error("#VALUE!");
+}
+
+function compareFormulaValues(left, right) {
+  const defaultValue = { number: 0, boolean: false, string: "" };
+  if (left === emptyReference) left = defaultValue[typeof right] ?? 0;
+  if (right === emptyReference) right = defaultValue[typeof left] ?? 0;
+  const types = ["number", "string", "boolean"];
+  if (typeof left !== typeof right) return types.indexOf(typeof left) - types.indexOf(typeof right);
+  if (typeof left === "string") {
+    left = left.toUpperCase();
+    right = right.toUpperCase();
+  }
+  return left === right ? 0 : left < right ? -1 : 1;
+}
 const textFunctions = new Map([
   ["LEN", (text) => text.length],
   ["LOWER", (text) => text.toLowerCase()],
@@ -330,6 +354,7 @@ export function calculateWorkbook(sheets, active) {
   const numeric = (value) => {
     if (value === "" || value === emptyReference) return 0;
     if (typeof value === "number") return value;
+    if (typeof value === "boolean") return Number(value);
     if (formulaError.test(value)) throw new Error(value);
     if (!numericLiteral.test(value.trim())) throw new Error("#VALUE!");
     const number = Number(value);
@@ -375,8 +400,7 @@ export function calculateWorkbook(sheets, active) {
 }
 
 function evaluateFormula(expression, scalarAt, numeric, valueAt) {
-  const tokens = expression.match(/"(?:[^"]|"")*"|#REF!|(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|[A-Za-z]+|[()+*/,:&-]|[^\s]/gi) ?? [];
-  if (tokens.some((token) => token.toUpperCase() === "#REF!")) throw new Error("#REF!");
+  const tokens = expression.match(/"(?:[^"]|"")*"|#REF!|(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|[A-Za-z]+|<=|>=|<>|[^\s]/gi) ?? [];
   if (tokens.length > 200) throw new Error("Formula is too long.");
   let index = 0;
   const take = (token) => tokens[index] === token && Boolean(++index);
@@ -388,52 +412,92 @@ function evaluateFormula(expression, scalarAt, numeric, valueAt) {
     return { address, sheet };
   }
   function term() {
-    if (take("-")) return -numeric(term());
-    if (take("+")) return numeric(term());
+    if (tokens[index] === "-" || tokens[index] === "+") {
+      const sign = tokens[index++] === "-" ? -1 : 1;
+      const operand = term();
+      return () => sign * numeric(operand());
+    }
     if (take("(")) {
-      const value = concatenate();
+      const value = comparison();
       if (!take(")")) throw new Error("Unclosed parenthesis.");
       return value;
     }
     const source = tokens[index++];
     const token = source?.toUpperCase();
-    if (source?.length >= 2 && source.startsWith('"')) return source.slice(1, -1).replaceAll('""', '"');
+    if (token === "#REF!") {
+      if (take(":") && !reference(tokens[index++])) throw new Error("#REF!");
+      return () => { throw new Error("#REF!"); };
+    }
+    if (source?.length >= 2 && source.startsWith('"')) return () => source.slice(1, -1).replaceAll('""', '"');
     const cell = reference(source);
-    if (cell) return scalarAt(cell.address, cell.sheet);
-    if (/^(?:\d+(?:\.\d*)?|\.\d+)(?:E[+-]?\d+)?$/.test(token)) return Number(token);
+    if (cell) return () => scalarAt(cell.address, cell.sheet);
+    if (/^(?:\d+(?:\.\d*)?|\.\d+)(?:E[+-]?\d+)?$/.test(token)) return () => Number(token);
+    if (token === "TRUE" || token === "FALSE") {
+      if (take("(") && !take(")")) throw new Error("#VALUE!");
+      return () => token === "TRUE";
+    }
     if (!take("(")) throw new Error("Unknown formula.");
-    if (textFunctions.has(token)) {
-      const value = concatenate();
+    if (token === "IF") {
+      const condition = comparison();
+      if (!take(",")) throw new Error("#VALUE!");
+      const yes = comparison();
+      const no = take(",") ? comparison() : () => false;
       if (!take(")")) throw new Error("#VALUE!");
-      return textFunctions.get(token)(formulaText(value));
+      return () => logicalValue(condition()) ? yes() : no();
+    }
+    if (token === "NOT") {
+      const value = comparison();
+      if (!take(")")) throw new Error("#VALUE!");
+      return () => !logicalValue(value());
+    }
+    if (textFunctions.has(token)) {
+      const value = comparison();
+      if (!take(")")) throw new Error("#VALUE!");
+      return () => textFunctions.get(token)(formulaText(value()));
     }
     if (!["SUM", "AVERAGE", "MIN", "MAX", "COUNT", "ABS", "ROUND", "MOD"].includes(token)) throw new Error("Unknown formula.");
     const scalar = ["ABS", "ROUND", "MOD"].includes(token);
-    const values = [];
+    const argumentsFor = [];
     do {
       const start = reference(tokens[index]);
       if (start && tokens[index + 1] === ":") {
         if (scalar) throw new Error("#VALUE!");
         const end = reference(tokens[index + 2]);
-        if (!end || (end.sheet && end.sheet.toUpperCase() !== start.sheet?.toUpperCase())) throw new Error("Invalid range.");
+        if (!end) {
+          if (tokens[index + 2]?.toUpperCase() === "#REF!") throw new Error("#REF!");
+          throw new Error("Invalid range.");
+        }
+        if (end.sheet && end.sheet.toUpperCase() !== start.sheet?.toUpperCase()) throw new Error("Invalid range.");
         const { address: first, sheet } = start;
         const last = end.address;
         index += 3;
-        for (let row = Math.min(+first.slice(1), +last.slice(1)); row <= Math.max(+first.slice(1), +last.slice(1)); row++) {
-          for (let column = Math.min(first.charCodeAt(0), last.charCodeAt(0)); column <= Math.max(first.charCodeAt(0), last.charCodeAt(0)); column++) {
-            const value = valueAt(String.fromCharCode(column) + row, sheet);
-            if (value === "") continue;
-            if (token === "COUNT" && (!numericLiteral.test(String(value).trim()) || !Number.isFinite(Number(value)))) continue;
-            values.push(numeric(value));
+        argumentsFor.push(() => {
+          const values = [];
+          for (let row = Math.min(+first.slice(1), +last.slice(1)); row <= Math.max(+first.slice(1), +last.slice(1)); row++) {
+            for (let column = Math.min(first.charCodeAt(0), last.charCodeAt(0)); column <= Math.max(first.charCodeAt(0), last.charCodeAt(0)); column++) {
+              const value = valueAt(String.fromCharCode(column) + row, sheet);
+              if (value === "" || typeof value === "boolean") continue;
+              if (token === "COUNT" && (!numericLiteral.test(String(value).trim()) || !Number.isFinite(Number(value)))) continue;
+              values.push(numeric(value));
+            }
           }
-        }
+          return values;
+        });
       } else if (token === "COUNT" && start && [",", ")"].includes(tokens[index + 1])) {
         index++;
-        const value = valueAt(start.address, start.sheet);
-        if (numericLiteral.test(String(value).trim()) && Number.isFinite(Number(value))) values.push(numeric(value));
-      } else values.push(numeric(concatenate()));
+        argumentsFor.push(() => {
+          const value = valueAt(start.address, start.sheet);
+          return numericLiteral.test(String(value).trim()) && Number.isFinite(Number(value)) ? [numeric(value)] : [];
+        });
+      } else {
+        const value = comparison();
+        argumentsFor.push(() => [numeric(value())]);
+      }
     } while (take(","));
     if (!take(")")) throw new Error("Unclosed function.");
+    return () => calculateNumericFunction(token, argumentsFor.flatMap((argument) => argument()), scalar);
+  }
+  function calculateNumericFunction(token, values, scalar) {
     if (token === "COUNT") return values.length;
     if (token === "ABS" && values.length === 1) return Math.abs(values[0]);
     if (token === "MOD" && values.length === 2) {
@@ -457,35 +521,56 @@ function evaluateFormula(expression, scalarAt, numeric, valueAt) {
     const total = values.reduce((result, value) => result + value, 0);
     return token === "AVERAGE" ? total / values.length : total;
   }
-  function product() {
-    let value = term();
-    while (["*", "/"].includes(tokens[index])) {
+  function binary(parseOperand, operators) {
+    let value = parseOperand();
+    while (Object.hasOwn(operators, tokens[index])) {
       const operator = tokens[index++];
-      const right = numeric(term());
-      if (operator === "/" && right === 0) throw new Error("#DIV/0!");
-      value = operator === "*" ? numeric(value) * right : numeric(value) / right;
+      const left = value;
+      const right = parseOperand();
+      value = () => operators[operator](left(), right());
     }
     return value;
+  }
+  const products = {
+    "*": (left, right) => numeric(left) * numeric(right),
+    "/": (left, right) => {
+      const divisor = numeric(right);
+      if (!divisor) throw new Error("#DIV/0!");
+      return numeric(left) / divisor;
+    },
+  };
+  const sums = {
+    "+": (left, right) => numeric(left) + numeric(right),
+    "-": (left, right) => numeric(left) - numeric(right),
+  };
+  const joins = { "&": (left, right) => {
+    const result = formulaText(left) + formulaText(right);
+    if (result.length > 32767) throw new Error("#VALUE!");
+    return result;
+  } };
+  const comparisons = {
+    "=": (left, right) => compareFormulaValues(left, right) === 0,
+    "<>": (left, right) => compareFormulaValues(left, right) !== 0,
+    "<": (left, right) => compareFormulaValues(left, right) < 0,
+    ">": (left, right) => compareFormulaValues(left, right) > 0,
+    "<=": (left, right) => compareFormulaValues(left, right) <= 0,
+    ">=": (left, right) => compareFormulaValues(left, right) >= 0,
+  };
+  function product() {
+    return binary(term, products);
   }
   function sum() {
-    let value = product();
-    while (["+", "-"].includes(tokens[index])) {
-      const operator = tokens[index++];
-      const right = numeric(product());
-      value = operator === "+" ? numeric(value) + right : numeric(value) - right;
-    }
-    return value;
+    return binary(product, sums);
   }
   function concatenate() {
-    let value = sum();
-    while (take("&")) {
-      value = formulaText(value) + formulaText(sum());
-      if (value.length > 32767) throw new Error("#VALUE!");
-    }
-    return value;
+    return binary(sum, joins);
   }
-  const value = concatenate();
+  function comparison() {
+    return binary(concatenate, comparisons);
+  }
+  const evaluate = comparison();
   if (index !== tokens.length) throw new Error("Unexpected formula tokens.");
+  const value = evaluate();
   return value === emptyReference ? 0 : value;
 }
 
@@ -496,7 +581,7 @@ export function toCsv(cells, valueAt = calculateSheet(cells)) {
   const columns = Math.max(...addresses.map((address) => address.charCodeAt(0) - 64));
   return Array.from({ length: rows }, (_, row) => Array.from({ length: columns }, (_, column) => {
     const value = valueAt(cellAddress(row, column));
-    const text = typeof value === "string" && /^\s*[=+@-]/.test(value) && !/^[+-]?\d+(?:\.\d+)?$/.test(value.trim()) ? "'" + value : String(value);
+    const text = typeof value === "string" && /^\s*[=+@-]/.test(value) && !/^[+-]?\d+(?:\.\d+)?$/.test(value.trim()) ? "'" + value : formulaText(value);
     return /[",\r\n]/.test(text) ? '"' + text.replaceAll('"', '""') + '"' : text;
   }).join(",")).join("\r\n");
 }
