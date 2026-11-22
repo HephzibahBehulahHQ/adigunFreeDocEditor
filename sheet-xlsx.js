@@ -148,7 +148,7 @@ function readValidation(worksheet) {
   return validation;
 }
 
-export function exportWorkbook(sheets, zip) {
+export function exportWorkbook(sheets, zip, date1904 = false) {
   const files = {};
   const workbookSheets = [];
   const rels = [];
@@ -182,7 +182,7 @@ export function exportWorkbook(sheets, zip) {
     }
     rels.push(`<Relationship Id="rId${id}" Type="${officeNs}/worksheet" Target="${target}"/>`);
     overrides.push(`<Override PartName="/xl/${target}" ContentType="${worksheetType}"/>`);
-    const valueAt = calculateWorkbook(sheets, index);
+    const valueAt = calculateWorkbook(sheets, index, date1904);
     files["xl/" + target] = makeWorksheet(sheet, valueAt, styleBook);
     if (sheet.chart) writeWorksheetChart(files, overrides, id, name, sheet.chart, valueAt, xml);
   }
@@ -196,7 +196,8 @@ export function exportWorkbook(sheets, zip) {
     ? `<bookViews><workbookView activeTab="${Math.max(0, sheets.findIndex((sheet) => !sheet.hidden))}"/></bookViews>`
     : "";
   const definedNames = printNames.length ? `<definedNames>${printNames.join("")}</definedNames>` : "";
-  files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}">${workbookViews}<sheets>${workbookSheets.join("")}</sheets>${definedNames}</workbook>`;
+  const workbookProperties = date1904 ? '<workbookPr date1904="1"/>' : "";
+  files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}">${workbookProperties}${workbookViews}<sheets>${workbookSheets.join("")}</sheets>${definedNames}</workbook>`;
   files["xl/_rels/workbook.xml.rels"] = `<Relationships xmlns="${packageNs}">${rels.join("")}</Relationships>`;
   files["_rels/.rels"] = `<Relationships xmlns="${packageNs}"><Relationship Id="rId1" Type="${officeNs}/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
   files["[Content_Types].xml"] = `<Types xmlns="${contentNs}"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="${workbookType}"/>${overrides.join("")}</Types>`;
@@ -258,11 +259,12 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     return conditionNames.find((name) => "FF" + conditionalColors[name] === color);
   });
   const workbook = parse("xl/workbook.xml");
+  const date1904 = ["1", "true"].includes(workbook.getElementsByTagNameNS(mainNs, "workbookPr")[0]?.getAttribute("date1904"));
   const definitions = [...workbook.getElementsByTagNameNS("*", "sheet")];
   const printNames = [...workbook.getElementsByTagNameNS(mainNs, "definedName")].filter((item) =>
     ["_xlnm.Print_Area", "_xlnm.Print_Titles"].includes(item.getAttribute("name")) && /^\d+$/.test(item.getAttribute("localSheetId") ?? ""));
   if (!definitions.length || definitions.length > 12) throw new Error("A workbook must contain between 1 and 12 sheets.");
-  return definitions.map((definition, index) => {
+  const sheets = definitions.map((definition, index) => {
     const relationship = [...definition.attributes].find((attribute) => attribute.localName === "id" && attribute.namespaceURI);
     const target = relationships.get(relationship?.value) || "";
     const path = target.startsWith("/") ? target.slice(1) : "xl/" + target;
@@ -344,4 +346,5 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const hidden = ["hidden", "veryHidden"].includes(definition.getAttribute("state"));
     return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print };
   });
+  return { sheets, date1904 };
 }

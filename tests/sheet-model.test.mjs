@@ -99,6 +99,19 @@ const lookup = calculateWorkbook([
 ], 0);
 assert.deepEqual(Array.from({ length: 7 }, (_, index) => lookup("A" + (index + 1))),
   [2, "Drive", "Literal", "Second ten", "#N/A", "#REF!", "#VALUE!"]);
+const dateSheets = [{ name: "Dates", formats: { A1: "date" }, cells: {
+  A1: "=DATE(2024,2,29)", A2: "=YEAR(A1)", A3: "=MONTH(A1)", A4: "=DAY(A1)",
+  B1: "=DATE(1900,2,29)", B2: "=DAY(60)", B3: "=DATE(2024,3,0)", B4: "=DATE(2023,14,29)",
+  C1: "=DATE(10000,1,1)", C2: "=YEAR(-1)", C3: "=DATE(1904,1,1)",
+} }];
+const dates1900 = calculateWorkbook(dateSheets, 0);
+assert.deepEqual(["A1", "A2", "A3", "A4", "B1", "B2", "B3", "B4", "C1", "C2", "C3"].map(dates1900),
+  [45351, 2024, 2, 29, 60, 29, 45351, 45351, "#NUM!", "#NUM!", 1462]);
+const dates1904 = calculateWorkbook(dateSheets, 0, true);
+assert.equal(dates1904("A1"), 43889);
+assert.equal(dates1904("C3"), 0);
+assert.equal(displayCell(dates1904("A1"), "date", undefined, true), "2024-02-29");
+assert.equal(displayCell(60, "date"), "1900-02-29");
 assert.deepEqual(parseCsv(toCsv({ A1: "2", B1: "=A1*3", A2: 'a,"b"', B2: "@external" })), [["2", "6"], ['a,"b"', "'@external"]]);
 console.log("Sheets calculations, CSV quoting, and input limits passed.");
 
@@ -114,13 +127,18 @@ try {
   assert.match(textXml, /<c r="A3" t="str"><f>[^<]+<\/f><v>#REF!<\/v><\/c>/);
   assert.match(textXml, /<c r="A4" t="inlineStr">/);
   assert.match(textXml, /<c r="A5" t="b"><f>NOT\(FALSE\(\)\)<\/f><v>1<\/v><\/c>/);
-  assert.deepEqual(importWorkbook(textBytes, zip, dom.window.DOMParser)[0].cells, { ...textSheets[0].cells, A4: "'=missing!A1" });
+  assert.deepEqual(importWorkbook(textBytes, zip, dom.window.DOMParser).sheets[0].cells, { ...textSheets[0].cells, A4: "'=missing!A1" });
   const lookupCells = { A1: "Bolt", B1: "8", C1: '=VLOOKUP("bolt",A1:B1,2,FALSE)', C2: '=VLOOKUP("nut",A1:B1,2,FALSE)' };
   const lookupBytes = exportWorkbook([{ name: "Inventory", cells: lookupCells }], zip);
   const lookupXml = zip.strFromU8(zip.unzipSync(lookupBytes)["xl/worksheets/sheet1.xml"]);
   assert.match(lookupXml, /<c r="C1"><f>[^<]+<\/f><v>8<\/v><\/c>/);
   assert.match(lookupXml, /<c r="C2" t="e"><f>[^<]+<\/f><v>#N\/A<\/v><\/c>/);
-  assert.deepEqual(importWorkbook(lookupBytes, zip, dom.window.DOMParser)[0].cells, lookupCells);
+  assert.deepEqual(importWorkbook(lookupBytes, zip, dom.window.DOMParser).sheets[0].cells, lookupCells);
+  const dateBytes = exportWorkbook(dateSheets, zip, true);
+  const dateWorkbook = importWorkbook(dateBytes, zip, dom.window.DOMParser);
+  assert.equal(dateWorkbook.date1904, true);
+  assert.equal(dateWorkbook.sheets[0].formats.A1, "date");
+  assert.equal(calculateWorkbook(dateWorkbook.sheets, 0, dateWorkbook.date1904)("A1"), 43889);
   const sheets = [{ name: "Sales & costs", cells: { A1: "10", A2: "20", A3: "=SUM(A1:A2)", B1: "001", B2: "'=literal" }, formats: { A3: "number", C1: "percent" } }, { name: "Notes", cells: { A1: 'Quotes and <symbols> "work"' }, formats: {} }];
   const validation = { C4: ["Ready", "On hold"], C5: ["Ready", "On hold"] };
   const filter = { range: "A1:B3", column: "A", value: "20" };
@@ -129,7 +147,7 @@ try {
   const styles = { A3: { bold: true, italic: true, font: "Georgia", size: 14, align: "right", color: "2543A0", fill: "FFE5AA", border: true } };
   const print = { range: "A1:B3", paper: "letter", orientation: "landscape", grid: true, repeat: true };
   const bytes = exportWorkbook([{ ...sheets[0], freezeFirstRow: true, validation, filter, chart, conditionalRule, styles, print }, { ...sheets[1], hidden: true }], zip);
-  const imported = importWorkbook(bytes, zip, dom.window.DOMParser);
+  const { sheets: imported } = importWorkbook(bytes, zip, dom.window.DOMParser);
   assert.deepEqual(imported.map(({ name, cells, formats }) => ({ name, cells, formats })), sheets);
   assert.equal(calculateSheet(imported[0].cells)("A3"), 30);
   assert.equal(imported[0].freezeFirstRow, true);
@@ -141,7 +159,7 @@ try {
   assert.deepEqual(imported[0].conditionalRule, conditionalRule);
   assert.deepEqual(imported[0].styles, styles);
   assert.deepEqual(imported[0].print, print);
-  const reopened = importWorkbook(exportWorkbook(linked, zip), zip, dom.window.DOMParser);
+  const { sheets: reopened } = importWorkbook(exportWorkbook(linked, zip), zip, dom.window.DOMParser);
   assert.equal(reopened[0].cells.A1, linked[0].cells.A1);
   assert.equal(calculateWorkbook(reopened, 0)("A1"), 14);
   const parts = zip.unzipSync(bytes);
@@ -149,7 +167,7 @@ try {
   assert.match(zip.strFromU8(parts["xl/worksheets/sheet1.xml"]), /<row r="3" hidden="1">/);
   const worksheet = zip.strFromU8(parts["xl/worksheets/sheet1.xml"]);
   parts["xl/worksheets/sheet1.xml"] = zip.strToU8(worksheet.replace("<filters>", '<filters blank="0">'));
-  assert.deepEqual(importWorkbook(zip.zipSync(parts), zip, dom.window.DOMParser)[0].filter, filter);
+  assert.deepEqual(importWorkbook(zip.zipSync(parts), zip, dom.window.DOMParser).sheets[0].filter, filter);
   parts["xl/worksheets/sheet2.xml"] = zip.strToU8(zip.strFromU8(parts["xl/worksheets/sheet2.xml"]).replace('r="A1"', 'r="AA1"'));
   assert.throws(() => importWorkbook(zip.zipSync(parts), zip, dom.window.DOMParser), /26-column/);
 } finally {

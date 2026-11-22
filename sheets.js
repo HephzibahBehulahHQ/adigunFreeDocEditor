@@ -44,7 +44,7 @@ try {
     let active = Number.isInteger(stored.active) ? Math.max(0, Math.min(stored.active, sheets.length - 1)) : 0;
     if (sheets[active].hidden) active = Math.max(0, sheets.findIndex((sheet) => !sheet.hidden));
     sheets[active].hidden = false;
-    workbook = { name: typeof stored.name === "string" && stored.name.trim() ? stored.name.slice(0, 100) : defaultWorkbookName, active, sheets };
+    workbook = { name: typeof stored.name === "string" && stored.name.trim() ? stored.name.slice(0, 100) : defaultWorkbookName, active, sheets, date1904: stored.date1904 === true };
   }
 } catch {
   status("Local workbook could not be read.");
@@ -52,7 +52,7 @@ try {
 
 function status(message) { $("sheet-save").textContent = message; }
 function currentSheet() { return workbook.sheets[workbook.active]; }
-function workbookValues(index = workbook.active) { return calculateWorkbook(workbook.sheets, index); }
+function workbookValues(index = workbook.active) { return calculateWorkbook(workbook.sheets, index, workbook.date1904); }
 function sheetName(index) { return workbook.sheets[index].name || `Sheet ${index + 1}`; }
 
 function uniqueName(base, used = new Set(workbook.sheets.map((_, index) => sheetName(index).toUpperCase()))) {
@@ -146,7 +146,7 @@ function refreshValues() {
   for (const field of grid.querySelectorAll("input")) {
     const address = field.dataset.cell;
     const value = valueAt(address);
-    if (document.activeElement !== field) field.value = displayCell(value, sheet.formats?.[address]);
+    if (document.activeElement !== field) field.value = displayCell(value, sheet.formats?.[address], undefined, workbook.date1904);
     const fill = fillAt(address, value);
     field.toggleAttribute("data-conditional-fill", Boolean(fill));
     if (fill) field.style.setProperty("--conditional-fill", "#" + fill);
@@ -821,7 +821,7 @@ $("sheet-find-form").addEventListener("submit", (event) => {
   const valueAt = workbookValues();
   const match = [...inputs.slice(offset), ...inputs.slice(0, offset)].find(({ dataset }) => {
     const address = dataset.cell;
-    return [sheet.cells[address] ?? "", displayCell(valueAt(address), sheet.formats?.[address])]
+    return [sheet.cells[address] ?? "", displayCell(valueAt(address), sheet.formats?.[address], undefined, workbook.date1904)]
       .some((value) => String(value).toLocaleLowerCase().includes(query));
   });
   if (!match) { $("sheet-find-status").textContent = "No matching cells."; return; }
@@ -955,9 +955,13 @@ $("workbook-file").addEventListener("change", async (event) => {
   if (!file) return;
   if (file.size > 4 * 1024 * 1024) { status("Choose an XLSX file under 4 MB."); return; }
   try {
-    const sheets = importWorkbook(new Uint8Array(await file.arrayBuffer()), window.fflate);
+    const { sheets, date1904 } = importWorkbook(new Uint8Array(await file.arrayBuffer()), window.fflate);
     const emptyWorkbook = workbook.sheets.length === 1 && !Object.keys(workbook.sheets[0].cells).length;
     const existing = emptyWorkbook ? [] : workbook.sheets;
+    if (existing.length && date1904 !== Boolean(workbook.date1904)) {
+      status("This file uses a different date system. Open it in a new workbook.");
+      return;
+    }
     if (existing.length + sheets.length > maxSheets) { status("The import would exceed the workbook’s 12-sheet limit."); return; }
     const used = new Set(existing.map((_, index) => sheetName(index).toUpperCase()));
     const renamed = new Map();
@@ -975,7 +979,7 @@ $("workbook-file").addEventListener("change", async (event) => {
     if (firstVisible < 0) sheets[0].hidden = false;
     workbook = {
       name: existing.length ? workbook.name : file.name.replace(/\.xlsx$/i, "").slice(0, 100),
-      active: existing.length + Math.max(0, firstVisible), sheets: [...existing, ...sheets],
+      active: existing.length + Math.max(0, firstVisible), sheets: [...existing, ...sheets], date1904,
     };
     save();
     render();
@@ -1000,7 +1004,7 @@ $("sheet-export").addEventListener("click", () => {
 $("workbook-export").addEventListener("click", () => {
   try {
     const name = workbook.name.trim().replace(/[\\/:*?"<>|]/g, "-") || defaultWorkbookName;
-    download(exportWorkbook(workbook.sheets, window.fflate), xlsxMime, name + ".xlsx");
+    download(exportWorkbook(workbook.sheets, window.fflate, workbook.date1904), xlsxMime, name + ".xlsx");
   } catch {
     status("The Excel workbook could not be exported.");
   }
