@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, numberFormats, parseChartRange, parseCsv, parseSheetFilter, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, spreadsheetFonts, toCsv, validationOptions } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRange, normalizeNamedRanges, numberFormats, parseChartRange, parseCsv, parseSheetFilter, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, spreadsheetFonts, toCsv, validationOptions } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 import { bindSheetPrinting } from "./sheet-print.js";
 
@@ -44,7 +44,8 @@ try {
     let active = Number.isInteger(stored.active) ? Math.max(0, Math.min(stored.active, sheets.length - 1)) : 0;
     if (sheets[active].hidden) active = Math.max(0, sheets.findIndex((sheet) => !sheet.hidden));
     sheets[active].hidden = false;
-    workbook = { name: typeof stored.name === "string" && stored.name.trim() ? stored.name.slice(0, 100) : defaultWorkbookName, active, sheets, date1904: stored.date1904 === true };
+    workbook = { name: typeof stored.name === "string" && stored.name.trim() ? stored.name.slice(0, 100) : defaultWorkbookName, active, sheets, date1904: stored.date1904 === true,
+      namedRanges: normalizeNamedRanges(stored.namedRanges) };
   }
 } catch {
   status("Local workbook could not be read.");
@@ -52,7 +53,7 @@ try {
 
 function status(message) { $("sheet-save").textContent = message; }
 function currentSheet() { return workbook.sheets[workbook.active]; }
-function workbookValues(index = workbook.active) { return calculateWorkbook(workbook.sheets, index, workbook.date1904); }
+function workbookValues(index = workbook.active) { return calculateWorkbook(workbook.sheets, index, workbook.date1904, workbook.namedRanges); }
 function sheetName(index) { return workbook.sheets[index].name || `Sheet ${index + 1}`; }
 
 function uniqueName(base, used = new Set(workbook.sheets.map((_, index) => sheetName(index).toUpperCase()))) {
@@ -740,15 +741,94 @@ $("sheet-selected").addEventListener("keydown", (event) => {
   if (event.key !== "Enter" || event.isComposing) return;
   event.preventDefault();
   const name = event.currentTarget;
-  const label = name.value.trim().toUpperCase();
+  const query = name.value.trim().toUpperCase();
+  const named = workbook.namedRanges?.find((entry) => entry.name.toUpperCase() === query);
+  if (named) {
+    const index = workbook.sheets.findIndex((sheet, position) => !sheet.hidden && sheetName(position).toUpperCase() === named.sheet.toUpperCase());
+    if (index < 0) { status("Show the named range's worksheet first."); return; }
+    if (index !== workbook.active) {
+      workbook.active = index;
+      save();
+      render();
+    }
+  }
+  const label = named?.range ?? query;
   const [first, last = first, extra] = label.split(":");
   const field = (address) => validAddress.test(address) && grid.querySelector(`[data-cell="${address}"]`);
   if (!field(first) || !field(last) || extra !== undefined || field(first).closest("tr").hidden) {
-    status("Enter a cell or range within this sheet, such as B2 or B2:F12.");
+    status("Enter a visible cell, range, or named range.");
     return;
   }
   field(first).focus();
   selectRange(first, last);
+});
+
+const namesDialog = $("sheet-names-dialog");
+const namesForm = namesDialog.querySelector("form");
+const namesStatus = namesDialog.querySelector("[role=status]");
+const { saved: namePicker, rangeName, worksheet: namedSheet, range: namedCells } = namesForm.elements;
+const removeName = namesForm.querySelector("[data-remove]");
+function expandNamedSheet(sheets, entry) {
+  const sheet = sheets.find((item, index) => (item.name || `Sheet ${index + 1}`).toUpperCase() === entry.sheet.toUpperCase());
+  if (!sheet) return false;
+  const last = entry.range.split(":").at(-1);
+  const rows = Math.max(sheet.rows, Number(last.slice(1)));
+  const columns = Math.max(sheet.columns, last.charCodeAt(0) - 64);
+  const expanded = rows !== sheet.rows || columns !== sheet.columns;
+  Object.assign(sheet, { rows, columns });
+  return expanded;
+}
+function renderNames(selected = "") {
+  const ranges = workbook.namedRanges ?? [];
+  namePicker.replaceChildren(new Option("New named range", ""), ...ranges.map((entry) => new Option(entry.name)));
+  namePicker.value = selected;
+  const entry = ranges.find(({ name }) => name === selected);
+  rangeName.value = entry?.name ?? "";
+  rangeName.readOnly = Boolean(entry);
+  namedSheet.value = entry?.sheet ?? sheetName(workbook.active);
+  namedCells.value = entry?.range ?? selectedRange?.label ?? selectedAddress;
+  removeName.disabled = !entry;
+}
+$("sheet-named-ranges").addEventListener("click", () => {
+  namedSheet.replaceChildren(...workbook.sheets.map((_, index) => new Option(sheetName(index))));
+  namesStatus.textContent = "";
+  renderNames();
+  namesDialog.showModal();
+});
+namePicker.addEventListener("change", () => { namesStatus.textContent = ""; renderNames(namePicker.value); });
+namesForm.querySelector("[data-close]").addEventListener("click", () => namesDialog.close());
+namesForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const entry = normalizeNamedRange({ name: rangeName.value, sheet: namedSheet.value, range: namedCells.value });
+  if (!entry) {
+    namesStatus.textContent = "Enter a valid name and cell range. Names start with a letter or underscore and contain no spaces or cell references.";
+    return;
+  }
+  const ranges = workbook.namedRanges ?? [];
+  const existing = ranges.findIndex(({ name }) => name.toUpperCase() === entry.name.toUpperCase());
+  if ((!namePicker.value && existing >= 0) || (existing < 0 && ranges.length >= 200)) {
+    namesStatus.textContent = existing >= 0 ? "Select the existing name to change its range." : "This workbook already has 200 named ranges.";
+    return;
+  }
+  recordEdit();
+  if (existing < 0) ranges.push(entry);
+  else ranges[existing] = entry;
+  workbook.namedRanges = ranges;
+  const expanded = expandNamedSheet(workbook.sheets, entry);
+  save();
+  if (expanded) render();
+  else refreshValues();
+  renderNames(entry.name);
+  namesStatus.textContent = "Named range saved.";
+});
+removeName.addEventListener("click", () => {
+  if (!namePicker.value) return;
+  recordEdit();
+  workbook.namedRanges = workbook.namedRanges.filter(({ name }) => name !== namePicker.value);
+  save();
+  refreshValues();
+  renderNames();
+  namesStatus.textContent = "Named range removed. Undo restores it.";
 });
 $("sheet-formula").addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); event.currentTarget.blur(); }
@@ -955,14 +1035,20 @@ $("workbook-file").addEventListener("change", async (event) => {
   if (!file) return;
   if (file.size > 4 * 1024 * 1024) { status("Choose an XLSX file under 4 MB."); return; }
   try {
-    const { sheets, date1904 } = importWorkbook(new Uint8Array(await file.arrayBuffer()), window.fflate);
-    const emptyWorkbook = workbook.sheets.length === 1 && !Object.keys(workbook.sheets[0].cells).length;
+    const { sheets, date1904, namedRanges } = importWorkbook(new Uint8Array(await file.arrayBuffer()), window.fflate);
+    const emptyWorkbook = workbook.sheets.length === 1 && !Object.keys(workbook.sheets[0].cells).length && !workbook.namedRanges?.length;
     const existing = emptyWorkbook ? [] : workbook.sheets;
     if (existing.length && date1904 !== Boolean(workbook.date1904)) {
       status("This file uses a different date system. Open it in a new workbook.");
       return;
     }
     if (existing.length + sheets.length > maxSheets) { status("The import would exceed the workbook’s 12-sheet limit."); return; }
+    const existingNames = existing.length ? workbook.namedRanges ?? [] : [];
+    const defined = new Set(existingNames.map(({ name }) => name.toUpperCase()));
+    if (namedRanges.some(({ name }) => defined.has(name.toUpperCase())) || existingNames.length + namedRanges.length > 200) {
+      status("The incoming workbook has conflicting or too many named ranges. Open it in a new workbook.");
+      return;
+    }
     const used = new Set(existing.map((_, index) => sheetName(index).toUpperCase()));
     const renamed = new Map();
     for (const [index, sheet] of sheets.entries()) {
@@ -974,12 +1060,15 @@ $("workbook-file").addEventListener("change", async (event) => {
     if (renamed.size) for (const sheet of sheets) {
       for (const address of Object.keys(sheet.cells)) sheet.cells[address] = renameSheetReferences(sheet.cells[address], renamed);
     }
+    const importedNames = namedRanges.map((entry) => ({ ...entry, sheet: renamed.get(entry.sheet.toUpperCase()) ?? entry.sheet }));
+    for (const entry of importedNames) expandNamedSheet(sheets, entry);
     recordEdit();
     const firstVisible = sheets.findIndex((sheet) => !sheet.hidden);
     if (firstVisible < 0) sheets[0].hidden = false;
     workbook = {
       name: existing.length ? workbook.name : file.name.replace(/\.xlsx$/i, "").slice(0, 100),
       active: existing.length + Math.max(0, firstVisible), sheets: [...existing, ...sheets], date1904,
+      namedRanges: [...existingNames, ...importedNames],
     };
     save();
     render();
@@ -1004,7 +1093,7 @@ $("sheet-export").addEventListener("click", () => {
 $("workbook-export").addEventListener("click", () => {
   try {
     const name = workbook.name.trim().replace(/[\\/:*?"<>|]/g, "-") || defaultWorkbookName;
-    download(exportWorkbook(workbook.sheets, window.fflate, workbook.date1904), xlsxMime, name + ".xlsx");
+    download(exportWorkbook(workbook.sheets, window.fflate, workbook.date1904, workbook.namedRanges), xlsxMime, name + ".xlsx");
   } catch {
     status("The Excel workbook could not be exported.");
   }
@@ -1080,6 +1169,9 @@ manageForm.addEventListener("submit", (event) => {
   recordEdit();
   workbook.sheets[index].name = name;
   const names = new Map([[previous.toUpperCase(), name]]);
+  for (const entry of workbook.namedRanges ?? []) {
+    if (entry.sheet.toUpperCase() === previous.toUpperCase()) entry.sheet = name;
+  }
   for (const sheet of workbook.sheets) {
     for (const address of Object.keys(sheet.cells)) sheet.cells[address] = renameSheetReferences(sheet.cells[address], names);
   }
@@ -1102,7 +1194,10 @@ function sheetMutation(action) {
     return;
   }
   if (action === "visibility") sheet.hidden = !sheet.hidden;
-  if (action === "delete") workbook.sheets.splice(index, 1);
+  if (action === "delete") {
+    workbook.namedRanges = (workbook.namedRanges ?? []).filter((entry) => entry.sheet.toUpperCase() !== sheet.name.toUpperCase());
+    workbook.sheets.splice(index, 1);
+  }
   if (action === "earlier" || action === "later") {
     const target = index + (action === "earlier" ? -1 : 1);
     [workbook.sheets[index], workbook.sheets[target]] = [workbook.sheets[target], workbook.sheets[index]];

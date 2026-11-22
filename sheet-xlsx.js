@@ -1,4 +1,4 @@
-import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizePrintSettings, numberFormats, parseSheetFilter, validationOptions } from "./sheet-model.js";
+import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRanges, normalizePrintSettings, numberFormats, parseSheetFilter, validationOptions } from "./sheet-model.js";
 import { readWorksheetChart, writeWorksheetChart } from "./sheet-chart-xlsx.js";
 
 const mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -148,7 +148,7 @@ function readValidation(worksheet) {
   return validation;
 }
 
-export function exportWorkbook(sheets, zip, date1904 = false) {
+export function exportWorkbook(sheets, zip, date1904 = false, namesInput) {
   const files = {};
   const workbookSheets = [];
   const rels = [];
@@ -182,7 +182,7 @@ export function exportWorkbook(sheets, zip, date1904 = false) {
     }
     rels.push(`<Relationship Id="rId${id}" Type="${officeNs}/worksheet" Target="${target}"/>`);
     overrides.push(`<Override PartName="/xl/${target}" ContentType="${worksheetType}"/>`);
-    const valueAt = calculateWorkbook(sheets, index, date1904);
+    const valueAt = calculateWorkbook(sheets, index, date1904, namesInput);
     files["xl/" + target] = makeWorksheet(sheet, valueAt, styleBook);
     if (sheet.chart) writeWorksheetChart(files, overrides, id, name, sheet.chart, valueAt, xml);
   }
@@ -195,7 +195,13 @@ export function exportWorkbook(sheets, zip, date1904 = false) {
   const workbookViews = sheets.some((sheet) => sheet.freezeFirstRow || sheet.hidden)
     ? `<bookViews><workbookView activeTab="${Math.max(0, sheets.findIndex((sheet) => !sheet.hidden))}"/></bookViews>`
     : "";
-  const definedNames = printNames.length ? `<definedNames>${printNames.join("")}</definedNames>` : "";
+  const namedRanges = normalizeNamedRanges(namesInput).map(({ name, sheet, range }) => {
+    const absolute = range.replace(/([A-Z])(\d+)/g, (_, column, row) => "$" + column + "$" + row);
+    const reference = "'" + sheet.replaceAll("'", "''") + "'!" + absolute;
+    return `<definedName name="${xml(name)}">${xml(reference)}</definedName>`;
+  });
+  const definitions = [...printNames, ...namedRanges];
+  const definedNames = definitions.length ? `<definedNames>${definitions.join("")}</definedNames>` : "";
   const workbookProperties = date1904 ? '<workbookPr date1904="1"/>' : "";
   files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}">${workbookProperties}${workbookViews}<sheets>${workbookSheets.join("")}</sheets>${definedNames}</workbook>`;
   files["xl/_rels/workbook.xml.rels"] = `<Relationships xmlns="${packageNs}">${rels.join("")}</Relationships>`;
@@ -346,5 +352,13 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const hidden = ["hidden", "veryHidden"].includes(definition.getAttribute("state"));
     return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print };
   });
-  return { sheets, date1904 };
+  const sheetNames = new Map(sheets.map(({ name }, index) => [(name || `Sheet ${index + 1}`).toUpperCase(), name || `Sheet ${index + 1}`]));
+  const namedRanges = normalizeNamedRanges([...workbook.getElementsByTagNameNS(mainNs, "definedName")].flatMap((item) => {
+    if (item.hasAttribute("localSheetId") || ["1", "true"].includes(item.getAttribute("hidden"))) return [];
+    const match = /^(?:'((?:[^']|'')+)'|([\w.]+))!(\$[A-Z]\$(?:[1-9]\d?|100)(?::\$[A-Z]\$(?:[1-9]\d?|100))?)$/i.exec(item.textContent.trim());
+    if (!match) return [];
+    const sheet = sheetNames.get((match[1]?.replaceAll("''", "'") ?? match[2]).toUpperCase());
+    return [{ name: item.getAttribute("name"), sheet, range: match[3] }];
+  }));
+  return { sheets, date1904, namedRanges };
 }

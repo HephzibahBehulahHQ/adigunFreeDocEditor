@@ -248,7 +248,7 @@ export function cellAddress(row, column) {
 
 export function shiftCellFormula(value, rowDelta, columnDelta) {
   if (!value.startsWith("=")) return value;
-  return value.replace(/(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|[A-Za-z_][\w.]*|"(?:[^"]|"")*"|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/gi, (token) => {
+  return value.replace(/(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+(?![\w.])|[A-Za-z_][\w.]*|"(?:[^"]|"")*"|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/gi, (token) => {
     const separator = token.lastIndexOf("!") + 1;
     const match = /^(\$?)([A-Za-z])(\$?)([1-9]\d?|100)$/.exec(token.slice(separator));
     if (!match) return token;
@@ -399,11 +399,39 @@ function dateSerial(values, date1904) {
   return serial;
 }
 
-export function calculateWorkbook(sheets, active, date1904 = false) {
+export function normalizeNamedRange(entry) {
+  const name = typeof entry?.name === "string" ? entry.name.trim() : "";
+  const sheet = entry?.sheet;
+  const cells = typeof entry?.range === "string" ? entry.range.toUpperCase().replaceAll("$", "").trim() : "";
+  const match = /^([A-Z])([1-9]\d?|100)(?::([A-Z])([1-9]\d?|100))?$/.exec(cells);
+  if (!match || !/^[A-Za-z_][A-Za-z0-9_.]{0,254}$/.test(name) || /^_xlnm\.|^(?:R(?:\d*)C(?:\d*)|R|C|TRUE|FALSE)$/i.test(name) ||
+      typeof sheet !== "string" || !sheet.length || sheet.length > 31) return null;
+  const possibleCell = /^([A-Z]{1,3})([1-9]\d*)$/i.exec(name);
+  if (possibleCell) {
+    const column = Array.from(possibleCell[1].toUpperCase()).reduce((total, letter) => total * 26 + letter.charCodeAt(0) - 64, 0);
+    if (column <= 16384 && Number(possibleCell[2]) <= 1048576) return null;
+  }
+  const [, first, firstRow, last = first, lastRow = firstRow] = match;
+  const start = cellAddress(Math.min(+firstRow, +lastRow) - 1, Math.min(first.charCodeAt(0), last.charCodeAt(0)) - 65);
+  const end = cellAddress(Math.max(+firstRow, +lastRow) - 1, Math.max(first.charCodeAt(0), last.charCodeAt(0)) - 65);
+  return { name, sheet, range: start === end ? start : start + ":" + end };
+}
+
+export function normalizeNamedRanges(entries) {
+  const result = new Map();
+  for (const item of Array.isArray(entries) ? entries.slice(0, 200) : []) {
+    const range = normalizeNamedRange(item);
+    if (range && !result.has(range.name.toUpperCase())) result.set(range.name.toUpperCase(), range);
+  }
+  return [...result.values()];
+}
+
+export function calculateWorkbook(sheets, active, date1904 = false, namesInput) {
   const computed = new Map();
   const errors = new Set();
   const visiting = new Set();
   const names = new Map();
+  const namedRanges = new Map(normalizeNamedRanges(namesInput).map((range) => [range.name.toUpperCase(), range]));
   for (const [index, sheet] of sheets.entries()) {
     const name = (sheet.name || `Sheet ${index + 1}`).toUpperCase();
     if (!names.has(name)) names.set(name, index);
@@ -436,7 +464,7 @@ export function calculateWorkbook(sheets, active, date1904 = false) {
         if (!source) return emptyReference;
         if (Number.isFinite(Number(source)) && String(Number(source)) === source) return Number(source);
         return result;
-      }, numeric, (cell, sheet) => valueAt(sheet === undefined ? sheetIndex : names.get(sheet.toUpperCase()), cell), date1904);
+      }, numeric, (cell, sheet) => valueAt(sheet === undefined ? sheetIndex : names.get(sheet.toUpperCase()), cell), date1904, namedRanges);
       if (typeof value === "number" && !Number.isFinite(value)) throw new Error("#DIV/0!");
       if (typeof value === "string" && value.length > 32767) throw new Error("#VALUE!");
     } catch (error) {
@@ -456,8 +484,8 @@ export function calculateWorkbook(sheets, active, date1904 = false) {
   return calculate;
 }
 
-function evaluateFormula(expression, scalarAt, numeric, valueAt, date1904) {
-  const tokens = expression.match(/"(?:[^"]|"")*"|#REF!|(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|[A-Za-z]+|<=|>=|<>|[^\s]/gi) ?? [];
+function evaluateFormula(expression, scalarAt, numeric, valueAt, date1904, namedRanges) {
+  const tokens = expression.match(/"(?:[^"]|"")*"|#REF!|(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+(?![\w.])|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|[A-Za-z_][\w.]*|<=|>=|<>|[^\s]/gi) ?? [];
   if (tokens.length > 200) throw new Error("Formula is too long.");
   let index = 0;
   const take = (token) => tokens[index] === token && Boolean(++index);
@@ -469,11 +497,20 @@ function evaluateFormula(expression, scalarAt, numeric, valueAt, date1904) {
     return { address, sheet };
   }
   function readRange() {
+    const named = namedRanges.get(tokens[index]?.toUpperCase());
+    if (named) {
+      index++;
+      const [first, last = first] = named.range.split(":");
+      return bounds({ address: first, sheet: named.sheet }, { address: last });
+    }
     const start = reference(tokens[index]);
     if (!start) throw new Error("#REF!");
     index++;
     const end = take(":") ? reference(tokens[index++]) : start;
     if (!end || (end.sheet && end.sheet.toUpperCase() !== start.sheet?.toUpperCase())) throw new Error("#REF!");
+    return bounds(start, end);
+  }
+  function bounds(start, end) {
     const rows = [start, end].map(({ address }) => Number(address.slice(1)) - 1);
     const columns = [start, end].map(({ address }) => address.charCodeAt(0) - 65);
     return {
@@ -528,6 +565,13 @@ function evaluateFormula(expression, scalarAt, numeric, valueAt, date1904) {
     }
     const source = tokens[index++];
     const token = source?.toUpperCase();
+    const named = namedRanges.get(token);
+    if (named && tokens[index] !== "(") {
+      return () => {
+        if (named.range.includes(":")) throw new Error("#VALUE!");
+        return scalarAt(named.range, named.sheet);
+      };
+    }
     if (token === "#REF!") {
       if (take(":") && !reference(tokens[index++])) throw new Error("#REF!");
       return () => { throw new Error("#REF!"); };
@@ -577,7 +621,8 @@ function evaluateFormula(expression, scalarAt, numeric, valueAt, date1904) {
     const argumentsFor = [];
     do {
       const start = reference(tokens[index]);
-      if (start && tokens[index + 1] === ":") {
+      const namedRange = !scalar && namedRanges.has(tokens[index]?.toUpperCase()) && [",", ")"].includes(tokens[index + 1]);
+      if ((start && tokens[index + 1] === ":") || namedRange) {
         if (scalar) throw new Error("#VALUE!");
         const { top, bottom, left, right, sheet } = readRange();
         argumentsFor.push(() => {
