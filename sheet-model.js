@@ -123,8 +123,18 @@ function recordBounds(sheet, range, column) {
   return { left, right, rows: Array.from({ length: last - first }, (_, index) => first + index + 1), column: target.column };
 }
 
+export function normalizeCellLink(value) {
+  if (typeof value !== "string" || value.length > 4000) return "";
+  try {
+    const url = new URL(value.trim());
+    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
 function rewriteRecordRows(sheet, { left, right, rows }, order) {
-  const keys = ["cells", "formats", "validation", "styles", "unlockedCells"];
+  const keys = ["cells", "formats", "validation", "styles", "unlockedCells", "links"];
   const result = Object.fromEntries(keys.map((key) => [key, { ...sheet[key] }]));
   for (const [offset, targetRow] of rows.entries()) {
     const sourceRow = order[offset];

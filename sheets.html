@@ -45,6 +45,7 @@
         <button id="sheet-add-row" type="button">Add row</button>
         <button id="sheet-add-column" type="button">Add column</button>
         <button id="sheet-pivot" type="button">PivotTable</button>
+        <button id="sheet-cell-link" type="button">Cell link</button>
         <button id="sheet-chart-open" type="button" aria-controls="sheet-chart-panel" aria-expanded="false">Bar chart</button>
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Format</summary><div>
@@ -92,6 +93,7 @@
       <input id="sheet-selected" aria-label="Go to cell, range, or named range" value="A1" maxlength="255" autocomplete="off" spellcheck="false">
       <input id="sheet-formula" aria-label="Selected cell value or formula" maxlength="4000" autocomplete="off">
       <select id="sheet-validation-picker" aria-label="Allowed values for the active cell" hidden></select>
+      <a id="sheet-open-cell-link" target="_blank" rel="noopener noreferrer" hidden>Open cell link</a>
     </div>
     <p class="sheets-help" id="sheets-help">Use arrow keys to move, Shift + arrow keys to select, and F2 to move the caret within a cell. CSV downloads contain calculated values from the active sheet.</p>
     <div class="sheet-work-area">
@@ -284,6 +286,20 @@
       <div class="sheets-actions">
         <button class="button button-outline" type="submit">Apply filter</button>
         <button class="button button-outline" type="button" data-close>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="sheet-link-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-link-title">
+    <h2 id="sheet-link-title">Cell link</h2>
+    <form>
+      <label>Web address for <output id="sheet-link-address"></output>
+        <input name="url" type="url" placeholder="https://example.com" maxlength="4000" required>
+      </label>
+      <p role="status"></p>
+      <div class="tool-actions">
+        <button type="button" data-close>Cancel</button>
+        <button type="button" id="sheet-remove-link">Remove link</button>
+        <button type="submit">Save link</button>
       </div>
     </form>
   </dialog>
