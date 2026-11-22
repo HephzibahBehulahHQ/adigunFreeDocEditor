@@ -160,6 +160,15 @@ try {
   assert.equal(reopenedPivot.columns, 12);
   assert.deepEqual(reopenedPivot.pivot, pivotDefinition);
   assert.deepEqual(reopenedPivot.chart, linkedPivot.chart);
+  const notes = { A2: { text: "Review <North> & South\nConfirm units", author: "Reviewer" },
+    L24: { text: "Note on a blank cell", author: "Adigun Sheets" } };
+  const noteBytes = exportWorkbook([pivotSheets[0], { ...linkedPivot, notes }], zip);
+  const noteSheet = importWorkbook(noteBytes, zip, dom.window.DOMParser).sheets[1];
+  assert.deepEqual(noteSheet.notes, notes);
+  assert.deepEqual(noteSheet.chart, linkedPivot.chart);
+  assert.deepEqual(noteSheet.pivot, pivotDefinition);
+  assert.equal(noteSheet.links.A2, target);
+  assert.equal(noteSheet.cells.L24, undefined);
   const jump = "#'Owner''s data'!B44";
   const workbookLinks = [{ name: "Home", cells: { A1: "Open data" }, links: { A1: jump } }, { name: "Owner's data", cells: { B44: "Target" } }];
   const workbookLinkBytes = exportWorkbook(workbookLinks, zip);

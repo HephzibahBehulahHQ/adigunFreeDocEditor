@@ -1,6 +1,7 @@
 import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellLink, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRanges, normalizePrintSettings, normalizeSheetProtection, normalizeWorkbookProtection, numberFormats, protectionCredentials, workbookProtectionCredentials, parseSheetFilter, validationOptions } from "./sheet-model.js";
 import { readWorksheetChart, writeWorksheetChart } from "./sheet-chart-xlsx.js";
 import { readWorksheetPivot, writeWorksheetPivot } from "./sheet-pivot-xlsx.js";
+import { readWorksheetNotes, writeWorksheetNotes } from "./sheet-notes-xlsx.js";
 
 const mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const officeNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -218,6 +219,7 @@ export function exportWorkbook(sheets, zip, date1904 = false, namesInput, onPivo
       const existing = files[relPath] || `<Relationships xmlns="${packageNs}"></Relationships>`;
       files[relPath] = existing.replace("</Relationships>", () => entries.join("") + "</Relationships>");
     }
+    writeWorksheetNotes(files, overrides, id, sheet.notes, xml);
   }
   const pivotCaches = [];
   for (const [index, sheet] of sheets.entries()) {
@@ -261,7 +263,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
   let total = 0;
   const files = zip.unzipSync(bytes, {
     filter({ name, originalSize }) {
-      if (!/^xl\/(?:workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|styles\.xml|(?:worksheets|drawings|charts|pivotTables|pivotCache)\/[\w.-]+\.xml|(?:worksheets|drawings)\/_rels\/[\w.-]+\.xml\.rels)$/.test(name)) return false;
+      if (!/^xl\/(?:workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|styles\.xml|comments[\w.-]*\.xml|(?:worksheets|drawings|charts|pivotTables|pivotCache|comments)\/[\w.-]+\.xml|(?:worksheets|drawings)\/_rels\/[\w.-]+\.xml\.rels)$/.test(name)) return false;
       total += originalSize;
       if (total > 12 * 1024 * 1024) throw new Error("Workbook content is too large.");
       return true;
@@ -343,8 +345,13 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const links = {};
     const linkNodes = worksheet.getElementsByTagNameNS(mainNs, "hyperlink");
     const relPath = path.replace(/\/([^/]+)$/, "/_rels/$1.rels");
+    const relationshipNodes = files[relPath] ? [...parse(relPath).getElementsByTagNameNS(packageNs, "Relationship")] : [];
+    const notes = readWorksheetNotes(files, parse, relationshipNodes);
+    for (const address of Object.keys(notes)) {
+      rows = Math.max(rows, Number(address.slice(1)));
+      columns = Math.max(columns, address.charCodeAt(0) - 64);
+    }
     if (linkNodes.length) {
-      const relationshipNodes = files[relPath] ? [...parse(relPath).getElementsByTagNameNS(packageNs, "Relationship")] : [];
       const targets = new Map(relationshipNodes
         .filter((node) => node.getAttribute("Type") === officeNs + "/hyperlink" && node.getAttribute("TargetMode") === "External" &&
           !node.getAttribute("Target")?.trim().startsWith("#"))
@@ -435,7 +442,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       ? readProtection(protectionNode, protectionCredentials, normalizeSheetProtection)
       : null;
     return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles,
-      unlockedCells, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print, protection, links };
+      unlockedCells, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print, protection, links, notes };
   });
   for (const [index, sheet] of sheets.entries()) {
     try {

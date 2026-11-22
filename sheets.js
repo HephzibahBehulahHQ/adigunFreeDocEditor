@@ -1,6 +1,7 @@
 import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellLink, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRange, normalizeNamedRanges, normalizeSheetProtection, normalizeWorkbookProtection, numberFormats, protectionCredentials, parseChartRange, parseCsv, parseSheetFilter, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, spreadsheetFonts, toCsv, validationOptions, workbookLinkTarget, workbookProtectionCredentials } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 import { bindSheetPrinting } from "./sheet-print.js";
+import { normalizeCellNote } from "./sheet-notes-xlsx.js";
 
 const $ = (id) => document.getElementById(id);
 const storageKey = "adigun-sheets-v1";
@@ -65,6 +66,8 @@ try {
         .filter(([address, options]) => validAddress.test(address) && validationOptions(options).length)),
       links: Object.fromEntries(Object.entries(item?.links ?? {}).map(([address, url]) => [address, normalizeCellLink(url)])
         .filter(([address, url]) => validAddress.test(address) && url)),
+      notes: Object.fromEntries(Object.entries(item?.notes ?? {}).map(([address, value]) => [address, normalizeCellNote(value)])
+        .filter(([address, note]) => validAddress.test(address) && note)),
       pivot: item?.pivot && Number.isInteger(item.pivot.source) &&
         ["range", "group", "measure", "aggregate"].every((key) => typeof item.pivot[key] === "string" && item.pivot[key].length <= 25)
         ? item.pivot : undefined,
@@ -185,7 +188,9 @@ function paintRows(valueAt) {
   const fillAt = conditionalFill(sheet.conditionalRule);
   for (const field of grid.querySelectorAll("input")) {
     const address = field.dataset.cell;
-    field.title = sheet.links?.[address] ?? "";
+    const note = sheet.notes?.[address];
+    field.title = [note && note.author + ": " + note.text, sheet.links?.[address]].filter(Boolean).join("\n");
+    field.parentElement.toggleAttribute("data-cell-note", Boolean(note));
     const value = valueAt(address);
     if (document.activeElement !== field) field.value = displayCell(value, sheet.formats?.[address], undefined, workbook.date1904);
     const fill = fillAt(address, value);
@@ -759,6 +764,44 @@ grid.addEventListener("change", (event) => {
   if (currentSheet().validation?.[address]) updateCell(address, event.target.value);
 });
 $("sheet-validation-picker").addEventListener("change", (event) => updateCell(selectedAddress, event.target.value));
+
+const noteDialog = $("sheet-note-dialog");
+const noteForm = noteDialog.querySelector("form");
+const noteInput = noteForm.elements.note;
+const removeNoteButton = $("sheet-remove-note");
+let noteSelection;
+$("sheet-cell-note").addEventListener("click", () => {
+  const sheet = currentSheet();
+  const address = selectedAddress;
+  noteSelection = { sheet, address };
+  $("sheet-note-address").value = address;
+  noteInput.value = sheet.notes?.[address]?.text ?? "";
+  noteInput.readOnly = cellLocked(sheet, address);
+  removeNoteButton.disabled = noteInput.readOnly || !noteInput.value;
+  noteForm.querySelector("[type=submit]").disabled = noteInput.readOnly;
+  noteDialog.showModal();
+});
+function saveCellNote(text) {
+  const { sheet, address } = noteSelection;
+  if (sheet !== currentSheet() || cellLocked(sheet, address)) return;
+  const current = sheet.notes?.[address];
+  const note = normalizeCellNote({ text, author: current?.author });
+  if (note?.text !== current?.text) {
+    recordEdit();
+    const notes = sheet.notes ??= {};
+    if (note) notes[address] = note;
+    else delete notes[address];
+    save();
+    refreshValues();
+  }
+  noteDialog.close();
+}
+noteDialog.querySelector("[data-close]").addEventListener("click", () => noteDialog.close());
+removeNoteButton.addEventListener("click", () => saveCellNote(""));
+noteForm.addEventListener("submit", event => {
+  event.preventDefault();
+  saveCellNote(noteInput.value);
+});
 
 const linkDialog = $("sheet-link-dialog");
 const linkForm = linkDialog.querySelector("form");
@@ -1403,7 +1446,8 @@ $("workbook-file").addEventListener("change", async (event) => {
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (!canChangeStructure()) return;
     const { sheets, date1904, namedRanges, protection } = importWorkbook(bytes, window.fflate);
-    const emptyWorkbook = workbook.sheets.length === 1 && !Object.keys(workbook.sheets[0].cells).length && !workbook.namedRanges?.length;
+    const emptyWorkbook = workbook.sheets.length === 1 && !Object.keys(workbook.sheets[0].cells).length &&
+      !Object.keys(workbook.sheets[0].notes ?? {}).length && !Object.keys(workbook.sheets[0].links ?? {}).length && !workbook.namedRanges?.length;
     const existing = emptyWorkbook ? [] : workbook.sheets;
     if (existing.length && (protection || workbook.protection)) {
       status("Open the protected XLSX in a new workbook to retain its protection settings.");
