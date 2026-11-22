@@ -56,9 +56,14 @@ try {
   assert.deepEqual([...animated.getElementsByTagNameNS("*", "animEffect")].map((node) => [
     node.getAttribute("transition"), node.getElementsByTagNameNS("*", "spTgt")[0].getAttribute("spid"),
   ]), [["in", "2"], ["in", "3"], ["out", "4"], ["in", "6"]]);
+  const [rise] = animated.getElementsByTagNameNS("*", "anim");
+  assert.equal(rise.getElementsByTagNameNS("*", "spTgt")[0].getAttribute("spid"), "2");
+  assert.equal(rise.parentElement.parentElement.getAttribute("presetSubtype"), "4");
+  assert.deepEqual([...rise.getElementsByTagNameNS("*", "strVal")].map((node) => node.getAttribute("val")),
+    ["1+#ppt_h/2", "#ppt_y"]);
   const [animatedSlide] = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(animatedParts), dom.window.DOMParser);
   assert.deepEqual(JSON.parse(JSON.stringify(animatedSlide.animations)), [
-    animations[0], { ...animations[1], target: "object:1" }, animations[2],
+    animations[0], { ...animations[1], target: "object:1" }, animations[2], animations[3],
   ]);
 } finally {
   dom.window.close();

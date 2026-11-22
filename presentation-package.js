@@ -107,9 +107,9 @@
     return `<mc:AlternateContent xmlns:mc="${markupCompatibility}" xmlns:p14="${powerpoint2010}"><mc:Choice Requires="p14">${element(` p14:dur="${duration}"`)}</mc:Choice><mc:Fallback>${element()}</mc:Fallback></mc:AlternateContent>`;
   }
 
-  function fadeTimingXml(animations, objects) {
+  function animationTimingXml(animations, objects) {
     const effects = (Array.isArray(animations) ? animations : []).slice(0, 16).flatMap((animation) => {
-      if (!["fade", "exit"].includes(animation?.effect)) return [];
+      if (!["fade", "exit", "rise"].includes(animation?.effect)) return [];
       const { effect, target, start, duration, delay } = animation;
       const match = /^object:(\d{1,2})$/.exec(target ?? "");
       const shapeIds = match ? (+match[1] < objects.length ? [+match[1] + 4] : []) :
@@ -126,10 +126,14 @@
       `<p:par><p:cTn id="${++id}" fill="hold" ${attributes}>${condition(delay)}<p:childTnLst>${markup}</p:childTnLst></p:cTn></p:par>`;
     const target = (shapeId) => `<p:tgtEl><p:spTgt spid="${shapeId}"/></p:tgtEl>`;
     function effectNode(effect, shapeId, start, delay) {
-      const enter = effect.effect === "fade";
+      const enter = effect.effect !== "exit";
       const visibility = `<p:set><p:cBhvr><p:cTn id="${++id}" dur="1" fill="hold">${condition(enter ? 0 : effect.duration)}</p:cTn>${target(shapeId)}<p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="${enter ? "visible" : "hidden"}"/></p:to></p:set>`;
-      const fade = `<p:animEffect transition="${enter ? "in" : "out"}" filter="fade"><p:cBhvr><p:cTn id="${++id}" dur="${effect.duration}"/>${target(shapeId)}</p:cBhvr></p:animEffect>`;
-      return parallel(`presetID="10" presetClass="${enter ? "entr" : "exit"}" presetSubtype="0" grpId="0" nodeType="${start}"`, delay, visibility + fade);
+      const rise = effect.effect === "rise";
+      const fade = () => `<p:animEffect transition="${enter ? "in" : "out"}" filter="fade"><p:cBhvr><p:cTn id="${++id}" dur="${effect.duration}"/>${target(shapeId)}</p:cBhvr></p:animEffect>`;
+      // Positions are slide-relative. Start with the top of the object at the bottom edge.
+      const motion = () => `<p:anim calcmode="lin" valueType="num"><p:cBhvr additive="base"><p:cTn id="${++id}" dur="${effect.duration}" fill="hold"/>${target(shapeId)}<p:attrNameLst><p:attrName>ppt_y</p:attrName></p:attrNameLst></p:cBhvr><p:tavLst><p:tav tm="0"><p:val><p:strVal val="1+#ppt_h/2"/></p:val></p:tav><p:tav tm="100000"><p:val><p:strVal val="#ppt_y"/></p:val></p:tav></p:tavLst></p:anim>`;
+      const animation = rise ? motion() : fade();
+      return parallel(`presetID="${rise ? 2 : 10}" presetClass="${enter ? "entr" : "exit"}" presetSubtype="${rise ? 4 : 0}" grpId="0" nodeType="${start}"`, delay, visibility + animation);
     }
     let elapsed = 0;
     const automatic = effects.filter(({ start }) => start !== "manual").map((effect) => {
@@ -147,7 +151,7 @@
     return `<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst><p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>${automatic ? parallel("", 0, automatic) : ""}${manual}</p:childTnLst></p:cTn>${navigation("prev")}${navigation("next")}</p:seq></p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>`;
   }
 
-  function readFadeAnimations(slide, shapeTargets) {
+  function readAnimations(slide, shapeTargets) {
     const child = (node, name) => [...(node?.children ?? [])].find((part) => part.localName === name);
     const branches = (node) => [...(child(node, "childTnLst")?.children ?? [])].map((part) => child(part, "cTn")).filter(Boolean);
     const delay = (node) => child(child(node, "stCondLst"), "cond")?.getAttribute("delay");
@@ -156,12 +160,18 @@
     const result = [];
     function readStep(step, start, startDelay) {
       const effects = branches(step).flatMap((node) => {
-        const behavior = child(child(child(node, "childTnLst"), "animEffect"), "cBhvr");
-        const animation = behavior?.parentElement;
+        const items = child(node, "childTnLst");
+        const fade = child(items, "animEffect");
+        const motion = child(items, "anim");
+        const rise = node.getAttribute("presetID") === "2" && node.getAttribute("presetClass") === "entr" &&
+          node.getAttribute("presetSubtype") === "4" && motion;
+        if (!rise && fade?.getAttribute("filter") !== "fade") return [];
+        const behavior = child(rise ? motion : fade, "cBhvr");
         const target = shapeTargets.get(child(child(behavior, "tgtEl"), "spTgt")?.getAttribute("spid"));
         const duration = Number(child(behavior, "cTn")?.getAttribute("dur")) / 1000;
-        if (animation?.getAttribute("filter") !== "fade" || !target || duration < 0.1 || duration > 5 || !Number.isFinite(duration)) return [];
-        return [{ effect: animation.getAttribute("transition") === "out" ? "exit" : "fade", target, start, duration, delay: startDelay }];
+        if (!target || duration < 0.1 || duration > 5 || !Number.isFinite(duration)) return [];
+        const effect = rise ? "rise" : fade.getAttribute("transition") === "out" ? "exit" : "fade";
+        return [{ effect, target, start, duration, delay: startDelay }];
       });
       if (effects.length === 2 && effects[0].target === "title" && effects[1].target === "content" &&
           effects[0].effect === effects[1].effect && effects[0].duration === effects[1].duration) {
@@ -234,7 +244,7 @@
         if (!members || members.length < 2) return entry.markup;
         return members.at(-1) === entry ? groupXml(members, 29 + entry.object.group) : "";
       }).join("");
-      const timing = fadeTimingXml(slides[i].animations, entries);
+      const timing = animationTimingXml(slides[i].animations, entries);
       const markup = slideXml(slides[i]).replace("</p:spTree>", objects + "</p:spTree>")
         .replace("</p:sld>", transitionXml(slides[i].transition) + timing + "</p:sld>");
       files["ppt/slides/slide" + (i + 1) + ".xml"] = slides[i].hidden ? markup.replace("<p:sld ", '<p:sld show="0" ') : markup;
@@ -433,7 +443,7 @@
       if (titleIndex >= 0) shapeTargets.set(shapes[titleIndex].id, "title");
       const contentShape = shapes.find((shape) => shape.isContent && !shape.isTitle);
       if (contentShape) shapeTargets.set(contentShape.id, "content");
-      const animations = readFadeAnimations(slide, shapeTargets);
+      const animations = readAnimations(slide, shapeTargets);
       if (animations.length) result.animations = animations;
       if (objects.length) result.objects = normalizeObjects(objects);
       const notes = slideNotes(path);
