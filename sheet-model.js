@@ -124,7 +124,7 @@ function recordBounds(sheet, range, column) {
 }
 
 function rewriteRecordRows(sheet, { left, right, rows }, order) {
-  const keys = ["cells", "formats", "validation", "styles"];
+  const keys = ["cells", "formats", "validation", "styles", "unlockedCells"];
   const result = Object.fromEntries(keys.map((key) => [key, { ...sheet[key] }]));
   for (const [offset, targetRow] of rows.entries()) {
     const sourceRow = order[offset];

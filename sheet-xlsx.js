@@ -40,17 +40,19 @@ function createStyleBook() {
     if (index >= 0) return index;
     return store.push(value) - 1;
   }
-  function indexFor(formatName, appearance) {
+  function indexFor(formatName, appearance, unlocked) {
     const style = normalizeCellStyle(appearance);
     const font = indexOf(fonts, `<font>${style.bold ? "<b/>" : ""}${style.italic ? "<i/>" : ""}${style.underline ? "<u/>" : ""}<sz val="${style.size || 11}"/>${style.color ? `<color rgb="FF${style.color}"/>` : ""}<name val="${style.font || "Calibri"}"/></font>`);
     const fill = style.fill ? indexOf(fills, `<fill><patternFill patternType="solid"><fgColor rgb="FF${style.fill}"/><bgColor indexed="64"/></patternFill></fill>`) : 0;
     const border = style.border ? indexOf(borders, "<border>" + ["left", "right", "top", "bottom"].map((side) => `<${side} style="thin"><color rgb="FF75839C"/></${side}>`).join("") + "</border>") : 0;
     const number = numberFormats[formatName] || 0;
-    if (!font && !fill && !border && !number && !style.align) return 0;
+    if (!font && !fill && !border && !number && !style.align && !unlocked) return 0;
     const flags = [font && 'applyFont="1"', fill && 'applyFill="1"', border && 'applyBorder="1"',
-      number && 'applyNumberFormat="1"', style.align && 'applyAlignment="1"'].filter(Boolean).join(" ");
+      number && 'applyNumberFormat="1"', style.align && 'applyAlignment="1"', unlocked && 'applyProtection="1"'].filter(Boolean).join(" ");
     const start = `<xf numFmtId="${number}" fontId="${font}" fillId="${fill}" borderId="${border}" xfId="0" ${flags}`;
-    return indexOf(cellFormats, style.align ? `${start}><alignment horizontal="${style.align}"/></xf>` : `${start}/>`);
+    const alignment = style.align ? `<alignment horizontal="${style.align}"/>` : "";
+    const protection = unlocked ? '<protection locked="0"/>' : "";
+    return indexOf(cellFormats, alignment || protection ? `${start}>${alignment}${protection}</xf>` : `${start}/>`);
   }
   fills.push('<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>');
   borders.push("<border/>");
@@ -67,9 +69,9 @@ function createStyleBook() {
   return { indexFor, markup, hasCellStyles: () => cellFormats.length > 1 };
 }
 
-function makeWorksheet({ cells, formats = {}, styles = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart, conditionalRule, print, protection }, valueAt, styleBook) {
+function makeWorksheet({ cells, formats = {}, styles = {}, unlockedCells = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart, conditionalRule, print, protection }, valueAt, styleBook) {
   const rows = new Map();
-  for (const address of new Set([...Object.keys(cells), ...Object.keys(formats), ...Object.keys(styles)])) {
+  for (const address of new Set([...Object.keys(cells), ...Object.keys(formats), ...Object.keys(styles), ...Object.keys(unlockedCells)])) {
     const raw = cells[address] ?? "";
     const row = Number(address.slice(1));
     if (!rows.has(row)) rows.set(row, []);
@@ -87,7 +89,7 @@ function makeWorksheet({ cells, formats = {}, styles = {}, freezeFirstRow, valid
       const text = raw.startsWith("'") ? raw.slice(1) : raw;
       markup = `<c r="${address}" t="inlineStr"><is><t xml:space="preserve">${xml(text)}</t></is></c>`;
     }
-    const style = styleBook.indexFor(formats[address], styles[address]);
+    const style = styleBook.indexFor(formats[address], styles[address], unlockedCells[address] === true);
     if (style > 0) markup = markup.replace("<c ", `<c s="${style}" `);
     rows.get(row).push({ address, markup });
   }
@@ -273,6 +275,13 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     styleNames.find((format) => String(numberFormats[format]) === xf.getAttribute("numFmtId")));
   const parts = (tag) => styles?.getElementsByTagNameNS(mainNs, tag)[0]?.children ?? [];
   const child = (element, tag) => element?.getElementsByTagNameNS(mainNs, tag)[0];
+  const unlockedStyles = Array.from(cellXfs?.children ?? [], (format) => {
+    const base = parts("cellStyleXfs")[Number(format.getAttribute("xfId"))];
+    const direct = child(format, "protection");
+    const protection = ["0", "false"].includes(format.getAttribute("applyProtection"))
+      ? child(base, "protection") : direct ?? child(base, "protection");
+    return ["0", "false"].includes(protection?.getAttribute("locked"));
+  });
   const readColor = (element) => /^(?:[\da-f]{2})?([\da-f]{6})$/i.exec(element?.getAttribute("rgb") ?? "")?.[1];
   const activeStyle = (element) => element && !["0", "false", "none"].includes(element.getAttribute("val"));
   const savedStyles = Array.from(cellXfs?.children ?? [], (format) => {
@@ -315,6 +324,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const cells = {};
     const formats = {};
     const cellStyles = {};
+    const unlockedCells = {};
     let rows = 20;
     let columns = 8;
     const worksheet = parse(path);
@@ -362,7 +372,8 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       const format = savedFormats[Number(node.getAttribute("s"))];
       const style = savedStyles[Number(node.getAttribute("s"))];
       const hasStyle = style && Object.keys(style).length;
-      if (!raw && (!format || format === "general") && !hasStyle) continue;
+      const unlocked = unlockedStyles[Number(node.getAttribute("s"))];
+      if (!raw && (!format || format === "general") && !hasStyle && !unlocked) continue;
       if (!formula && /^[=']/.test(raw)) raw = "'" + raw;
       if (!/^[A-Z](?:[1-9]\d{0,3})$/.test(address) || raw.length > maxCellLength) {
         throw new Error("Workbook cells exceed the 9,999-row, 26-column, or cell-length limit.");
@@ -370,6 +381,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       if (raw) cells[address] = raw;
       if (format && format !== "general") formats[address] = format;
       if (hasStyle) cellStyles[address] = style;
+      if (unlocked) unlockedCells[address] = true;
       rows = Math.max(rows, Number(address.slice(1)));
       columns = Math.max(columns, address.charCodeAt(0) - 64);
     }
@@ -391,7 +403,8 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const protection = ["1", "true"].includes(protectionNode?.getAttribute("sheet"))
       ? readProtection(protectionNode, protectionCredentials, normalizeSheetProtection)
       : null;
-    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print, protection };
+    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles,
+      unlockedCells, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print, protection };
   });
   for (const [index, sheet] of sheets.entries()) {
     try {

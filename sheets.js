@@ -43,6 +43,8 @@ try {
       hidden: item?.hidden === true,
       print: item?.print,
       protection: normalizeSheetProtection(item?.protection),
+      unlockedCells: Object.fromEntries(Object.entries(item?.unlockedCells ?? {})
+        .filter(([address, unlocked]) => validAddress.test(address) && unlocked === true)),
       validation: Object.fromEntries(Object.entries(item?.validation ?? {})
         .filter(([address, options]) => validAddress.test(address) && validationOptions(options).length)),
       pivot: item?.pivot && Number.isInteger(item.pivot.source) &&
@@ -403,14 +405,23 @@ function refreshFormula() {
   $("sheet-formula").value = currentSheet().cells[selectedAddress] ?? "";
   const picker = $("sheet-validation-picker");
   const options = currentSheet().validation?.[selectedAddress] || [];
-  const protectedSheet = Boolean(currentSheet().protection);
-  $("sheet-formula").readOnly = protectedSheet;
-  picker.disabled = protectedSheet;
+  const sheet = currentSheet();
+  const addresses = selectionAddresses();
+  const locked = cellLocked(sheet, selectedAddress);
+  const selectionLocked = Boolean(sheet.protection) && addresses.some((address) => cellLocked(sheet, address));
+  const unlock = $("sheet-unlocked-range");
+  unlock.disabled = Boolean(sheet.protection);
+  unlock.textContent = addresses.every((address) => sheet.unlockedCells?.[address]) ? "Lock selected cells" : "Unlock selected cells";
+  $("sheet-formula").readOnly = locked;
+  $("sheet-paste").disabled = locked;
+  $("sheet-cut").disabled = selectionLocked;
+  $("sheet-clear-cells").disabled = selectionLocked;
+  picker.disabled = locked;
   picker.hidden = !options.length;
   picker.replaceChildren(new Option("Choose value", ""), ...options.map((value) => new Option(value)));
   picker.value = options.includes($("sheet-formula").value) ? $("sheet-formula").value : "";
-  $("sheet-fill-down").disabled = protectedSheet || !selectedRange || selectedRange.firstRow === selectedRange.lastRow;
-  $("sheet-fill-right").disabled = protectedSheet || !selectedRange || selectedRange.firstColumn === selectedRange.lastColumn;
+  $("sheet-fill-down").disabled = selectionLocked || !selectedRange || selectedRange.firstRow === selectedRange.lastRow;
+  $("sheet-fill-right").disabled = selectionLocked || !selectedRange || selectedRange.firstColumn === selectedRange.lastColumn;
 }
 
 function selectRange(first, last) {
@@ -431,10 +442,14 @@ function acceptsValue(sheet, address, value) {
   return !value || !sheet.validation?.[address] || sheet.validation[address].includes(value);
 }
 
+function cellLocked(sheet, address) {
+  return Boolean(sheet.protection) && sheet.unlockedCells?.[address] !== true;
+}
+
 function updateCell(address, value, mergeTyping = false) {
   const sheet = currentSheet();
   const { cells } = sheet;
-  if (sheet.protection) { refreshValues(); refreshFormula(); return; }
+  if (cellLocked(sheet, address)) return;
   if (!acceptsValue(sheet, address, value)) {
     status(`Choose an allowed value for ${address}.`);
     refreshFormula();
@@ -469,13 +484,29 @@ workbookProtection.addEventListener("click", () => {
   render();
   workbookProtection.focus();
 });
-const protectedCommands = ["sheet-cut", "sheet-paste", "sheet-clear-cells", "sheet-chart-open", "sheet-style-open",
+const protectedCommands = ["sheet-chart-open", "sheet-style-open",
   "sheet-rule-open", "sheet-autosum", "sheet-print-settings", "sheet-validation", "sheet-filter",
   "sheet-sort", "sheet-deduplicate", "sheet-split"];
 
 function requiresExcelToUnprotect(sheet) {
   return protectionCredentials.some((key) => sheet.protection?.[key]);
 }
+
+$("sheet-unlocked-range").addEventListener("click", () => {
+  const sheet = currentSheet();
+  if (sheet.protection) return;
+  const addresses = selectionAddresses();
+  sheet.unlockedCells ??= {};
+  const unlock = addresses.some((address) => !sheet.unlockedCells[address]);
+  recordEdit();
+  for (const address of addresses) {
+    if (unlock) sheet.unlockedCells[address] = true;
+    else delete sheet.unlockedCells[address];
+  }
+  save();
+  refreshFormula();
+  status(unlock ? "Selected cells will stay editable when the sheet is protected." : "Selected cells will lock when the sheet is protected.");
+});
 
 protectionButton.addEventListener("click", () => {
   const sheet = currentSheet();
@@ -499,8 +530,8 @@ function render() {
   protectionButton.disabled = externalPassword;
   protectionStatus.textContent = externalPassword
     ? "This sheet is password-protected. Use Excel to remove its protection."
-    : protectedSheet ? "Sheet protected. Edits are disabled."
-      : "Prevent accidental edits without setting a password.";
+    : protectedSheet ? "Sheet protected. Unlocked cells are editable."
+      : "Unlock any input cells, then protect the sheet.";
   for (const id of protectedCommands) $(id).disabled = protectedSheet;
   for (const button of document.querySelectorAll("[data-sheet-format]")) button.disabled = protectedSheet;
   if (protectedSheet) {
@@ -542,7 +573,7 @@ function createGridRow(row, sheet) {
     field.dataset.cell = address;
     field.setAttribute("aria-label", address);
     field.maxLength = maxCellLength;
-    field.readOnly = Boolean(sheet.protection);
+    field.readOnly = cellLocked(sheet, address);
     field.autocomplete = "off";
     field.spellcheck = false;
     cell.append(field);
@@ -836,8 +867,9 @@ validationForm.addEventListener("submit", (event) => {
 });
 function applyCellChanges(entries) {
   const sheet = currentSheet();
-  if (sheet.protection) throw new Error("Unprotect this sheet before editing its cells.");
   const changes = entries.filter(([address, value]) => (sheet.cells[address] ?? "") !== value);
+  const locked = changes.find(([address]) => cellLocked(sheet, address));
+  if (locked) throw new Error(`Cell ${locked[0]} is locked.`);
   const invalid = changes.find(([address, value]) => !acceptsValue(sheet, address, value));
   if (invalid) throw new Error(`Choose an allowed value for ${invalid[0]}.`);
   if (!changes.length) return;
@@ -877,6 +909,7 @@ grid.addEventListener("paste", (event) => {
 async function copySelection(cut) {
   const sheet = currentSheet();
   const addresses = selectionAddresses();
+  if (cut && addresses.some((address) => cellLocked(sheet, address))) return;
   const values = addresses.map((address) => sheet.cells[address] ?? "");
   const columns = selectedRange ? selectedRange.lastColumn - selectedRange.firstColumn + 1 : 1;
   const rows = [];
@@ -887,7 +920,8 @@ async function copySelection(cut) {
   const text = values.length === 1 && !/[\t\r\n]/.test(values[0]) ? values[0] : rows.join("\r\n");
   try { await navigator.clipboard.writeText(text); }
   catch { status("Clipboard access is unavailable in this browser."); return; }
-  if (cut && (sheet !== currentSheet() || sheet.protection || addresses.some((address, index) => (sheet.cells[address] ?? "") !== values[index]))) {
+  if (cut && (sheet !== currentSheet() || addresses.some((address, index) =>
+    cellLocked(sheet, address) || (sheet.cells[address] ?? "") !== values[index]))) {
     status("Copied. The selection changed before it could be cut.");
     return;
   }
@@ -906,7 +940,7 @@ $("sheet-paste").addEventListener("click", async () => {
 });
 
 function clearSelection(addresses = selectionAddresses()) {
-  if (currentSheet().protection) return;
+  if (addresses.some((address) => cellLocked(currentSheet(), address))) return;
   applyCellChanges(addresses.map((address) => [address, ""]));
   $("sheet-export").disabled = Object.keys(currentSheet().cells).length === 0;
   refreshValues();
