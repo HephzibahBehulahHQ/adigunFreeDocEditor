@@ -154,7 +154,8 @@
     }
     if (tag === "span") {
       for (const name of ["data-equation-kind", "data-equation-first", "data-equation-second"]) {
-        if (node.hasAttribute(name)) attrs[name] = node.getAttribute(name);
+        const value = node.getAttribute(name);
+        if (value !== null) attrs[name] = value;
       }
       const family = supportedFontFamily(sourceTag === "font" ? node.getAttribute("face") : node.getAttribute("data-font-family") || node.style?.fontFamily);
       if (family) attrs["data-font-family"] = family;
