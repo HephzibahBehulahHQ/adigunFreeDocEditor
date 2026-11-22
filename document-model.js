@@ -72,6 +72,7 @@
     if (tag === "span") {
       if (typeof attributes["data-footnote-text"] === "string" && attributes["data-footnote-text"].trim()) {
         result["data-footnote-text"] = attributes["data-footnote-text"].trim().slice(0, 2000);
+        if (attributes["data-footnote-kind"] === "endnote") result["data-footnote-kind"] = "endnote";
       }
       const fontFamily = supportedFontFamily(attributes["data-font-family"]);
       if (fontFamily) result["data-font-family"] = fontFamily;
@@ -139,7 +140,7 @@
     if (sourceTag === "br" && node.classList?.contains("ProseMirror-trailingBreak")) return null;
     const tag = sourceTag === "font" ? "span" : sourceTag;
     const attrs = {};
-    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "value", "data-generated-toc", "data-footnote-text", "data-page-break", "data-page-flow-id", "data-page-header-copy", "data-font-family", "data-font-size", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level", "data-revision-id", "data-revision-author", "data-revision-created-at"]) {
+    for (const name of ["href", "src", "alt", "width", "height", "colspan", "rowspan", "start", "value", "data-generated-toc", "data-footnote-text", "data-footnote-kind", "data-page-break", "data-page-flow-id", "data-page-header-copy", "data-font-family", "data-font-size", "data-text-color", "data-highlight-color", "data-line-spacing", "data-paragraph-spacing", "data-indent-level", "data-revision-id", "data-revision-author", "data-revision-created-at"]) {
       const value = node.getAttribute(name);
       if (value !== null) attrs[name] = value;
     }

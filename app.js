@@ -202,7 +202,7 @@
     references: [
       [{ label: "Document outline", action: "outline", icon: "☷ Outline" }, { label: "Quick overview", action: "quick-overview", icon: "✧ Quick overview" }],
       [{ label: "Insert or refresh table of contents", action: "contents", icon: "Table of contents" }],
-      [{ label: "Insert footnote", action: "footnote", icon: "Footnote" }],
+      [{ label: "Insert footnote", action: "footnote", icon: "Footnote" }, { label: "Insert endnote", action: "endnote", icon: "Footnote" }],
     ],
     review: [
       [{ label: "Track changes", action: "track-changes", icon: "▤ Track changes" }, { label: "Add comment", action: "add-comment", icon: "▧ Comment" }, { label: "Review comments", action: "show-comments", icon: "☷ Comments" }],
@@ -334,14 +334,17 @@
     $("#insight-reading").textContent = isEditableDocument ? (words < 180 ? "<1 min" : `${Math.ceil(words / 180)} min`) : "—";
  
     renderOutline();
-    const footnotes = $("#print-footnotes");
     const notes = isEditableDocument ? [...editor.querySelectorAll("[data-footnote-text]")] : [];
-    footnotes.hidden = !notes.length;
-    footnotes.querySelector("ol").replaceChildren(...notes.map((marker) => {
-      const note = document.createElement("li");
-      note.textContent = marker.dataset.footnoteText;
-      return note;
-    }));
+    for (const kind of ["footnote", "endnote"]) {
+      const section = $(`#print-${kind}s`);
+      const entries = notes.filter((marker) => (marker.dataset.footnoteKind || "footnote") === kind);
+      section.hidden = !entries.length;
+      section.querySelector("ol").replaceChildren(...entries.map((marker) => {
+        const note = document.createElement("li");
+        note.textContent = marker.dataset.footnoteText;
+        return note;
+      }));
+    }
   }
 
   function editorOutlineHeadings() {
@@ -3307,20 +3310,22 @@
     }
   }
 
-  function recoverWordFootnotes(source) {
+  function recoverWordNotes(source) {
     const parsed = new DOMParser().parseFromString(source, "text/html");
-    const notes = new Map([...parsed.querySelectorAll('li[id^="footnote-"]')].map((item) => [item.id, item]));
+    const notes = new Map([...parsed.querySelectorAll('li[id^="footnote-"], li[id^="endnote-"]')].map((item) => [item.id, item]));
     const used = new Set();
-    for (const anchor of parsed.querySelectorAll('sup a[href^="#footnote-"]')) {
+    for (const anchor of parsed.querySelectorAll('sup a[href^="#footnote-"], sup a[href^="#endnote-"]')) {
       const id = anchor.getAttribute("href").slice(1);
       const note = notes.get(id);
       if (!note) continue;
       const copy = note.cloneNode(true);
-      for (const backlink of copy.querySelectorAll('a[href^="#footnote-ref-"]')) backlink.remove();
+      for (const backlink of copy.querySelectorAll('a[href^="#footnote-ref-"], a[href^="#endnote-ref-"]')) backlink.remove();
+      for (const line of copy.querySelectorAll("br")) line.replaceWith("\n");
       const text = [...copy.children].map((paragraph) => paragraph.textContent.trim()).filter(Boolean).join("\n") || copy.textContent.trim();
       if (!text) continue;
       const marker = parsed.createElement("span");
       marker.setAttribute("data-footnote-text", text.slice(0, 2000));
+      if (id.startsWith("endnote-")) marker.dataset.footnoteKind = "endnote";
       let reference = anchor.parentElement;
       while (reference.parentElement?.tagName === "SUP" && reference.parentElement.childNodes.length === 1) {
         reference = reference.parentElement;
@@ -3361,7 +3366,10 @@
       const footnote = tag === "span" && node.getAttribute("data-footnote-text");
       if (!allowedTags.has(tag) && !footnote) { removed++; const fragment = document.createDocumentFragment(); for (const child of [...node.childNodes]) { const safeChild = copy(child); if (safeChild) fragment.append(safeChild); } return fragment; }
       const element = document.createElement(tag);
-      if (footnote) element.setAttribute("data-footnote-text", footnote.trim().slice(0, 2000));
+      if (footnote) {
+        element.setAttribute("data-footnote-text", footnote.trim().slice(0, 2000));
+        if (node.dataset.footnoteKind === "endnote") element.dataset.footnoteKind = "endnote";
+      }
       if (tag === "hr" && (node.getAttribute("data-page-break") === "true" || node.classList.contains("adigun-imported-page-break"))) {
         element.setAttribute("data-page-break", "true");
       }
@@ -3542,7 +3550,7 @@
             ...Array.from({ length: 9 }, (_, index) => "p.TOC" + (index + 1) + " => ol.adigun-imported-contents > li:fresh"),
           ],
         });
-        const sanitized = sanitizeDocxHtml(recoverWordFootnotes(converted.value));
+        const sanitized = sanitizeDocxHtml(recoverWordNotes(converted.value));
         const revisionMapping = mapDocxRevisionsToHtml(sanitized.html, revisionCounts?.paragraphs);
         const commentTargetText = new DOMParser().parseFromString("<main>" + revisionMapping.html + "</main>", "text/html").querySelector("main")?.textContent || "";
         const importedCommentData = await readDocxReviewComments(arrayBuffer, archiveEntry, commentTargetText);
@@ -4222,8 +4230,9 @@
   const footnoteForm = footnoteDialog.querySelector("form");
   let footnotePosition;
   let footnoteEditor;
+  let noteKind;
 
-  function openFootnote(marker) {
+  function openFootnote(marker, kind = "footnote") {
     if (!liveEditor) return;
     footnoteEditor = liveEditor;
     footnotePosition = undefined;
@@ -4233,6 +4242,10 @@
         liveEditor.state.doc.nodeAt(index)?.type.name === "footnote");
       if (footnotePosition === undefined) return;
     }
+    noteKind = marker?.dataset.footnoteKind === "endnote" ? "endnote" : kind;
+    $("#footnote-dialog-title").textContent = noteKind === "endnote" ? "Endnote" : "Footnote";
+    $("#footnote-save").textContent = `Save ${noteKind}`;
+    $("#footnote-remove").textContent = `Remove ${noteKind}`;
     footnoteForm.elements.text.value = marker?.dataset.footnoteText ?? "";
     $("#footnote-remove").hidden = !marker;
     footnoteDialog.showModal();
@@ -4263,13 +4276,13 @@
     const text = footnoteForm.elements.text.value.trim();
     if (!text || !liveEditor || liveEditor !== footnoteEditor) return;
     if (footnotePosition === undefined) {
-      const inserted = liveEditor.chain().focus().insertContentAt(liveEditor.state.selection.to, { type: "footnote", attrs: { text } }).run();
+      const inserted = liveEditor.chain().focus().insertContentAt(liveEditor.state.selection.to, { type: "footnote", attrs: { text, kind: noteKind } }).run();
       if (!inserted) return;
     } else {
       const { doc, tr } = liveEditor.state;
       const note = doc.nodeAt(footnotePosition);
       if (note?.type.name !== "footnote") return;
-      liveEditor.view.dispatch(tr.setNodeMarkup(footnotePosition, undefined, { text }));
+      liveEditor.view.dispatch(tr.setNodeMarkup(footnotePosition, undefined, { ...note.attrs, text }));
     }
     finishFootnote();
   });
@@ -4572,6 +4585,7 @@
       case "outline": $("#toggle-outline").click(); break;
       case "contents": updateTableOfContents(); break;
       case "footnote": openFootnote(); break;
+      case "endnote": openFootnote(undefined, "endnote"); break;
       case "quick-overview": toggleAssistant(true); buildOverview(); break;
       case "track-changes":
         trackChangesEnabled = !trackChangesEnabled;
@@ -4805,7 +4819,7 @@
   function makeWordPackage(source = editor, pageLayout = null, comments = []) {
     const exportLayout = pageLayout || { paper: $("#editor-card").classList.contains("paper-letter") ? "letter" : "a4", orientation: $("#editor-card").classList.contains("landscape") ? "landscape" : "portrait", margins: $("#editor-card").classList.contains("margin-narrow") ? "narrow" : $("#editor-card").classList.contains("margin-wide") ? "wide" : "normal", pageNumbers: pageNumbersEnabled, header: pageHeaderText, footer: pageFooterText };
     const relationships = [];
-    const footnotes = [];
+    const wordNotes = { footnote: [], endnote: [] };
     const hyperlinkIds = new Map();
     const imageIds = new Map();
     const images = [];
@@ -4900,8 +4914,9 @@
       const tag = node.tagName.toLowerCase();
       const footnote = tag === "span" && node.getAttribute("data-footnote-text");
       if (footnote) {
-        const id = footnotes.push(footnote);
-        return `<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="${id}"/></w:r>`;
+        const kind = node.getAttribute("data-footnote-kind") === "endnote" ? "endnote" : "footnote";
+        const id = wordNotes[kind].push(footnote);
+        return `<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:${kind}Reference w:id="${id}"/></w:r>`;
       }
       if (tag === "br") return "<w:r><w:br/></w:r>";
       if (tag === "img") {
@@ -5239,7 +5254,8 @@
     const footerReference = hasFooter ? `<w:footerReference w:type="default" r:id="${footerRelationshipId}"/>` : "";
     const commentsRelationshipId = exportedComments.length ? `rId${nextRelationship++}` : "";
     const commentsExtendedRelationshipId = exportedComments.length ? `rId${nextRelationship++}` : "";
-    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join("")}<w:sectPr>${headerReference}${footerReference}<w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="${topMarginTwips}" w:right="${rightMarginTwips}" w:bottom="${bottomMarginTwips}" w:left="${leftMarginTwips}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+    const endnoteProperties = wordNotes.endnote.length ? '<w:endnotePr><w:numFmt w:val="lowerRoman"/></w:endnotePr>' : "";
+    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join("")}<w:sectPr>${headerReference}${footerReference}${endnoteProperties}<w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="${topMarginTwips}" w:right="${rightMarginTwips}" w:bottom="${bottomMarginTwips}" w:left="${leftMarginTwips}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
     const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="20"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="18"/></w:rPr></w:style></w:styles>';
     const bulletGlyphs = ["•", "○", "▪"];
     const numberingLevels = (format) => Array.from({ length: 9 }, (_, level) => `<w:lvl w:ilvl="${level}"><w:start w:val="1"/><w:numFmt w:val="${format}"/><w:lvlText w:val="${format === "bullet" ? bulletGlyphs[level % bulletGlyphs.length] : `%${level + 1}.`}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${(level + 1) * 720}" w:hanging="360"/></w:pPr></w:lvl>`).join("");
@@ -5251,7 +5267,9 @@
     if (hasFooter) relationships.push(`<Relationship Id="${footerRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`);
     if (commentsRelationshipId) relationships.push(`<Relationship Id="${commentsRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/>`);
     if (commentsExtendedRelationshipId) relationships.push(`<Relationship Id="${commentsExtendedRelationshipId}" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="commentsExtended.xml"/>`);
-    if (footnotes.length) relationships.push('<Relationship Id="rIdFootnotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>');
+    for (const [kind, notes] of Object.entries(wordNotes)) {
+      if (notes.length) relationships.push(`<Relationship Id="rId-${kind}s" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${kind}s" Target="${kind}s.xml"/>`);
+    }
     const documentRelationships = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>${relationships.join("")}</Relationships>`;
     const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const coreProperties = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${wordXmlText(title())}</dc:title><dc:creator>adigunFreeDocEditor</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
@@ -5263,13 +5281,15 @@
         '"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="' + (index * 240) + '"/></w:pPr></w:style>').join("");
       files["word/styles.xml"] = stylesXml.replace("</w:styles>", contentsStyles + "</w:styles>");
     }
-    if (footnotes.length) {
-      files["[Content_Types].xml"] = contentTypes.replace("</Types>", '<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/></Types>');
-      const entries = footnotes.map((note, index) => {
+    for (const [kind, notes] of Object.entries(wordNotes)) {
+      if (!notes.length) continue;
+      files["[Content_Types].xml"] = files["[Content_Types].xml"].replace("</Types>",
+        `<Override PartName="/word/${kind}s.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.${kind}s+xml"/></Types>`);
+      const entries = notes.map((note, index) => {
         const lines = note.split(/\r?\n/).map((line) => `<w:t xml:space="preserve">${wordXmlText(line)}</w:t>`).join("<w:br/>");
-        return `<w:footnote w:id="${index + 1}"><w:p><w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> </w:t>${lines}</w:r></w:p></w:footnote>`;
+        return `<w:${kind} w:id="${index + 1}"><w:p><w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:${kind}Ref/></w:r><w:r><w:t xml:space="preserve"> </w:t>${lines}</w:r></w:p></w:${kind}>`;
       });
-      files["word/footnotes.xml"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>' + entries.join("") + "</w:footnotes>";
+      files[`word/${kind}s.xml`] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:${kind}s xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:${kind} w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:${kind}><w:${kind} w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:${kind}>${entries.join("")}</w:${kind}s>`;
     }
     if (exportedComments.length) {
       files["word/comments.xml"] = commentsXml;
