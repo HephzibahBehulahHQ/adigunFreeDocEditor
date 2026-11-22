@@ -11,7 +11,7 @@
   const animationList = $("slide-animation-list");
   const transitionDialog = $("slide-transition-dialog");
   const transitionForm = transitionDialog.querySelector("form");
-  const { normalizeTransition, transitionFrames, normalizeObjects, imageLimit, imageData } = window.AdigunPresentation;
+  const { normalizeTransition, transitionFrames, normalizeObjects, normalizeObjectLink, imageLimit, imageData } = window.AdigunPresentation;
   const effects = {
     fade: [{ opacity: 0 }, { opacity: 1 }],
     rise: [{ opacity: 0, transform: "translateY(24px)" }, { opacity: 1, transform: "translateY(0)" }],
@@ -215,7 +215,8 @@
 
   function drawObjects(layer, objects = [], editable = false) {
     layer.replaceChildren(...objects.map((object, index) => {
-      const node = document.createElement(editable ? "button" : "div");
+      const link = editable ? "" : normalizeObjectLink(object.link);
+      const node = document.createElement(editable ? "button" : link ? "a" : "div");
       node.className = `slide-object slide-object-${object.kind}`;
       if (object.kind === "image") {
         const image = document.createElement("img");
@@ -226,6 +227,12 @@
       } else node.textContent = object.text;
       node.style.setProperty("--object-fill", "#" + object.fill);
       placeObject(node, object);
+      if (link) {
+        node.href = link;
+        node.target = "_blank";
+        node.rel = "noopener noreferrer";
+        if (!object.text.trim()) node.setAttribute("aria-label", `Open ${new URL(link).hostname} (new tab)`);
+      }
       if (editable) {
         node.type = "button";
         node.setAttribute("aria-label", `${object.kind === "text" ? "Text box" : object.kind} ${index + 1}${object.text ? ": " + object.text : ""}`);
@@ -399,6 +406,8 @@
     if (!object) return;
     addResizeHandle(objects, selectedObject);
     for (const key of ["text", "x", "y", "width", "height", "rotation"]) objectForm.elements[key].value = object[key];
+    objectForm.elements.link.value = object.link || "";
+    objectForm.elements.link.setCustomValidity("");
     objectForm.elements.fill.value = "#" + object.fill;
     objectForm.elements.fill.disabled = ["text", "image"].includes(object.kind);
     $("slide-object-text-label").textContent = object.kind === "image" ? "Alternative text" : "Text";
@@ -568,12 +577,19 @@
       objectForm.elements.text.focus();
     } catch (error) { status(error.message || "The image could not be opened."); }
   });
+  objectForm.elements.link.addEventListener("input", (event) => event.target.setCustomValidity(""));
   objectForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const objects = deck.slides[deck.active].objects;
     const changes = Object.fromEntries(["x", "y", "width", "height", "rotation"].map((key) => [key, objectForm.elements[key].valueAsNumber]));
-    const { fill, text } = objectForm.elements;
-    [objects[selectedObject]] = normalizeObjects([{ ...objects[selectedObject], ...changes, fill: fill.value.slice(1), text: text.value }]);
+    const { fill, text, link } = objectForm.elements;
+    const address = normalizeObjectLink(link.value);
+    if (link.value.trim() && !address) {
+      link.setCustomValidity("Enter a complete HTTP or HTTPS URL without credentials.");
+      link.reportValidity();
+      return;
+    }
+    [objects[selectedObject]] = normalizeObjects([{ ...objects[selectedObject], ...changes, fill: fill.value.slice(1), text: text.value, link: address }]);
     save();
     renderObjects();
   });

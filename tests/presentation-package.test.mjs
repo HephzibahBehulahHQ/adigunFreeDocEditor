@@ -4,7 +4,7 @@ import vm from "node:vm";
 import { JSDOM } from "jsdom";
 
 const window = {};
-const context = vm.createContext({ window, Uint8Array, Uint16Array, Uint32Array, Int32Array, TextEncoder, TextDecoder });
+const context = vm.createContext({ window, URL, Uint8Array, Uint16Array, Uint32Array, Int32Array, TextEncoder, TextDecoder });
 for (const file of ["assets/vendor/fflate.min.js", "presentation-package.js"]) {
   vm.runInContext(fs.readFileSync(new URL("../" + file, import.meta.url), "utf8"), context);
   if (file.endsWith("fflate.min.js")) window.fflate = context.fflate;
@@ -28,16 +28,22 @@ try {
       objects: [{ kind: "ellipse", x: 10, y: 20, width: 25, height: 18, rotation: 30, text: "Review", fill: "DAA9EF" }] },
   ]);
   const grouped = [
-    { kind: "rectangle", x: 15, y: 12, width: 20, height: 12, text: "First", group: 2 },
+    { kind: "rectangle", x: 15, y: 12, width: 20, height: 12, text: "First", group: 2, link: "https://example.com/?a=1&b=2" },
     { kind: "text", x: 45, y: 40, width: 20, height: 12, text: "Outside" },
     { kind: "ellipse", x: 52, y: 13, width: 16, height: 14, rotation: 30, text: "Second", group: 2 },
   ];
   const groupedParts = window.AdigunPresentation.createParts([{ title: "Group test", lines: [], objects: grouped }]);
   const xml = window.fflate.strFromU8(groupedParts["ppt/slides/slide1.xml"]);
   assert.match(xml, /<p:grpSp><p:nvGrpSpPr><p:cNvPr id="31" name="Adigun group"/);
+  assert.match(xml, /<a:hlinkClick r:id="rIdLink1"\/>/);
+  assert.match(window.fflate.strFromU8(groupedParts["ppt/slides/_rels/slide1.xml.rels"]), /Target="https:\/\/example.com\/\?a=1&amp;b=2" TargetMode="External"/);
   const [reopened] = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(groupedParts), dom.window.DOMParser);
   assert.deepEqual(Array.from(reopened.objects, ({ text, x, group }) => [text, x, group]),
     [["Outside", 45, undefined], ["First", 15, 1], ["Second", 52, 1]]);
+  assert.equal(reopened.objects[1].link, grouped[0].link);
+  for (const unsafe of ["javascript:alert(1)", "file:///secret", "https://user:secret@example.com"]) {
+    assert.equal(window.AdigunPresentation.normalizeObjectLink(unsafe), "");
+  }
   groupedParts["ppt/slides/slide1.xml"] = window.fflate.strToU8(xml.replace(
     '<a:off x="1828800" y="822960"/><a:ext', '<a:off x="2438400" y="822960"/><a:ext',
   ));
