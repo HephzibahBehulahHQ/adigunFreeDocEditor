@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
-import { buildPivot, calculateSheet, calculateWorkbook, cellAddress, displayCell, parseChartRange, parseCsv, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, toCsv } from "../sheet-model.js";
+import { maxRows, buildPivot, calculateSheet, calculateWorkbook, cellAddress, displayCell, parseChartRange, parseCsv, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, toCsv } from "../sheet-model.js";
 import { exportWorkbook, importWorkbook } from "../sheet-xlsx.js";
 
 assert.equal(cellAddress(99, 25), "Z100");
+assert.equal(cellAddress(maxRows - 1, 25), "Z9999");
+assert.equal(calculateSheet({ A9998: "7", A9999: "=SUM(A9998:A9998)" })("A9999"), 7);
 assert.equal(shiftCellFormula("=SUM(A1:B2)+$A1+A$1+'Q1 data'!$B$2", 2, 1), "=SUM(B3:C4)+$A3+B$1+'Q1 data'!$B$2");
 assert.equal(shiftCellFormula("=Z1", 0, 1), "=#REF!");
 assert.equal(renameSheetReferences("=Input!A1+'Input old'!A2", new Map([["INPUT", "Input old"], ["INPUT OLD", "Owner's data"]])), "='Input old'!A1+'Owner''s data'!A2");
@@ -36,7 +38,7 @@ assert.deepEqual(parseCsv('name\t"one, two"\r\n"line\nbreak"\t"with\ttab"', "\t"
   ["name", "one, two"], ["line\nbreak", "with\ttab"],
 ]);
 assert.throws(() => parseCsv("x,".repeat(26) + "x"), /column/);
-assert.throws(() => parseCsv("x\n".repeat(101)), /row/);
+assert.throws(() => parseCsv("x\n".repeat(maxRows + 1)), /row/);
 
 const cells = { A1: "2", A2: "3", B1: "=A1+A2*4", B2: "=SUM(A1:A2,B1)", C1: "=AVERAGE(A1:A2)", C2: "=MIN(A2,A1)", D1: "=MAX(A1:A2)", D2: "=1/0", E1: "=E2", E2: "=E1", F1: "=unknown(3)" };
 const valueAt = calculateSheet(cells);
@@ -169,6 +171,10 @@ try {
     [protectedSheets[0].protection, protectedSheets[1].protection, null]);
   assert.equal(reopenedProtection[1].cells.A1, "=1+2");
   const namedBytes = exportWorkbook(namedSheets, zip, false, namedRanges);
+  const longSheet = { name: "Long", cells: { A9998: "7", A9999: "=A9998+3" } };
+  const [reopenedLong] = importWorkbook(exportWorkbook([longSheet], zip), zip, dom.window.DOMParser).sheets;
+  assert.equal(reopenedLong.rows, maxRows);
+  assert.deepEqual(reopenedLong.cells, longSheet.cells);
   const namedFile = importWorkbook(namedBytes, zip, dom.window.DOMParser);
   assert.deepEqual(namedFile.namedRanges, namedRanges);
   assert.deepEqual(["A1", "A2", "A3"].map(calculateWorkbook(namedFile.sheets, 0, false, namedFile.namedRanges)), [20, 12, 8]);

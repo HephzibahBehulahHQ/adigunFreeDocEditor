@@ -7,7 +7,7 @@ const relation = (id, kind, target) => `<Relationship Id="${id}" Type="${office}
 const relationships = (links) => `<Relationships xmlns="${packageNs}">${links}</Relationships>`;
 const partType = (path, kind) =>
   `<Override PartName="/${path}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.${kind}+xml"/>`;
-const rangePattern = /^([A-Z])([1-9]\d?|100):([A-Z])([1-9]\d?|100)$/;
+const rangePattern = /^([A-Z])([1-9]\d{0,3}):([A-Z])([1-9]\d{0,3})$/;
 
 function cacheValue(value, xml) {
   if (value === "") return "<m/>";
@@ -103,7 +103,7 @@ export function readWorksheetPivot(files, parse, worksheetPath, sheets, workshee
   const table = parse(tablePath).documentElement;
   const nodes = (root, kind) => [...root.getElementsByTagNameNS(main, kind)];
   const location = nodes(table, "location")[0];
-  if (!/^A1:B(?:[1-9]\d?|100)$/.test(location?.getAttribute("ref") ?? "") ||
+  if (!/^A1:B(?:[1-9]\d{0,3})$/.test(location?.getAttribute("ref") ?? "") ||
       nodes(table, "colFields").length || nodes(table, "pageFields").length ||
       table.getAttribute("rowGrandTotals") !== "0" || table.getAttribute("colGrandTotals") !== "0") return null;
   const groups = nodes(table, "field");

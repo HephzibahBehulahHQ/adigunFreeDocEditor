@@ -1,4 +1,4 @@
-export const maxRows = 100;
+export const maxRows = 9999;
 export const maxColumns = 26;
 export const maxCellLength = 4000;
 export const numberFormats = { general: 0, number: 4, percent: 10, decimal: 2, date: 14 };
@@ -62,7 +62,7 @@ export function normalizeConditionalRule(input) {
   const { range, operator, threshold, color } = input ?? {};
   if (typeof range !== "string" || !["greaterThan", "lessThan", "equal"].includes(operator) ||
     !Number.isFinite(threshold) || !Object.hasOwn(conditionalColors, color)) return null;
-  const match = /^([A-Z])([1-9]\d?|100)(?::([A-Z])([1-9]\d?|100))?$/.exec(range.toUpperCase().trim());
+  const match = /^([A-Z])([1-9]\d{0,3})(?::([A-Z])([1-9]\d{0,3}))?$/.exec(range.toUpperCase().trim());
   if (!match) return null;
   const [, left, top, right = left, bottom = top] = match;
   if (right < left || Number(bottom) < Number(top)) return null;
@@ -93,7 +93,7 @@ export function parseSheetFilter(input) {
   const { range, column, value } = input ?? {};
   if (typeof range !== "string" || typeof column !== "string" || typeof value !== "string" ||
     !value || value.length > 255) return null;
-  const match = /^([A-Z])([1-9]\d?|100):([A-Z])([1-9]\d?|100)$/.exec(range.toUpperCase().trim());
+  const match = /^([A-Z])([1-9]\d{0,3}):([A-Z])([1-9]\d{0,3})$/.exec(range.toUpperCase().trim());
   if (!match) return null;
   const [, left, first, right, last] = match;
   const key = column.toUpperCase().trim();
@@ -178,7 +178,7 @@ export function removeDuplicateRecords(sheet, range, valueAt) {
 }
 
 export function splitColumnText(sheet, range, delimiter) {
-  const match = /^([A-Z])([1-9]\d?|100)(?::\1([1-9]\d?|100))?$/.exec(String(range).trim().toUpperCase());
+  const match = /^([A-Z])([1-9]\d{0,3})(?::\1([1-9]\d{0,3}))?$/.exec(String(range).trim().toUpperCase());
   if (!match || ![",", ";", "\t", "|"].includes(delimiter)) throw new Error("Select cells in one column and choose a separator.");
   const [, letter, start, end = start] = match;
   const column = letter.charCodeAt(0) - 65;
@@ -201,7 +201,7 @@ export function splitColumnText(sheet, range, delimiter) {
 
 export function parseChartRange(range = "") {
   if (typeof range !== "string") return null;
-  const match = /^([A-Z])([1-9]\d?|100):([A-Z])([1-9]\d?|100)$/.exec(range.toUpperCase().trim());
+  const match = /^([A-Z])([1-9]\d{0,3}):([A-Z])([1-9]\d{0,3})$/.exec(range.toUpperCase().trim());
   if (!match) return null;
   const [, labels, first, values, last] = match;
   if (values.charCodeAt(0) - labels.charCodeAt(0) !== 1 || Number(last) <= Number(first)) return null;
@@ -249,7 +249,7 @@ export function parseCsv(source, delimiter = ",") {
     quoteClosed = false;
   };
   const finishRow = () => {
-    if (rows.length >= maxRows) throw new Error("CSV exceeds the 100-row limit.");
+    if (rows.length >= maxRows) throw new Error("CSV exceeds the 9,999-row limit.");
     finishField();
     rows.push(row);
     row = [];
@@ -281,7 +281,7 @@ export function shiftCellFormula(value, rowDelta, columnDelta) {
   if (!value.startsWith("=")) return value;
   return value.replace(/(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+(?![\w.])|[A-Za-z_][\w.]*|"(?:[^"]|"")*"|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/gi, (token) => {
     const separator = token.lastIndexOf("!") + 1;
-    const match = /^(\$?)([A-Za-z])(\$?)([1-9]\d?|100)$/.exec(token.slice(separator));
+    const match = /^(\$?)([A-Za-z])(\$?)([1-9]\d{0,3})$/.exec(token.slice(separator));
     if (!match) return token;
     const [, absoluteColumn, letter, absoluteRow, digits] = match;
     const column = letter.toUpperCase().charCodeAt(0) - 65 + (absoluteColumn ? 0 : columnDelta);
@@ -302,7 +302,7 @@ export function renameSheetReferences(value, names) {
 }
 
 export function buildPivot(cells, { range, group, measure, aggregate }, valueAt = calculateSheet(cells)) {
-  const match = /^([A-Z])([1-9]\d?|100):([A-Z])([1-9]\d?|100)$/.exec(range.toUpperCase().trim());
+  const match = /^([A-Z])([1-9]\d{0,3}):([A-Z])([1-9]\d{0,3})$/.exec(range.toUpperCase().trim());
   if (!match) throw new Error("Enter a source range such as A1:D20, including the header row.");
   const [, left, first, right, last] = match;
   const groupColumn = group.toUpperCase().trim();
@@ -434,7 +434,7 @@ export function normalizeNamedRange(entry) {
   const name = typeof entry?.name === "string" ? entry.name.trim() : "";
   const sheet = entry?.sheet;
   const cells = typeof entry?.range === "string" ? entry.range.toUpperCase().replaceAll("$", "").trim() : "";
-  const match = /^([A-Z])([1-9]\d?|100)(?::([A-Z])([1-9]\d?|100))?$/.exec(cells);
+  const match = /^([A-Z])([1-9]\d{0,3})(?::([A-Z])([1-9]\d{0,3}))?$/.exec(cells);
   if (!match || !/^[A-Za-z_][A-Za-z0-9_.]{0,254}$/.test(name) || /^_xlnm\.|^(?:R(?:\d*)C(?:\d*)|R|C|TRUE|FALSE)$/i.test(name) ||
       typeof sheet !== "string" || !sheet.length || sheet.length > 31) return null;
   const possibleCell = /^([A-Z]{1,3})([1-9]\d*)$/i.exec(name);
@@ -523,7 +523,7 @@ function evaluateFormula(expression, scalarAt, numeric, valueAt, date1904, named
   function reference(token = "") {
     const separator = token.lastIndexOf("!");
     const address = token.slice(separator + 1).replaceAll("$", "").toUpperCase();
-    if (!/^[A-Z](?:[1-9]\d?|100)$/.test(address)) return null;
+    if (!/^[A-Z](?:[1-9]\d{0,3})$/.test(address)) return null;
     const sheet = separator < 0 ? undefined : token.slice(0, separator).replace(/^'|'$/g, "").replaceAll("''", "'");
     return { address, sheet };
   }

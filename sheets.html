@@ -100,7 +100,7 @@
       <aside id="sheet-chart-panel" class="sheet-chart-panel" aria-labelledby="sheet-chart-title" hidden>
         <header><h2 id="sheet-chart-title">Bar chart</h2><button id="sheet-chart-close" class="button button-outline" type="button">Close</button></header>
         <form id="sheet-chart-form">
-          <label>Two columns with headers <input name="range" placeholder="A1:B5" maxlength="9" required></label>
+          <label>Two columns with headers <input name="range" placeholder="A1:B5" maxlength="11" required></label>
           <div class="sheets-actions">
             <button class="button button-outline" type="submit">Apply range</button>
             <button id="sheet-chart-remove" class="button button-outline" type="button" disabled>Remove chart</button>
@@ -112,7 +112,7 @@
       <aside id="sheet-rule-panel" class="sheet-chart-panel" aria-labelledby="sheet-rule-title" hidden>
         <header><h2 id="sheet-rule-title">Conditional formatting</h2><button id="sheet-rule-close" class="button button-outline" type="button">Close</button></header>
         <form id="sheet-rule-form">
-          <label>Apply to <input name="range" placeholder="B2:B20" maxlength="9" required></label>
+          <label>Apply to <input name="range" placeholder="B2:B20" maxlength="11" required></label>
           <label>Cell value <select name="operator"><option value="greaterThan">Greater than</option><option value="lessThan">Less than</option><option value="equal">Equals</option></select></label>
           <label>Compare with <input name="threshold" type="number" step="any" required></label>
           <label>Fill <select name="color"><option value="yellow">Yellow</option><option value="green">Green</option><option value="red">Red</option></select></label>
@@ -195,7 +195,7 @@
   <dialog id="sheet-print-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-print-title">
     <h2 id="sheet-print-title">Print setup</h2>
     <form>
-      <label>Print area <input name="range" maxlength="9" placeholder="Cells with content"></label>
+      <label>Print area <input name="range" maxlength="11" placeholder="Cells with content"></label>
       <label>Paper <select name="paper"><option value="a4">A4</option><option value="letter">US Letter</option></select></label>
       <label>Orientation <select name="orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
       <label><input name="grid" type="checkbox"> Print gridlines</label>
@@ -249,7 +249,7 @@
   <dialog id="sheet-sort-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-sort-title">
     <h2 id="sheet-sort-title">Sort records</h2>
     <form>
-      <label>Full range with headers <input name="range" placeholder="A1:D20" maxlength="9" required></label>
+      <label>Full range with headers <input name="range" placeholder="A1:D20" maxlength="11" required></label>
       <div data-sort-options>
         <label>Sort by column <input name="column" placeholder="B" maxlength="1" required></label>
         <label>Order <select name="direction"><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
@@ -264,7 +264,7 @@
   <dialog id="sheet-split-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-split-title">
     <h2 id="sheet-split-title">Split text into columns</h2>
     <form>
-      <label>Range in one column <input name="range" maxlength="9" required></label>
+      <label>Range in one column <input name="range" maxlength="11" required></label>
       <label>Separator <select name="delimiter"><option value=",">Comma</option><option value=";">Semicolon</option><option value="tab">Tab</option><option value="|">Pipe</option></select></label>
       <p role="status"></p>
       <div class="sheets-actions">
@@ -276,7 +276,7 @@
   <dialog id="sheet-filter-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-filter-title">
     <h2 id="sheet-filter-title">Filter rows</h2>
     <form>
-      <label>Range with headers <input name="range" placeholder="A1:D20" maxlength="9" required></label>
+      <label>Range with headers <input name="range" placeholder="A1:D20" maxlength="11" required></label>
       <label>Column to filter <input name="column" placeholder="B" maxlength="1" required></label>
       <label>Show rows with this value <input name="value" maxlength="255" required></label>
       <p role="status"></p>
