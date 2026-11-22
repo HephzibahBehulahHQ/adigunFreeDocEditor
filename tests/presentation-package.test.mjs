@@ -83,6 +83,14 @@ try {
   assert.deepEqual(JSON.parse(JSON.stringify(animatedSlide.animations)), [
     animations[0], animations[1], { ...animations[2], target: "object:1" }, animations[3], animations[4], animations[5],
   ]);
+  const tableCells = [["Product", "Units"], ["B & C", "3"], ["D", ""]];
+  const tableParts = window.AdigunPresentation.createParts([{ title: "Table", lines: [], objects: [
+    { kind: "table", width: 48, height: 30, cells: tableCells },
+  ] }]);
+  const tableXml = window.fflate.strFromU8(tableParts["ppt/slides/slide1.xml"]);
+  assert.match(tableXml, /<p:graphicFrame>.*<a:tbl><a:tblPr\/><a:tblGrid>/);
+  const [tableSlide] = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(tableParts), dom.window.DOMParser);
+  assert.deepEqual(JSON.parse(JSON.stringify(tableSlide.objects[0].cells)), tableCells);
 } finally {
   dom.window.close();
 }
