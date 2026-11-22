@@ -30,6 +30,7 @@
   let presentedSlide = 0;
   let draggedSlide = null;
   let selectedObject = null;
+  const selectedObjects = new Set();
 
   function normalizeAnimation(animation) {
     const { effect, target, start, duration, delay } = animation || {};
@@ -121,6 +122,7 @@
 
   function render() {
     selectedObject = null;
+    selectedObjects.clear();
     const slide = deck.slides[deck.active];
     $("deck-title").value = deck.name;
     $("slide-title").value = slide.title;
@@ -227,11 +229,16 @@
       if (editable) {
         node.type = "button";
         node.setAttribute("aria-label", `${object.kind === "text" ? "Text box" : object.kind} ${index + 1}${object.text ? ": " + object.text : ""}`);
-        node.setAttribute("aria-pressed", String(index === selectedObject));
-        node.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown ArrowLeft ArrowRight");
-        node.addEventListener("click", () => selectObject(index, true));
+        node.setAttribute("aria-pressed", String(selectedObjects.has(index)));
+        node.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown ArrowLeft ArrowRight Shift+Enter");
+        node.addEventListener("click", (event) => selectObject(index, true, event.shiftKey));
+        node.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" || !event.shiftKey) return;
+          event.preventDefault();
+          selectObject(index, true, true);
+        });
         node.addEventListener("pointerdown", (event) => {
-          if (event.button !== 0) return;
+          if (event.button !== 0 || event.shiftKey) return;
           const bounds = layer.getBoundingClientRect();
           const { clientX, clientY } = event;
           let move = object;
@@ -353,8 +360,19 @@
   function renderObjects() {
     const objects = deck.slides[deck.active].objects ?? [];
     const object = objects[selectedObject];
+    const multiple = selectedObjects.size > 1;
     objectPanel.hidden = !object;
+    objectForm.hidden = multiple;
+    $("slide-object-alignment").hidden = !multiple;
+    $("slide-object-heading").textContent = multiple ? "Align objects" : "Object properties";
     drawObjects(objectLayer, objects, true);
+    if (multiple) {
+      $("slide-object-selection-count").textContent = `${selectedObjects.size} objects selected`;
+      for (const control of document.querySelectorAll('[data-align-objects^="distribute"]')) {
+        control.disabled = selectedObjects.size < 3;
+      }
+      return;
+    }
     if (!object) return;
     addResizeHandle(objects, selectedObject);
     for (const key of ["text", "x", "y", "width", "height", "rotation"]) objectForm.elements[key].value = object[key];
@@ -366,12 +384,73 @@
     $("slide-object-duplicate").disabled = objects.length >= 25;
   }
 
-  function selectObject(index, focus = false) {
+  function selectObject(index, focus = false, extend = false) {
     if (index !== null) animationPanel.hidden = true;
-    selectedObject = index;
+    if (!extend) selectedObjects.clear();
+    if (extend && selectedObjects.has(index)) selectedObjects.delete(index);
+    else if (index !== null) selectedObjects.add(index);
+    selectedObject = selectedObjects.has(index) ? index : [...selectedObjects].at(-1) ?? null;
     renderObjects();
     if (focus) objectLayer.children[index]?.focus();
   }
+
+  function objectAxis(object, horizontal, aspect) {
+    const radians = object.rotation * Math.PI / 180;
+    const cosine = Math.abs(Math.cos(radians));
+    const sine = Math.abs(Math.sin(radians));
+    const center = horizontal ? object.x + object.width / 2 : object.y + object.height / 2;
+    const size = horizontal ? object.width * cosine + object.height * sine / aspect :
+      object.height * cosine + object.width * sine * aspect;
+    return { center, start: center - size / 2, end: center + size / 2 };
+  }
+
+  for (const control of document.querySelectorAll("[data-align-objects]")) {
+    control.addEventListener("click", () => {
+      if (selectedObjects.size < 2) return;
+      const mode = control.dataset.alignObjects;
+      const distribute = mode.startsWith("distribute");
+      if (distribute && selectedObjects.size < 3) return;
+      const horizontal = ["left", "center", "right", "distribute-x"].includes(mode);
+      const key = horizontal ? "x" : "y";
+      const bounds = objectLayer.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      const objects = deck.slides[deck.active].objects;
+      const entries = [...selectedObjects].map((index) => ({
+        index, axis: objectAxis(objects[index], horizontal, bounds.width / bounds.height),
+      }));
+      const first = Math.min(...entries.map(({ axis }) => axis.start));
+      const last = Math.max(...entries.map(({ axis }) => axis.end));
+      const edge = ["left", "top"].includes(mode) ? "start" : ["right", "bottom"].includes(mode) ? "end" : "center";
+      const coordinate = { start: first, end: last, center: (first + last) / 2 }[edge];
+      const objectSize = ({ axis }) => axis.end - axis.start;
+      const space = last - first - entries.reduce((total, entry) => total + objectSize(entry), 0);
+      if (distribute && space < -0.001) {
+        status("Move the outer objects farther apart before distributing this selection.");
+        return;
+      }
+      if (distribute) entries.sort((one, two) => one.axis.start - two.axis.start);
+      let nextStart = first;
+      const changes = entries.map(({ index, axis }) => {
+        const offset = distribute ? nextStart - axis.start : coordinate - axis[edge];
+        nextStart += axis.end - axis.start + space / (entries.length - 1);
+        const requested = objects[index][key] + offset;
+        const [item] = normalizeObjects([{ ...objects[index], [key]: requested }]);
+        return { index, item, requested };
+      });
+      if (changes.some(({ item, requested }) => Math.abs(item[key] - requested) > 0.051)) {
+        status("These objects cannot align there within the slide. Move or resize one and try again.");
+        return;
+      }
+      for (const { index, item } of changes) objects[index] = item;
+      save();
+      renderObjects();
+    });
+  }
+  $("slide-alignment-close").addEventListener("click", () => {
+    const index = selectedObject;
+    selectObject(null);
+    objectLayer.children[index]?.focus();
+  });
 
   objectLayer.addEventListener("keydown", (event) => {
     const offsets = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };

@@ -82,6 +82,7 @@
       <aside id="slide-object-panel" class="slide-object-panel" aria-labelledby="slide-object-heading" hidden>
         <h2 id="slide-object-heading">Object properties</h2>
         <form id="slide-object-form">
+          <p>Shift-click or Shift+Enter to select multiple objects.</p>
           <label><span id="slide-object-text-label">Text</span><textarea name="text" rows="3" maxlength="500"></textarea></label>
           <div class="slide-object-fields">
             <label>Left % <input name="x" type="number" min="0" max="100" step="0.1" required></label>
@@ -100,6 +101,20 @@
             <button id="slide-object-close" class="button button-outline" type="button">Close</button>
           </div>
         </form>
+        <section id="slide-object-alignment" hidden aria-label="Align selected objects">
+          <p id="slide-object-selection-count"></p>
+          <div class="slides-actions">
+            <button class="button button-outline" type="button" data-align-objects="left">Align left</button>
+            <button class="button button-outline" type="button" data-align-objects="center">Center horizontally</button>
+            <button class="button button-outline" type="button" data-align-objects="right">Align right</button>
+            <button class="button button-outline" type="button" data-align-objects="top">Align top</button>
+            <button class="button button-outline" type="button" data-align-objects="middle">Center vertically</button>
+            <button class="button button-outline" type="button" data-align-objects="bottom">Align bottom</button>
+            <button class="button button-outline" type="button" data-align-objects="distribute-x">Distribute horizontally</button>
+            <button class="button button-outline" type="button" data-align-objects="distribute-y">Distribute vertically</button>
+            <button id="slide-alignment-close" class="button button-outline" type="button">Clear selection</button>
+          </div>
+        </section>
       </aside>
       <aside id="slide-animation-panel" class="slide-object-panel" aria-labelledby="slide-animation-panel-title" hidden>
         <h2 id="slide-animation-panel-title">Animation order</h2>
