@@ -35,6 +35,7 @@ const fixture = modelApi.normalize({
       element("tfoot", {}, [element("tr", {}, [element("td", {}, [element("p", {}, [text("Footer")])])])]),
     ]),
     element("hr", { "data-page-break": "true" }),
+    element("hr", { "data-section-break": "nextPage" }),
   ],
 });
 

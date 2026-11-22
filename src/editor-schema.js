@@ -133,6 +133,11 @@ const ModelAttributes = Extension.create({
             parseHTML: (element) => element.getAttribute("data-page-break") === "true",
             renderHTML: (attrs) => attrs.pageBreak ? { "data-page-break": "true" } : {},
           },
+          sectionBreak: {
+            default: false,
+            parseHTML: (element) => element.getAttribute("data-section-break") === "nextPage",
+            renderHTML: (attrs) => attrs.sectionBreak ? { "data-section-break": "nextPage" } : {},
+          },
         },
       },
     ];
@@ -397,7 +402,9 @@ function modelNodeToEditor(node, marks = []) {
     height: attrs.height ? Number(attrs.height) : null,
   }, ...(marks.length ? { marks } : {}) }];
   if (tag === "br") return [{ type: "hardBreak", ...(marks.length ? { marks } : {}) }];
-  if (tag === "hr") return [{ type: "horizontalRule", attrs: { pageBreak: attrs["data-page-break"] === "true" } }];
+  if (tag === "hr") return [{ type: "horizontalRule", attrs: {
+    pageBreak: attrs["data-page-break"] === "true", sectionBreak: attrs["data-section-break"] === "nextPage",
+  } }];
   if (tag === "p") return [{ type: "paragraph", attrs: modelAttrsToEditor(attrs), content: childrenToEditor(children, marks) }];
   if (/^h[1-6]$/.test(tag)) return [{ type: "heading", attrs: { ...modelAttrsToEditor(attrs), level: Number(tag.slice(1)) }, content: childrenToEditor(children, marks) }];
   if (tag === "ul") return [{ type: "bulletList", content: ensureEditorBlocks(childrenToEditor(children, marks)) }];
@@ -492,7 +499,10 @@ function editorNodeToModel(node) {
   if (node.type === "equation") return { type: "element", tag: "span", attrs: {
     "data-equation-kind": node.attrs.kind, "data-equation-first": node.attrs.first, "data-equation-second": node.attrs.second,
   }, children: [] };
-  if (node.type === "horizontalRule") return { type: "element", tag: "hr", attrs: node.attrs.pageBreak ? { "data-page-break": "true" } : {}, children: [] };
+  if (node.type === "horizontalRule") return { type: "element", tag: "hr", attrs: {
+    ...(node.attrs.pageBreak && { "data-page-break": "true" }),
+    ...(node.attrs.sectionBreak && { "data-section-break": "nextPage" }),
+  }, children: [] };
 
   const children = (node.content || []).map(editorNodeToModel);
   const attrs = editorAttrsToModel(node.attrs);

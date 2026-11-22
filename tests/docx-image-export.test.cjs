@@ -129,6 +129,11 @@ const equation = exportElement("SPAN", [], {
 });
 const equationXml = makeWordPackage(exportElement("DIV", [paragraph(equation)])).files["word/document.xml"];
 assert.match(equationXml, /<m:oMath [^>]+><m:f><m:num><m:r><m:t xml:space="preserve">a &lt; b<\/m:t><\/m:r><\/m:num><m:den>/);
+const sectionRule = exportElement("HR", [], { "data-page-break": "true", "data-section-break": "nextPage" });
+const sectionXml = makeWordPackage(exportElement("DIV", [paragraph(footnote), sectionRule, paragraph(equation)])).files["word/document.xml"];
+assert.match(sectionXml, /<w:p><w:pPr><w:sectPr>[\s\S]*?<w:type w:val="nextPage"\/>[\s\S]*?<\/w:sectPr><\/w:pPr><\/w:p>/);
+assert.equal((sectionXml.match(/<w:sectPr>/g) || []).length, 2);
+assert.doesNotMatch(sectionXml, /<w:br w:type="page"\/>/);
 const headingDocumentXml = result.files["word/document.xml"];
 const headingStylesXml = result.files["word/styles.xml"];
 for (const level of [4, 5, 6]) {
