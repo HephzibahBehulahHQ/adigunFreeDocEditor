@@ -113,9 +113,10 @@ function makeWorksheet({ cells, formats = {}, styles = {}, unlockedCells = {}, f
     ? `<autoFilter ref="${filter.range}"><filterColumn colId="${filter.column.charCodeAt(0) - filter.range.charCodeAt(0)}"><filters><filter val="${xml(filter.value)}"/></filters></filterColumn></autoFilter>`
     : "";
   const drawing = sheetChart ? '<drawing r:id="rId1"/>' : "";
-  const hyperlinks = links.length ? `<hyperlinks>${links.map(([address], index) =>
-    `<hyperlink ref="${address}" r:id="rIdLink${index + 1}"/>`).join("")}</hyperlinks>` : "";
-  const relationship = sheetChart || links.length ? ` xmlns:r="${officeNs}"` : "";
+  const hyperlinks = links.length ? `<hyperlinks>${links.map(([address, url], index) => url.startsWith("#")
+    ? `<hyperlink ref="${address}" location="${xml(url.slice(1))}"/>`
+    : `<hyperlink ref="${address}" r:id="rIdLink${index + 1}"/>`).join("")}</hyperlinks>` : "";
+  const relationship = sheetChart || links.some(([, url]) => !url.startsWith("#")) ? ` xmlns:r="${officeNs}"` : "";
   const condition = normalizeConditionalRule(conditionalRule);
   const conditional = condition
     ? `<conditionalFormatting sqref="${condition.range}"><cfRule type="cellIs" dxfId="${conditionNames.indexOf(condition.color)}" priority="1" operator="${condition.operator}"><formula>${condition.threshold}</formula></cfRule></conditionalFormatting>`
@@ -210,11 +211,11 @@ export function exportWorkbook(sheets, zip, date1904 = false, namesInput, onPivo
       .filter(([address, url]) => /^[A-Z][1-9]\d{0,3}$/.test(address) && Number(address.slice(1)) <= maxRows && url);
     files["xl/" + target] = makeWorksheet(sheet, valueAt, styleBook, links);
     if (sheet.chart) writeWorksheetChart(files, overrides, id, name, sheet.chart, valueAt, xml);
-    if (links.length) {
+    const entries = links.flatMap(([, url], index) => url.startsWith("#") ? [] :
+      [`<Relationship Id="rIdLink${index + 1}" Type="${officeNs}/hyperlink" Target="${xml(url)}" TargetMode="External"/>`]);
+    if (entries.length) {
       const relPath = `xl/worksheets/_rels/sheet${id}.xml.rels`;
       const existing = files[relPath] || `<Relationships xmlns="${packageNs}"></Relationships>`;
-      const entries = links.map(([, url], index) =>
-        `<Relationship Id="rIdLink${index + 1}" Type="${officeNs}/hyperlink" Target="${xml(url)}" TargetMode="External"/>`);
       files[relPath] = existing.replace("</Relationships>", () => entries.join("") + "</Relationships>");
     }
   }
@@ -342,13 +343,16 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const links = {};
     const linkNodes = worksheet.getElementsByTagNameNS(mainNs, "hyperlink");
     const relPath = path.replace(/\/([^/]+)$/, "/_rels/$1.rels");
-    if (linkNodes.length && files[relPath]) {
-      const targets = new Map([...parse(relPath).getElementsByTagNameNS(packageNs, "Relationship")]
-        .filter((node) => node.getAttribute("Type") === officeNs + "/hyperlink" && node.getAttribute("TargetMode") === "External")
+    if (linkNodes.length) {
+      const relationshipNodes = files[relPath] ? [...parse(relPath).getElementsByTagNameNS(packageNs, "Relationship")] : [];
+      const targets = new Map(relationshipNodes
+        .filter((node) => node.getAttribute("Type") === officeNs + "/hyperlink" && node.getAttribute("TargetMode") === "External" &&
+          !node.getAttribute("Target")?.trim().startsWith("#"))
         .map((node) => [node.getAttribute("Id"), normalizeCellLink(node.getAttribute("Target"))]));
       for (const node of linkNodes) {
         const address = node.getAttribute("ref");
-        const url = targets.get(node.getAttributeNS(officeNs, "id"));
+        const id = node.getAttributeNS(officeNs, "id");
+        const url = id ? targets.get(id) : normalizeCellLink("#" + node.getAttribute("location"));
         if (!url || !/^[A-Z][1-9]\d{0,3}$/.test(address) || Number(address.slice(1)) > maxRows) continue;
         links[address] = url;
         rows = Math.max(rows, Number(address.slice(1)));
