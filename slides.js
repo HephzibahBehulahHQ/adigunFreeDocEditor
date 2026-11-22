@@ -228,6 +228,7 @@
         node.type = "button";
         node.setAttribute("aria-label", `${object.kind === "text" ? "Text box" : object.kind} ${index + 1}${object.text ? ": " + object.text : ""}`);
         node.setAttribute("aria-pressed", String(index === selectedObject));
+        node.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown ArrowLeft ArrowRight");
         node.addEventListener("click", () => selectObject(index, true));
         node.addEventListener("pointerdown", (event) => {
           if (event.button !== 0) return;
@@ -274,6 +275,7 @@
     $("slide-object-text-label").textContent = object.kind === "image" ? "Alternative text" : "Text";
     $("slide-object-front").disabled = selectedObject === objects.length - 1;
     $("slide-object-back").disabled = selectedObject === 0;
+    $("slide-object-duplicate").disabled = objects.length >= 25;
   }
 
   function selectObject(index, focus = false) {
@@ -282,6 +284,23 @@
     renderObjects();
     if (focus) objectLayer.children[index]?.focus();
   }
+
+  objectLayer.addEventListener("keydown", (event) => {
+    const offsets = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (!Object.hasOwn(offsets, event.key) || event.altKey || event.ctrlKey || event.metaKey) return;
+    const index = Array.prototype.indexOf.call(objectLayer.children, event.target);
+    const objects = deck.slides[deck.active].objects;
+    const object = objects?.[index];
+    if (!object) return;
+    event.preventDefault();
+    const [horizontal, vertical] = offsets[event.key];
+    const step = event.shiftKey ? 5 : 1;
+    const [moved] = normalizeObjects([{ ...object, x: object.x + horizontal * step, y: object.y + vertical * step }]);
+    if (moved.x === object.x && moved.y === object.y) return;
+    objects[index] = moved;
+    save();
+    selectObject(index, true);
+  });
 
   for (const button of document.querySelectorAll("[data-slide-object]")) {
     button.addEventListener("click", () => {
@@ -352,6 +371,17 @@
   }
   $("slide-object-front").addEventListener("click", () => rearrangeObject(true));
   $("slide-object-back").addEventListener("click", () => rearrangeObject(false));
+  $("slide-object-duplicate").addEventListener("click", () => {
+    const objects = deck.slides[deck.active].objects;
+    const object = objects?.[selectedObject];
+    if (!object || objects.length >= 25) return;
+    const x = object.x + (object.x + object.width + 3 > 100 ? -3 : 3);
+    const y = object.y + (object.y + object.height + 3 > 100 ? -3 : 3);
+    const [copy] = normalizeObjects([{ ...object, x, y }]);
+    objects.push(copy);
+    save();
+    selectObject(objects.length - 1, true);
+  });
   $("slide-object-delete").addEventListener("click", () => {
     const slide = deck.slides[deck.active];
     const before = [...slide.objects];
