@@ -155,15 +155,17 @@
         <label>Source PDF <select name="source"></select></label>
         <label>Page <select name="page"></select></label>
       </div>
-      <canvas aria-label="Page preview with sticky note markers" hidden></canvas>
+      <canvas aria-label="Page preview for annotations" hidden></canvas>
       <label>Markup type <select name="kind">
         <option value="note">Sticky note</option>
         <option value="highlight">Highlight</option>
         <option value="underline">Underline</option>
         <option value="strike">Strikeout</option>
         <option value="box">Rectangle</option>
+        <option value="ink">Freehand ink</option>
       </select></label>
-      <div class="pdf-redact-fields">
+      <p data-ink-help hidden>Draw on the preview. Each stroke is saved as a separate mark.</p>
+      <div class="pdf-redact-fields" data-position>
         <label>Left % <input name="left" type="number" min="0" max="100" step="0.1" value="10" required></label>
         <label>Top % <input name="top" type="number" min="0" max="100" step="0.1" value="10" required></label>
       </div>
