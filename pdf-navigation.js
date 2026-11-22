@@ -15,10 +15,13 @@ export function bindPdfNavigation(sources, preview) {
   const scroll = $("pdf-reader-scroll");
   const zoom = $("pdf-reader-zoom");
   const hand = $("pdf-reader-hand");
+  const layout = $("pdf-reader-layout");
   const browserPreview = $("pdf-preview");
   let session;
   let generation = 0;
-  let rendering;
+  const jobs = new Map();
+  let continuousObserver;
+  let scrollFrame;
   let drag;
 
   hand.addEventListener("click", () => {
@@ -47,40 +50,56 @@ export function bindPdfNavigation(sources, preview) {
     scroll.classList.remove("pdf-reader-dragging");
   });
 
-  function cancelPageRender() {
-    rendering?.canvasTask?.cancel();
-    rendering?.textTask?.cancel();
-    rendering = undefined;
+  function cancelPageRender(surface) {
+    const job = jobs.get(surface);
+    jobs.delete(surface);
+    job?.canvasTask?.cancel();
+    job?.textTask?.cancel();
+  }
+
+  function clearPages() {
+    continuousObserver?.disconnect();
+    continuousObserver = undefined;
+    cancelAnimationFrame(scrollFrame);
+    scrollFrame = undefined;
+    for (const surface of jobs.keys()) cancelPageRender(surface);
+    scroll.replaceChildren();
   }
 
   function stop() {
     generation++;
-    cancelPageRender();
+    clearPages();
     if (!session) return;
     session.observer?.disconnect();
     void session.task.destroy().catch(() => {});
     session = undefined;
   }
 
-  async function drawPage(view) {
-    cancelPageRender();
+  function pageScale(width, height) {
+    const widthScale = Math.max(0.15, (scroll.clientWidth - 28) / width);
+    const heightScale = Math.max(0.15, (scroll.clientHeight - 28) / height);
+    return zoom.value === "fit" ? Math.min(widthScale, heightScale) :
+      zoom.value === "width" ? widthScale : Number(zoom.value);
+  }
+
+  function setSurfaceSize(surface, width, height) {
+    surface.style.width = width + "px";
+    surface.style.height = height + "px";
+  }
+
+  async function drawPage(view, index, pageSurface) {
     const job = {};
-    rendering = job;
-    const index = view.index;
+    jobs.set(pageSurface, job);
+    const active = () => jobs.get(pageSurface) === job;
     try {
       const page = await view.document.getPage(index + 1);
-      if (rendering !== job) return;
+      if (!active()) return;
       const rotation = (page.rotate + (view.rotation ?? 0)) % 360;
       const original = page.getViewport({ scale: 1, rotation });
-      const widthScale = Math.max(0.15, (scroll.clientWidth - 28) / original.width);
-      const heightScale = Math.max(0.15, (scroll.clientHeight - 28) / original.height);
-      const scale = zoom.value === "fit" ? Math.min(widthScale, heightScale) :
-        zoom.value === "width" ? widthScale : Number(zoom.value);
+      view.pageSizes.set(index, { width: original.width, height: original.height });
+      const scale = pageScale(original.width, original.height);
       const viewport = page.getViewport({ scale, rotation });
-      const pageSurface = document.createElement("div");
-      pageSurface.className = "pdf-reader-page";
-      pageSurface.style.width = viewport.width + "px";
-      pageSurface.style.height = viewport.height + "px";
+      setSurfaceSize(pageSurface, viewport.width, viewport.height);
       pageSurface.style.setProperty("--scale-factor", viewport.scale);
       const canvas = document.createElement("canvas");
       const density = Math.min(window.devicePixelRatio || 1, 3000 / Math.max(viewport.width, viewport.height));
@@ -89,33 +108,101 @@ export function bindPdfNavigation(sources, preview) {
       canvas.setAttribute("aria-hidden", "true");
       const textLayer = document.createElement("div");
       textLayer.className = "pdf-reader-text";
-      pageSurface.append(canvas, textLayer);
       job.canvasTask = page.render({ canvasContext: canvas.getContext("2d"), viewport, transform: [density, 0, 0, density, 0, 0], background: "white" });
       await job.canvasTask.promise;
-      if (rendering !== job) return;
-      scroll.replaceChildren(pageSurface);
+      if (!active()) return;
+      pageSurface.replaceChildren(canvas, textLayer);
       job.textTask = window.pdfjsLib.renderTextLayer({ textContentSource: page.streamTextContent(), container: textLayer, viewport });
       await job.textTask.promise;
     } catch (error) {
-      if (rendering === job) status.textContent = error.message || "The page could not be displayed.";
+      if (active()) status.textContent = error.message || "The page could not be displayed.";
     }
   }
 
-  function showPage(index) {
-    if (!session?.document || index < 0 || index >= session.document.numPages) return;
-    for (const button of thumbnails.querySelectorAll("[aria-current]")) button.removeAttribute("aria-current");
+  function updatePageIndex(index) {
+    thumbnails.children[session.index]?.firstElementChild.removeAttribute("aria-current");
     thumbnails.children[index]?.firstElementChild.setAttribute("aria-current", "page");
     go.elements.page.value = index + 1;
     session.index = index;
-    preview(session.item.file, index + 1);
-    browserPreview.hidden = true;
-    reader.hidden = false;
     $("pdf-reader-page").textContent = `${index + 1} of ${session.document.numPages}`;
     $("pdf-reader-prev").disabled = index === 0;
     $("pdf-reader-next").disabled = index + 1 >= session.document.numPages;
-    scroll.replaceChildren();
-    scroll.scrollTo(0, 0);
-    void drawPage(session);
+  }
+
+  function buildReader(view) {
+    clearPages();
+    const continuous = layout.value === "continuous";
+    scroll.classList.toggle("pdf-reader-continuous", continuous);
+    if (!continuous) {
+      const surface = document.createElement("div");
+      surface.className = "pdf-reader-page";
+      scroll.append(surface);
+      scroll.scrollTo(0, 0);
+      void drawPage(view, view.index, surface);
+      return;
+    }
+    const fallback = view.pageSizes.get(view.index) ?? (view.rotation % 180 ? { width: 792, height: 612 } : { width: 612, height: 792 });
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < view.document.numPages; index++) {
+      const surface = document.createElement("div");
+      surface.className = "pdf-reader-page";
+      surface.dataset.index = index;
+      surface.setAttribute("role", "group");
+      surface.setAttribute("aria-label", `Page ${index + 1}`);
+      const { width, height } = view.pageSizes.get(index) ?? fallback;
+      const scale = pageScale(width, height);
+      setSurfaceSize(surface, width * scale, height * scale);
+      fragment.append(surface);
+    }
+    scroll.append(fragment);
+    const observer = new IntersectionObserver((entries) => {
+      if (observer !== continuousObserver || session !== view) return;
+      for (const { target, isIntersecting } of entries) {
+        if (isIntersecting && !jobs.has(target)) void drawPage(view, Number(target.dataset.index), target);
+        if (!isIntersecting && jobs.has(target)) {
+          cancelPageRender(target);
+          target.replaceChildren();
+        }
+      }
+    }, { root: scroll, rootMargin: "75% 0px" });
+    continuousObserver = observer;
+    for (const surface of scroll.children) observer.observe(surface);
+    goToSurface(view.index);
+  }
+
+  function goToSurface(index) {
+    const surface = scroll.children[index];
+    if (!surface) return;
+    const inset = Math.max(14, (scroll.clientHeight - surface.offsetHeight) / 2);
+    scroll.scrollTo(0, surface.offsetTop - inset);
+  }
+
+  scroll.addEventListener("scroll", () => {
+    if (!continuousObserver || scrollFrame !== undefined) return;
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = undefined;
+      if (!continuousObserver || !session?.document || !scroll.children.length) return;
+      const center = scroll.scrollTop + scroll.clientHeight / 2;
+      let first = 0;
+      let last = scroll.children.length - 1;
+      while (first < last) {
+        const middle = Math.floor((first + last) / 2);
+        const page = scroll.children[middle];
+        if (page.offsetTop + page.offsetHeight < center) first = middle + 1;
+        else last = middle;
+      }
+      if (first !== session.index) updatePageIndex(first);
+    });
+  }, { passive: true });
+
+  function showPage(index) {
+    if (!session?.document || index < 0 || index >= session.document.numPages) return;
+    updatePageIndex(index);
+    preview(session.item.file, index + 1);
+    browserPreview.hidden = true;
+    reader.hidden = false;
+    if (continuousObserver) goToSurface(index);
+    else buildReader(session);
   }
 
   function pageLink(text, index) {
@@ -162,7 +249,7 @@ export function bindPdfNavigation(sources, preview) {
     try {
       const bytes = new Uint8Array(await item.file.arrayBuffer());
       if (request !== generation || panel.hidden || sources[source.value] !== item) return;
-      const view = { item, task: openPdfRaster(bytes) };
+      const view = { item, task: openPdfRaster(bytes), rotation: 0, pageSizes: new Map() };
       session = view;
       view.document = await view.task.promise;
       if (session !== view) return;
@@ -201,9 +288,11 @@ export function bindPdfNavigation(sources, preview) {
   }
 
   function close() {
-    if (!reader.hidden) browserPreview.hidden = !browserPreview.hasAttribute("src");
+    if (!reader.hidden) {
+      if (continuousObserver && session?.document) preview(session.item.file, session.index + 1);
+      browserPreview.hidden = !browserPreview.hasAttribute("src");
+    }
     reader.hidden = true;
-    scroll.replaceChildren();
     panel.hidden = true;
     toggle.setAttribute("aria-expanded", "false");
     stop();
@@ -218,17 +307,19 @@ export function bindPdfNavigation(sources, preview) {
   });
   $("pdf-navigation-close").addEventListener("click", () => { close(); toggle.focus(); });
   source.addEventListener("change", () => void load());
-  $("pdf-reader-prev").addEventListener("click", () => showPage(session.index - 1));
-  $("pdf-reader-next").addEventListener("click", () => showPage(session.index + 1));
+  $("pdf-reader-prev").addEventListener("click", () => { if (session?.document) showPage(session.index - 1); });
+  $("pdf-reader-next").addEventListener("click", () => { if (session?.document) showPage(session.index + 1); });
   $("pdf-reader-rotate").addEventListener("click", () => {
     if (!session?.document) return;
-    session.rotation = ((session.rotation ?? 0) + 90) % 360;
-    scroll.scrollTo(0, 0);
-    void drawPage(session);
+    session.rotation = (session.rotation + 90) % 360;
+    session.pageSizes.clear();
+    buildReader(session);
   });
-  zoom.addEventListener("change", () => { if (session?.document) void drawPage(session); });
+  for (const control of [zoom, layout]) {
+    control.addEventListener("change", () => { if (session?.document) buildReader(session); });
+  }
   new ResizeObserver(() => {
-    if (!reader.hidden && session?.document && ["fit", "width"].includes(zoom.value)) void drawPage(session);
+    if (!reader.hidden && session?.document && ["fit", "width"].includes(zoom.value)) buildReader(session);
   }).observe(scroll);
   go.addEventListener("submit", (event) => {
     event.preventDefault();
