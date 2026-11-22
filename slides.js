@@ -243,6 +243,9 @@
               y: object.y + (position.clientY - clientY) * 100 / bounds.height,
             }]);
             placeObject(node, move);
+            if (index === selectedObject && layer.lastElementChild?.classList.contains("slide-resize-frame")) {
+              placeObject(layer.lastElementChild, move);
+            }
           };
           const finish = (position) => {
             node.removeEventListener("pointermove", pointerMove);
@@ -252,7 +255,12 @@
               objects[index] = move;
               save();
               selectObject(index, true);
-            } else placeObject(node, object);
+            } else {
+              placeObject(node, object);
+              if (index === selectedObject && layer.lastElementChild?.classList.contains("slide-resize-frame")) {
+                placeObject(layer.lastElementChild, object);
+              }
+            }
           };
           node.addEventListener("pointermove", pointerMove);
           node.addEventListener("pointerup", finish);
@@ -263,12 +271,92 @@
     }));
   }
 
+  function addResizeHandle(objects, index) {
+    const object = objects[index];
+    const node = objectLayer.children[index];
+    const frame = document.createElement("div");
+    frame.className = "slide-resize-frame";
+    const handle = document.createElement("button");
+    handle.type = "button";
+    handle.className = "slide-resize-handle";
+    handle.setAttribute("aria-label", "Resize selected object");
+    handle.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown ArrowLeft ArrowRight");
+    handle.title = "Drag to resize or use the arrow keys";
+    frame.append(handle);
+    placeObject(frame, object);
+    objectLayer.append(frame);
+
+    const angle = object.rotation * Math.PI / 180;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    function resized(width, height, bounds) {
+      const [size] = normalizeObjects([{ ...object, width, height }]);
+      const horizontal = (size.width - object.width) * bounds.width / 200;
+      const vertical = (size.height - object.height) * bounds.height / 200;
+      // Keep the opposite corner fixed while the object's rotated center moves.
+      const x = object.x + (horizontal * cosine - vertical * sine - horizontal) * 100 / bounds.width;
+      const y = object.y + (horizontal * sine + vertical * cosine - vertical) * 100 / bounds.height;
+      const [result] = normalizeObjects([{ ...size, x, y }]);
+      return result;
+    }
+    function commit(result) {
+      if (result.width === object.width && result.height === object.height) return;
+      objects[index] = result;
+      save();
+      renderObjects();
+      objectLayer.querySelector(".slide-resize-handle")?.focus();
+    }
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      const bounds = objectLayer.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      const { clientX, clientY } = event;
+      let preview = object;
+      handle.setPointerCapture(event.pointerId);
+      const move = (position) => {
+        const dx = position.clientX - clientX;
+        const dy = position.clientY - clientY;
+        preview = resized(
+          object.width + (dx * cosine + dy * sine) * 100 / bounds.width,
+          object.height + (-dx * sine + dy * cosine) * 100 / bounds.height,
+          bounds,
+        );
+        placeObject(node, preview);
+        placeObject(frame, preview);
+      };
+      const finish = (position) => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", finish);
+        handle.removeEventListener("lostpointercapture", finish);
+        if (position.type === "pointerup") commit(preview);
+        else {
+          placeObject(node, object);
+          placeObject(frame, object);
+        }
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", finish);
+      handle.addEventListener("lostpointercapture", finish);
+    });
+    handle.addEventListener("keydown", (event) => {
+      const sizes = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      if (!Object.hasOwn(sizes, event.key) || event.altKey || event.ctrlKey || event.metaKey) return;
+      event.preventDefault();
+      const bounds = objectLayer.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      const [width, height] = sizes[event.key];
+      const step = event.shiftKey ? 5 : 1;
+      commit(resized(object.width + width * step, object.height + height * step, bounds));
+    });
+  }
+
   function renderObjects() {
     const objects = deck.slides[deck.active].objects ?? [];
     const object = objects[selectedObject];
     objectPanel.hidden = !object;
     drawObjects(objectLayer, objects, true);
     if (!object) return;
+    addResizeHandle(objects, selectedObject);
     for (const key of ["text", "x", "y", "width", "height", "rotation"]) objectForm.elements[key].value = object[key];
     objectForm.elements.fill.value = "#" + object.fill;
     objectForm.elements.fill.disabled = ["text", "image"].includes(object.kind);
