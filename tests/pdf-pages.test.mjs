@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import * as pdf from "pdf-lib";
 import { buildPdf, parsePages } from "../pdf-pages.js";
+import { cropBoxFromMargins } from "../pdf-crop.js";
+
+const margins = { left: 10, top: 20, right: 30, bottom: 25 };
+assert.deepEqual(cropBoxFromMargins({
+  width: 400, height: 600, convertToPdfPoint: (x, y) => [10 + x, 630 - y],
+}, margins), [50, 180, 240, 330]);
+assert.deepEqual(cropBoxFromMargins({
+  width: 600, height: 400, convertToPdfPoint: (x, y) => [10 + y, 30 + x],
+}, margins), [90, 90, 220, 360]);
 
 assert.deepEqual(parsePages("3, 1-2", 3), [2, 0, 1]);
 assert.deepEqual(parsePages("", 2), [0, 1]);

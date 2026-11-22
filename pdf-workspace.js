@@ -6,6 +6,7 @@ import { bindPdfNavigation } from "./pdf-navigation.js";
 import { bindPdfComments } from "./pdf-comments.js";
 import { bindPdfOrganizer } from "./pdf-organize.js";
 import { bindPdfText } from "./pdf-text.js";
+import { bindPdfCrop } from "./pdf-crop.js";
 
 const $ = (id) => document.getElementById(id);
 const sources = [];
@@ -16,6 +17,10 @@ const closeNavigation = bindPdfNavigation(sources, showPreview);
 bindPdfComments(sources, showPreview);
 bindPdfOrganizer(sources, () => { render(); status("Page arrangement applied to the output."); });
 bindPdfText(sources, showPreview);
+bindPdfCrop(sources, (file, page) => {
+  closeNavigation();
+  showPreview(file, page);
+});
 const preview = $("pdf-preview");
 let previewUrl;
 let busy = false;
@@ -50,6 +55,7 @@ function render() {
   closeNavigation();
   $("pdf-organize").disabled = busy || sources.length === 0;
   $("pdf-text-open").disabled = busy || sources.length === 0;
+  $("pdf-crop-open").disabled = busy || sources.length === 0;
   $("pdf-sign-open").disabled = busy || sources.length === 0;
   $("pdf-navigation-toggle").disabled = busy || sources.length === 0;
   $("pdf-comments-open").disabled = busy || sources.length === 0;
