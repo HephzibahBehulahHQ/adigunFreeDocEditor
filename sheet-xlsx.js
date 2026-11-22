@@ -1,4 +1,4 @@
-import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRanges, normalizePrintSettings, numberFormats, parseSheetFilter, validationOptions } from "./sheet-model.js";
+import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRanges, normalizePrintSettings, normalizeSheetProtection, numberFormats, protectionCredentials, parseSheetFilter, validationOptions } from "./sheet-model.js";
 import { readWorksheetChart, writeWorksheetChart } from "./sheet-chart-xlsx.js";
 import { readWorksheetPivot, writeWorksheetPivot } from "./sheet-pivot-xlsx.js";
 
@@ -55,7 +55,7 @@ function createStyleBook() {
   return { indexFor, markup, hasCellStyles: () => cellFormats.length > 1 };
 }
 
-function makeWorksheet({ cells, formats = {}, styles = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart, conditionalRule, print }, valueAt, styleBook) {
+function makeWorksheet({ cells, formats = {}, styles = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart, conditionalRule, print, protection }, valueAt, styleBook) {
   const rows = new Map();
   for (const address of new Set([...Object.keys(cells), ...Object.keys(formats), ...Object.keys(styles)])) {
     const raw = cells[address] ?? "";
@@ -109,7 +109,12 @@ function makeWorksheet({ cells, formats = {}, styles = {}, freezeFirstRow, valid
     ? `<printOptions gridLines="${settings.grid ? 1 : 0}"/><pageMargins left="0.472" right="0.472" top="0.472" bottom="0.472" header="0.25" footer="0.25"/><pageSetup paperSize="${settings.paper === "letter" ? 1 : 9}" orientation="${settings.orientation}" fitToWidth="1" fitToHeight="0"/>`
     : "";
   const pageProperties = print ? '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' : "";
-  return `<worksheet xmlns="${mainNs}"${relationship}>${pageProperties}${views}<sheetData>${data}</sheetData>${filterMarkup}${conditional}${validations}${pageOptions}${drawing}</worksheet>`;
+  const protectedSheet = normalizeSheetProtection(protection);
+  const protectionMarkup = protectedSheet
+    ? '<sheetProtection sheet="1"' + Object.entries(protectedSheet)
+      .map(([name, value]) => ` ${name}="${typeof value === "boolean" ? Number(value) : xml(value)}"`).join("") + "/>"
+    : "";
+  return `<worksheet xmlns="${mainNs}"${relationship}>${pageProperties}${views}<sheetData>${data}</sheetData>${protectionMarkup}${filterMarkup}${conditional}${validations}${pageOptions}${drawing}</worksheet>`;
 }
 
 function readFilter(worksheet) {
@@ -367,7 +372,12 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       columns = Math.max(columns, chart.values.charCodeAt(0) - 64);
     }
     const hidden = ["hidden", "veryHidden"].includes(definition.getAttribute("state"));
-    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print };
+    const protectionNode = worksheet.getElementsByTagNameNS(mainNs, "sheetProtection")[0];
+    const protection = ["1", "true"].includes(protectionNode?.getAttribute("sheet"))
+      ? normalizeSheetProtection(Object.fromEntries(Array.from(protectionNode.attributes, ({ name, value }) =>
+        [name, protectionCredentials.includes(name) ? value : { "1": true, true: true, "0": false, false: false }[value]])))
+      : null;
+    return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print, protection };
   });
   for (const [index, sheet] of sheets.entries()) {
     try {

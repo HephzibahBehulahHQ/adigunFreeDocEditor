@@ -151,6 +151,18 @@ try {
   assert.deepEqual(omitted, ["Summary"]);
   assert.equal(importWorkbook(stale, zip, dom.window.DOMParser).sheets[1].cells.B2, "6");
   assert.equal(importWorkbook(stale, zip, dom.window.DOMParser).sheets[1].pivot, undefined);
+  const protectedSheets = [
+    { name: "Schedule", cells: { A1: "Keep" }, protection: { objects: true, scenarios: true } },
+    { name: "Locked", cells: { A1: "=1+2" }, protection: { password: "ABCD", formatCells: false } },
+    { name: "Editable", cells: { A1: "Change" } },
+  ];
+  const protectedBytes = exportWorkbook(protectedSheets, zip);
+  const protectedXml = zip.strFromU8(zip.unzipSync(protectedBytes)["xl/worksheets/sheet2.xml"]);
+  assert.match(protectedXml, /<\/sheetData><sheetProtection sheet="1" password="ABCD" formatCells="0"\/>/);
+  const reopenedProtection = importWorkbook(protectedBytes, zip, dom.window.DOMParser).sheets;
+  assert.deepEqual(reopenedProtection.map((sheet) => sheet.protection),
+    [protectedSheets[0].protection, protectedSheets[1].protection, null]);
+  assert.equal(reopenedProtection[1].cells.A1, "=1+2");
   const namedBytes = exportWorkbook(namedSheets, zip, false, namedRanges);
   const namedFile = importWorkbook(namedBytes, zip, dom.window.DOMParser);
   assert.deepEqual(namedFile.namedRanges, namedRanges);

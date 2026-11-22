@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRange, normalizeNamedRanges, numberFormats, parseChartRange, parseCsv, parseSheetFilter, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, spreadsheetFonts, toCsv, validationOptions } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRange, normalizeNamedRanges, normalizeSheetProtection, numberFormats, protectionCredentials, parseChartRange, parseCsv, parseSheetFilter, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, spreadsheetFonts, toCsv, validationOptions } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 import { bindSheetPrinting } from "./sheet-print.js";
 
@@ -35,6 +35,7 @@ try {
       conditionalRule: normalizeConditionalRule(item?.conditionalRule),
       hidden: item?.hidden === true,
       print: item?.print,
+      protection: normalizeSheetProtection(item?.protection),
       validation: Object.fromEntries(Object.entries(item?.validation ?? {})
         .filter(([address, options]) => validAddress.test(address) && validationOptions(options).length)),
       pivot: item?.pivot && Number.isInteger(item.pivot.source) &&
@@ -169,7 +170,7 @@ function refreshValues() {
   for (const [index, row] of [...grid.tBodies[0].rows].entries()) {
     row.hidden = hidden.has(index + 1) && !row.contains(document.activeElement);
   }
-  $("sheet-filter-clear").disabled = !sheet.filter;
+  $("sheet-filter-clear").disabled = Boolean(sheet.protection) || !sheet.filter;
   refreshSelection(valueAt);
   refreshChart(valueAt);
 }
@@ -357,7 +358,8 @@ function refreshSelection(valueAt = workbookValues()) {
     (typeof value === "string" && /^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(value.trim()))).map(Number).filter(Number.isFinite);
   const sum = numbers.reduce((total, value) => total + value, 0);
   const format = new Intl.NumberFormat(undefined, { maximumFractionDigits: 8 });
-  $("sheet-active-name").textContent = currentSheet().name || `Sheet ${workbook.active + 1}`;
+  const name = sheetName(workbook.active);
+  $("sheet-active-name").textContent = currentSheet().protection ? `${name} · Protected` : name;
   $("sheet-selection-statistics").textContent = `Count ${values.length} · Sum ${format.format(sum)} · Average ${numbers.length ? format.format(sum / numbers.length) : "—"}`;
 }
 
@@ -366,11 +368,14 @@ function refreshFormula() {
   $("sheet-formula").value = currentSheet().cells[selectedAddress] ?? "";
   const picker = $("sheet-validation-picker");
   const options = currentSheet().validation?.[selectedAddress] || [];
+  const protectedSheet = Boolean(currentSheet().protection);
+  $("sheet-formula").readOnly = protectedSheet;
+  picker.disabled = protectedSheet;
   picker.hidden = !options.length;
   picker.replaceChildren(new Option("Choose value", ""), ...options.map((value) => new Option(value)));
   picker.value = options.includes($("sheet-formula").value) ? $("sheet-formula").value : "";
-  $("sheet-fill-down").disabled = !selectedRange || selectedRange.firstRow === selectedRange.lastRow;
-  $("sheet-fill-right").disabled = !selectedRange || selectedRange.firstColumn === selectedRange.lastColumn;
+  $("sheet-fill-down").disabled = protectedSheet || !selectedRange || selectedRange.firstRow === selectedRange.lastRow;
+  $("sheet-fill-right").disabled = protectedSheet || !selectedRange || selectedRange.firstColumn === selectedRange.lastColumn;
 }
 
 function selectRange(first, last) {
@@ -394,6 +399,7 @@ function acceptsValue(sheet, address, value) {
 function updateCell(address, value, mergeTyping = false) {
   const sheet = currentSheet();
   const { cells } = sheet;
+  if (sheet.protection) { refreshValues(); refreshFormula(); return; }
   if (!acceptsValue(sheet, address, value)) {
     status(`Choose an allowed value for ${address}.`);
     refreshFormula();
@@ -409,13 +415,47 @@ function updateCell(address, value, mergeTyping = false) {
   save();
 }
 
+const protectionButton = $("sheet-protection");
+const protectionStatus = $("sheet-protection-status");
+const protectedCommands = ["sheet-cut", "sheet-paste", "sheet-clear-cells", "sheet-chart-open", "sheet-style-open",
+  "sheet-rule-open", "sheet-autosum", "sheet-print-settings", "sheet-validation", "sheet-filter",
+  "sheet-sort", "sheet-deduplicate", "sheet-split"];
+
+function requiresExcelToUnprotect(sheet) {
+  return protectionCredentials.some((key) => sheet.protection?.[key]);
+}
+
+protectionButton.addEventListener("click", () => {
+  const sheet = currentSheet();
+  if (requiresExcelToUnprotect(sheet)) return;
+  recordEdit();
+  sheet.protection = sheet.protection ? null : { objects: true, scenarios: true };
+  save();
+  render();
+  protectionButton.focus();
+});
+
 function render() {
   $("workbook-title").value = workbook.name;
   const sheet = currentSheet();
   chartForm.elements.range.value = sheet.chart?.range ?? "";
   selectedRange = null;
   if (!rulePanel.hidden) refreshRuleForm();
-  $("sheet-pivot-refresh").disabled = !sheet.pivot;
+  const protectedSheet = Boolean(sheet.protection);
+  const externalPassword = requiresExcelToUnprotect(sheet);
+  protectionButton.textContent = protectedSheet ? "Unprotect sheet" : "Protect sheet";
+  protectionButton.disabled = externalPassword;
+  protectionStatus.textContent = externalPassword
+    ? "This sheet is password-protected. Use Excel to remove its protection."
+    : protectedSheet ? "Sheet protected. Edits are disabled."
+      : "Prevent accidental edits without setting a password.";
+  for (const id of protectedCommands) $(id).disabled = protectedSheet;
+  for (const button of document.querySelectorAll("[data-sheet-format]")) button.disabled = protectedSheet;
+  if (protectedSheet) {
+    showChartPanel(false);
+    showRulePanel(false);
+  }
+  $("sheet-pivot-refresh").disabled = protectedSheet || !sheet.pivot;
   if (Number(selectedAddress.slice(1)) > sheet.rows || selectedAddress.charCodeAt(0) - 64 > sheet.columns) selectedAddress = "A1";
   const header = document.createElement("thead");
   const heading = header.insertRow();
@@ -440,6 +480,7 @@ function render() {
       field.dataset.cell = address;
       field.setAttribute("aria-label", address);
       field.maxLength = maxCellLength;
+      field.readOnly = protectedSheet;
       field.autocomplete = "off";
       field.spellcheck = false;
       cell.append(field);
@@ -462,8 +503,8 @@ function render() {
     return button;
   }));
   $("sheet-add").disabled = workbook.sheets.length >= maxSheets;
-  $("sheet-add-row").disabled = sheet.rows >= maxRows;
-  $("sheet-add-column").disabled = sheet.columns >= maxColumns;
+  $("sheet-add-row").disabled = protectedSheet || sheet.rows >= maxRows;
+  $("sheet-add-column").disabled = protectedSheet || sheet.columns >= maxColumns;
   $("sheet-export").disabled = Object.keys(sheet.cells).length === 0;
 }
 
@@ -636,6 +677,7 @@ validationForm.addEventListener("submit", (event) => {
 });
 function applyCellChanges(entries) {
   const sheet = currentSheet();
+  if (sheet.protection) throw new Error("Unprotect this sheet before editing its cells.");
   const changes = entries.filter(([address, value]) => (sheet.cells[address] ?? "") !== value);
   const invalid = changes.find(([address, value]) => !acceptsValue(sheet, address, value));
   if (invalid) throw new Error(`Choose an allowed value for ${invalid[0]}.`);
@@ -686,7 +728,7 @@ async function copySelection(cut) {
   const text = values.length === 1 && !/[\t\r\n]/.test(values[0]) ? values[0] : rows.join("\r\n");
   try { await navigator.clipboard.writeText(text); }
   catch { status("Clipboard access is unavailable in this browser."); return; }
-  if (cut && (sheet !== currentSheet() || addresses.some((address, index) => (sheet.cells[address] ?? "") !== values[index]))) {
+  if (cut && (sheet !== currentSheet() || sheet.protection || addresses.some((address, index) => (sheet.cells[address] ?? "") !== values[index]))) {
     status("Copied. The selection changed before it could be cut.");
     return;
   }
@@ -705,6 +747,7 @@ $("sheet-paste").addEventListener("click", async () => {
 });
 
 function clearSelection(addresses = selectionAddresses()) {
+  if (currentSheet().protection) return;
   applyCellChanges(addresses.map((address) => [address, ""]));
   $("sheet-export").disabled = Object.keys(currentSheet().cells).length === 0;
   refreshValues();
