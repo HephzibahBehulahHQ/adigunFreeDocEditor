@@ -276,6 +276,7 @@ function showChartPanel(open) {
   $("sheet-chart-open").setAttribute("aria-expanded", String(open));
   if (open) {
     showRulePanel(false);
+    showNotesPanel(false);
     chartForm.elements.range.value = currentSheet().chart?.range || selectedRange?.label || "";
     refreshChart(workbookValues());
     chartForm.elements.range.focus();
@@ -325,6 +326,7 @@ function showRulePanel(open) {
   $("sheet-rule-open").setAttribute("aria-expanded", String(open));
   if (open) {
     showChartPanel(false);
+    showNotesPanel(false);
     refreshRuleForm();
     ruleForm.elements.range.focus();
   }
@@ -591,6 +593,7 @@ function render() {
   refreshValues();
   refreshFormula();
   renderSheetTabs(sheet);
+  if (!notesPanel.hidden) renderNotes();
 }
 
 function createGridRow(row, sheet) {
@@ -765,6 +768,63 @@ grid.addEventListener("change", (event) => {
 });
 $("sheet-validation-picker").addEventListener("change", (event) => updateCell(selectedAddress, event.target.value));
 
+const notesPanel = $("sheet-notes-panel");
+const notesOpen = $("sheet-notes-open");
+const notesList = $("sheet-notes-list");
+const notesMessage = $("sheet-notes-message");
+
+function renderNotes() {
+  const entries = workbook.sheets.flatMap((sheet, index) => sheet.hidden ? [] :
+    Object.entries(sheet.notes ?? {}).sort(([a], [b]) => Number(a.slice(1)) - Number(b.slice(1)) || a.localeCompare(b))
+      .map(([address, note]) => ({ index, address, note })));
+  notesMessage.textContent = entries.length ? "" : "No notes on visible sheets.";
+  const items = document.createDocumentFragment();
+  for (const { index, address, note } of entries) {
+    const item = document.createElement("li");
+    const jump = document.createElement("button");
+    const text = document.createElement("p");
+    jump.type = "button";
+    jump.className = "button button-outline";
+    jump.textContent = `${sheetName(index)} · ${address}`;
+    text.textContent = note.text;
+    jump.addEventListener("click", () => {
+      if (index !== workbook.active) {
+        workbook.active = index;
+        save();
+        render();
+      }
+      const field = revealField(address);
+      if (!field) {
+        notesMessage.textContent = "Clear the worksheet filter to show this cell.";
+        return;
+      }
+      notesMessage.textContent = "";
+      selectedAddress = address;
+      field.focus();
+      selectRange(address, address);
+    });
+    item.append(jump, text);
+    items.append(item);
+  }
+  notesList.replaceChildren(items);
+}
+
+function showNotesPanel(open) {
+  notesPanel.hidden = !open;
+  notesOpen.setAttribute("aria-expanded", String(open));
+  if (open) {
+    showChartPanel(false);
+    showRulePanel(false);
+    renderNotes();
+    $("sheet-notes-close").focus();
+  }
+}
+notesOpen.addEventListener("click", () => showNotesPanel(true));
+$("sheet-notes-close").addEventListener("click", () => {
+  showNotesPanel(false);
+  notesOpen.focus();
+});
+
 const noteDialog = $("sheet-note-dialog");
 const noteForm = noteDialog.querySelector("form");
 const noteInput = noteForm.elements.note;
@@ -793,6 +853,7 @@ function saveCellNote(text) {
     else delete notes[address];
     save();
     refreshValues();
+    if (!notesPanel.hidden) renderNotes();
   }
   noteDialog.close();
 }
@@ -927,6 +988,7 @@ sortForm.addEventListener("submit", (event) => {
     sortDialog.close();
     refreshValues();
     refreshFormula();
+    if (!notesPanel.hidden) renderNotes();
     if (message) status(message);
   } catch (error) { sortForm.querySelector("[role=status]").textContent = error.message; }
 });

@@ -644,6 +644,8 @@ button.slide-object[aria-pressed="true"],button.slide-object:focus-visible{outli
 .sheet-chart-panel{max-height:65vh;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .sheet-chart-panel header{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .sheet-chart-panel h2{margin:0;font-size:16px}
+.sheet-notes-list{display:grid;gap:12px;list-style:none;padding:0}
+.sheet-notes-list p{margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .sheet-chart-panel label{display:grid;gap:4px;margin:10px 0}
 .sheet-chart-panel input{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:5px;font:inherit}
 .sheet-chart-panel select{width:100%;min-height:32px;border:1px solid var(--line);border-radius:5px;font:inherit}
