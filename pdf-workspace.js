@@ -1,4 +1,4 @@
-import { buildPdf } from "./pdf-pages.js";
+import { buildPdf, compressPdf } from "./pdf-pages.js";
 import { bindPdfOcr } from "./pdf-ocr.js";
 import { bindPdfRedaction } from "./pdf-redact.js";
 import { bindPdfForms } from "./pdf-forms.js";
@@ -62,6 +62,7 @@ function render() {
   $("pdf-form-open").disabled = busy || sources.length === 0;
   $("pdf-redact").disabled = busy || sources.length === 0;
   $("pdf-ocr").disabled = busy || sources.length === 0;
+  $("pdf-compress-open").disabled = busy || sources.length === 0;
   $("pdf-add").disabled = busy;
   $("pdf-export").disabled = busy || sources.length === 0;
   $("pdf-preview-output").disabled = busy || sources.length === 0;
@@ -170,4 +171,47 @@ async function outputPages(show) {
 }
 $("pdf-export").addEventListener("click", () => void outputPages(false));
 $("pdf-preview-output").addEventListener("click", () => void outputPages(true));
+
+const compressDialog = $("pdf-compress-dialog");
+const compressForm = compressDialog.querySelector("form");
+const compressSource = compressForm.elements.source;
+const compressStatus = compressDialog.querySelector("[role=status]");
+const compressSubmit = compressForm.querySelector('[type="submit"]');
+const closeCompression = compressForm.querySelector("[data-close]");
+$("pdf-compress-open").addEventListener("click", () => {
+  compressSource.replaceChildren(...sources.map(({ file }, index) => new Option(file.name, index)));
+  compressStatus.textContent = "";
+  compressDialog.showModal();
+});
+compressSource.addEventListener("change", () => { compressStatus.textContent = ""; });
+closeCompression.addEventListener("click", () => compressDialog.close());
+compressDialog.addEventListener("cancel", (event) => { if (compressSubmit.disabled) event.preventDefault(); });
+compressForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (compressSubmit.disabled) return;
+  const file = sources[Number(compressSource.value)]?.file;
+  if (!file) return;
+  compressSource.disabled = compressSubmit.disabled = closeCompression.disabled = true;
+  compressStatus.textContent = "Compressing the PDF…";
+  try {
+    const bytes = await compressPdf(new Uint8Array(await file.arrayBuffer()), window.PDFLib);
+    if (!bytes) {
+      compressStatus.textContent = "Lossless compression did not make this file smaller.";
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.name.replace(/\.pdf$/i, "") + "-compressed.pdf";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const number = new Intl.NumberFormat();
+    compressStatus.textContent = `Downloaded ${number.format(bytes.length)} bytes. Original: ${number.format(file.size)} bytes.`;
+  } catch (error) {
+    compressStatus.textContent = error.message || "Could not compress this PDF.";
+  } finally {
+    compressSource.disabled = compressSubmit.disabled = closeCompression.disabled = false;
+    compressSubmit.focus();
+  }
+});
 render();

@@ -107,3 +107,27 @@ export async function flattenPdfForm(source, { PDFDocument, PDFName, PDFSignatur
   output.getForm().flatten({ updateFieldAppearances: false });
   return output;
 }
+export async function compressPdf(bytes, { PDFDocument, PDFDict, PDFName, PDFRawStream }) {
+  const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
+  const name = (value) => PDFName.of(value);
+  const objects = pdf.context.enumerateIndirectObjects();
+  const signed = objects.some(([, object]) => object instanceof PDFDict &&
+    (object.has(name("ByteRange")) || ["/Sig", "/DocTimeStamp"].includes(object.get(name("Type"))?.toString())));
+  if (signed || pdf.catalog.has(name("Perms")) || pdf.catalog.getAcroForm()?.dict.has(name("XFA"))) {
+    throw new Error("Choose an unsigned PDF without XFA forms.");
+  }
+  const filter = name("Filter");
+  for (const [ref, stream] of objects) {
+    if (!(stream instanceof PDFRawStream) || stream.dict.has(filter) || stream.dict.has(name("DecodeParms")) ||
+        stream.dict.has(name("F")) || ["/Metadata", "/ObjStm", "/XRef"].includes(stream.dict.get(name("Type"))?.toString())) continue;
+    const contents = stream.getContents();
+    if (contents.length < 64) continue;
+    const data = new Blob([contents]).stream().pipeThrough(new CompressionStream("deflate"));
+    const compressed = new Uint8Array(await new Response(data).arrayBuffer());
+    if (compressed.length + 24 >= contents.length) continue;
+    stream.dict.set(filter, name("FlateDecode"));
+    pdf.context.assign(ref, PDFRawStream.of(stream.dict, compressed));
+  }
+  const output = await pdf.save({ updateFieldAppearances: false, useObjectStreams: true });
+  return output.length < bytes.byteLength ? output : null;
+}

@@ -26,6 +26,7 @@
       </div></details>
       <details name="pdf-commands" class="command-menu"><summary>Convert</summary><div>
         <a href="./index.html#convert">Convert a file</a>
+        <button id="pdf-compress-open" type="button" disabled>Compress PDF</button>
       </div></details>
       <details name="pdf-commands" class="command-menu"><summary>Organize Pages</summary><div>
         <button id="pdf-organize" type="button" disabled>Arrange individual pages</button>
@@ -91,6 +92,18 @@
       </div>
     </div>
   </main>
+  <dialog id="pdf-compress-dialog" class="pdf-tool-dialog" aria-labelledby="pdf-compress-title">
+    <h2 id="pdf-compress-title">Compress PDF</h2>
+    <form>
+      <label>Source PDF <select name="source" required></select></label>
+      <p>Download a smaller copy when lossless compression can reduce the file size.</p>
+      <p role="status"></p>
+      <div class="slides-actions">
+        <button class="button button-outline" type="submit">Download compressed copy</button>
+        <button class="button button-outline" type="button" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="pdf-crop-dialog" class="pdf-tool-dialog pdf-redact-dialog" aria-labelledby="pdf-crop-title">
     <h2 id="pdf-crop-title">Crop PDF page</h2>
     <p>Crop changes the visible page boundary. Hidden content remains in the file. Use Redact to remove sensitive content.</p>
