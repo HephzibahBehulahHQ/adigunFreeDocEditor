@@ -91,6 +91,7 @@ try {
   assert.match(tableXml, /<p:graphicFrame>.*<a:tbl><a:tblPr\/><a:tblGrid>/);
   const [tableSlide] = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(tableParts), dom.window.DOMParser);
   assert.deepEqual(JSON.parse(JSON.stringify(tableSlide.objects[0].cells)), tableCells);
+  assert.equal(tableSlide.objects[0].fill, "D9D1FC");
 } finally {
   dom.window.close();
 }

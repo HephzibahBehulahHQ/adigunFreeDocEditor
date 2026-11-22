@@ -437,8 +437,9 @@
       if (!width || width > tableLimit || cells.some((row) => row.length !== width || row.some((cell) =>
         ["gridSpan", "rowSpan"].some((attr) => Number(cell.getAttribute(attr) || 1) !== 1) ||
         ["hMerge", "vMerge"].some((attr) => ["1", "true"].includes(cell.getAttribute(attr)))))) return null;
-      const fill = cells[0][0].getElementsByTagNameNS("*", "tcPr")[0]
-        ?.getElementsByTagNameNS("*", "solidFill")[0]?.getElementsByTagNameNS("*", "srgbClr")[0]?.getAttribute("val");
+      const properties = cells[0][0].getElementsByTagNameNS("*", "tcPr")[0];
+      const paint = [...(properties?.children ?? [])].find((part) => part.localName === "solidFill");
+      const fill = paint?.getElementsByTagNameNS("*", "srgbClr")[0]?.getAttribute("val");
       return { ...readObjectTransform(frame), kind: "table", cells: cells.map((row) => row.map(paragraphs)), fill };
     }
     function pictures(slide, relationships) {
