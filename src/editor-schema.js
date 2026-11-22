@@ -11,7 +11,7 @@ import StarterKit from "@tiptap/starter-kit";
 const modelFormat = "adigun-document";
 const paragraphTypes = ["paragraph", "heading", "listItem", "tableCell", "tableHeader"];
 const blockTypes = new Set(["paragraph", "heading", "bulletList", "orderedList", "listItem", "blockquote", "codeBlock", "horizontalRule", "table", "tableRow", "tableCell", "tableHeader"]);
-const inlineTypes = new Set(["text", "image", "hardBreak", "footnote"]);
+const inlineTypes = new Set(["text", "image", "hardBreak", "footnote", "equation"]);
 
 function parseOrderedListOrdinal(value) {
   if (typeof value === "number") return Number.isInteger(value) && value >= -2147483648 && value <= 2147483647 ? value : null;
@@ -255,12 +255,37 @@ const Footnote = Node.create({
   },
 });
 
+const Equation = Node.create({
+  name: "equation",
+  inline: true,
+  group: "inline",
+  atom: true,
+  addAttributes() {
+    return { kind: { default: "text" }, first: { default: "" }, second: { default: "" } };
+  },
+  parseHTML() {
+    return [{ tag: "span[data-equation-kind][data-equation-first]", getAttrs: (element) => ({
+      kind: element.dataset.equationKind,
+      first: element.dataset.equationFirst,
+      second: element.dataset.equationSecond || "",
+    }) }];
+  },
+  renderHTML({ node }) {
+    const { kind, first, second } = node.attrs;
+    const description = kind === "fraction" ? `${first} over ${second}`
+      : kind === "power" ? `${first} to the power of ${second}` : first;
+    return ["span", { "data-equation-kind": kind, "data-equation-first": first, "data-equation-second": second,
+      "aria-label": `Edit equation: ${description}`, title: description, role: "button", tabindex: "0" }];
+  },
+});
+
 export const editorExtensions = [
   DocumentSheet,
   StarterKit.configure({ link: false, orderedList: false, listItem: false, heading: { levels: [1, 2, 3, 4, 5, 6] } }),
   ModelOrderedList,
   ModelListItem,
   Footnote,
+  Equation,
   TableKit,
   Image.configure({ inline: true, allowBase64: true }),
   Link.configure({ openOnClick: false, autolink: false, linkOnPaste: false }),
@@ -358,6 +383,9 @@ function modelNodeToEditor(node, marks = []) {
   const { tag, attrs = {}, children = [] } = node;
   if (tag === "span" && attrs["data-footnote-text"]) {
     return [{ type: "footnote", attrs: { text: attrs["data-footnote-text"], kind: attrs["data-footnote-kind"] } }];
+  }
+  if (tag === "span" && attrs["data-equation-first"]) {
+    return [{ type: "equation", attrs: { kind: attrs["data-equation-kind"], first: attrs["data-equation-first"], second: attrs["data-equation-second"] } }];
   }
   const inlineMark = inlineMarkForTag(tag, attrs);
   if (inlineMark) return childrenToEditor(children, mergeMark(marks, inlineMark));
@@ -460,6 +488,9 @@ function editorNodeToModel(node) {
   if (node.type === "hardBreak") return { type: "element", tag: "br", attrs: {}, children: [] };
   if (node.type === "footnote") return { type: "element", tag: "span", attrs: {
     "data-footnote-text": node.attrs.text, ...(node.attrs.kind === "endnote" && { "data-footnote-kind": "endnote" }),
+  }, children: [] };
+  if (node.type === "equation") return { type: "element", tag: "span", attrs: {
+    "data-equation-kind": node.attrs.kind, "data-equation-first": node.attrs.first, "data-equation-second": node.attrs.second,
   }, children: [] };
   if (node.type === "horizontalRule") return { type: "element", tag: "hr", attrs: node.attrs.pageBreak ? { "data-page-break": "true" } : {}, children: [] };
 

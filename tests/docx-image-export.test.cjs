@@ -124,6 +124,11 @@ const recoverNotes = new Function("DOMParser", source.slice(source.indexOf("  fu
 const importedNote = sanitizeDocxHtml(recoverNotes('<p>Reference<sup><a href="#endnote-1">[1]</a></sup></p>' +
   '<ol><li id="endnote-1"><p>See appendix<br>Second line<a href="#endnote-ref-1">↑</a></p></li></ol>')).html;
 assert.match(importedNote, /data-footnote-text="See appendix\nSecond line" data-footnote-kind="endnote"/);
+const equation = exportElement("SPAN", [], {
+  "data-equation-kind": "fraction", "data-equation-first": "a < b", "data-equation-second": "2",
+});
+const equationXml = makeWordPackage(exportElement("DIV", [paragraph(equation)])).files["word/document.xml"];
+assert.match(equationXml, /<m:oMath [^>]+><m:f><m:num><m:r><m:t xml:space="preserve">a &lt; b<\/m:t><\/m:r><\/m:num><m:den>/);
 const headingDocumentXml = result.files["word/document.xml"];
 const headingStylesXml = result.files["word/styles.xml"];
 for (const level of [4, 5, 6]) {

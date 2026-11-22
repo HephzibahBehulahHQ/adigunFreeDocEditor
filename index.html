@@ -358,6 +358,19 @@
         <div class="settings-foot"><span>Page break is available while a document is being edited.</span><button class="button button-primary" value="close">Done</button></div>
       </form>
     </dialog>
+    <dialog class="settings-dialog" id="equation-dialog" aria-labelledby="equation-title">
+      <h2 id="equation-title">Equation</h2>
+      <form>
+        <label>Type <select name="kind"><option value="text">Linear expression</option><option value="fraction">Fraction</option><option value="power">Power</option></select></label>
+        <label><span data-first-label>Expression</span> <input name="first" maxlength="200" required></label>
+        <label hidden><span data-second-label>Denominator</span> <input name="second" maxlength="200"></label>
+        <div class="slides-actions">
+          <button class="button button-outline" type="submit">Save equation</button>
+          <button class="button button-outline" type="button" data-remove hidden>Remove equation</button>
+          <button class="button button-outline" type="button" data-close>Cancel</button>
+        </div>
+      </form>
+    </dialog>
     <dialog class="settings-dialog" id="footnote-dialog" aria-labelledby="footnote-dialog-title">
       <h2 id="footnote-dialog-title">Footnote</h2>
       <form>

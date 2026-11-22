@@ -136,6 +136,14 @@
 .document-page [data-footnote-kind="endnote"]{counter-increment:adigun-endnote}
 .document-page [data-footnote-kind="endnote"]::before{content:counter(adigun-endnote,lower-roman)}
 .document-page [data-footnote-text]:focus-visible{outline:2px solid var(--blue)}
+.document-page [data-equation-kind]{display:inline-grid;vertical-align:middle;justify-items:center;padding:0 .12em;cursor:pointer;font-family:Cambria,serif;line-height:1.05}
+.document-page [data-equation-kind]::before{content:attr(data-equation-first)}
+.document-page [data-equation-kind="fraction"]::before{border-bottom:1px solid currentColor;padding:0 .14em .08em}
+.document-page [data-equation-kind="fraction"]::after{content:attr(data-equation-second);padding-top:.08em}
+.document-page [data-equation-kind="power"]{display:inline-block}
+.document-page [data-equation-kind="power"]::after{content:attr(data-equation-second);vertical-align:super;font-size:.72em}
+.document-page [data-equation-kind]:focus-visible{outline:2px solid var(--blue)}
+#equation-dialog form{display:grid;gap:10px}
 #footnote-dialog textarea{display:block;width:100%;margin:8px 0 12px;padding:8px;font:inherit}
 .print-footnotes{display:none}
 @media print{

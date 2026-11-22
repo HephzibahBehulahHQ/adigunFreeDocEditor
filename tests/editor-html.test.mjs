@@ -27,6 +27,7 @@ const fixture = modelApi.normalize({
       element("ins", { "data-revision-id": "rev-1", "data-revision-author": "Editor", "data-revision-created-at": "1762992000000" }, [text("inserted")]),
       text(" "), element("del", { "data-revision-id": "rev-2", "data-revision-author": "Editor", "data-revision-created-at": "1762992000001" }, [text("deleted")]),
       element("br"), element("img", { src: "data:image/png;base64,aGVsbG8=", alt: "Diagram", width: 120, height: 80 }),
+      element("span", { "data-equation-kind": "fraction", "data-equation-first": "a < b", "data-equation-second": "2" }),
     ]),
     element("table", {}, [
       element("thead", { "data-page-header-copy": "true" }, [element("tr", {}, [element("th", { colspan: 2 }, [element("p", {}, [text("Column heading")])])])]),
