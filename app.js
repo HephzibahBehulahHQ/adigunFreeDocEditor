@@ -36,6 +36,8 @@
   } catch { /* Keep the default width when local preferences are unavailable. */ }
   let saveTimer;
   let editorPaginationTimer;
+  let preparingDocumentPrint = false;
+  let printingDocument = false;
   let toastTimer;
   let zoom = 100;
   let showIndentRuler = false;
@@ -482,8 +484,69 @@
   window.addEventListener("resize", scheduleCurrentPageNavigation);
   function scheduleEditorPagination() {
     clearTimeout(editorPaginationTimer);
-    editorPaginationTimer = setTimeout(paginateEditor, 120);
+    editorPaginationTimer = undefined;
+    if (printingDocument) return;
+    editorPaginationTimer = setTimeout(() => {
+      editorPaginationTimer = undefined;
+      paginateEditor();
+    }, 120);
   }
+
+  function canPrintDocument() {
+    return editor.contentEditable === "true" && !$("#editor-card").classList.contains("landing");
+  }
+
+  async function printDocument() {
+    if (preparingDocumentPrint || printingDocument || !canPrintDocument()) return;
+    preparingDocumentPrint = true;
+    const documentId = activeId;
+    const documentEditor = editor;
+    const nextFrame = () => new Promise((resolve) => window.requestAnimationFrame(resolve));
+    const stillActive = () => activeId === documentId && editor === documentEditor && canPrintDocument();
+    try {
+      const images = [...editor.querySelectorAll("img")].filter((image) => typeof image.decode === "function");
+      await Promise.allSettled([document.fonts?.ready, ...images.map((image) => image.decode())]);
+      // Mixed sections can reflow after their geometry is applied. Measure the new layout before printing.
+      for (let pass = 0; pass < 4; pass++) {
+        await nextFrame();
+        if (!stillActive()) return;
+        clearTimeout(editorPaginationTimer);
+        editorPaginationTimer = undefined;
+        applyPaperCanvasMinimumHeight();
+        paginateEditor();
+        await nextFrame();
+        if (!editorPaginationTimer) break;
+      }
+      if (!stillActive()) return;
+      clearTimeout(editorPaginationTimer);
+      editorPaginationTimer = undefined;
+      window.print();
+    } catch {
+      notify("Could not prepare the document for printing.");
+    } finally {
+      preparingDocumentPrint = false;
+    }
+  }
+
+  window.addEventListener("beforeprint", () => {
+    if (!canPrintDocument()) return;
+    if (editorPaginationTimer && !window.matchMedia("print").matches) paginateEditor();
+    printingDocument = true;
+    clearTimeout(editorPaginationTimer);
+    editorPaginationTimer = undefined;
+  });
+  window.addEventListener("afterprint", () => {
+    if (!printingDocument) return;
+    printingDocument = false;
+    if (canPrintDocument()) scheduleEditorPagination();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.defaultPrevented || event.isComposing || event.altKey || event.shiftKey ||
+        !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "p" ||
+        !canPrintDocument() || document.querySelector("dialog[open]")) return;
+    event.preventDefault();
+    void printDocument();
+  });
   function mergePageFlowFragments(nodes) {
     const mergeNestedListFragments = (parent) => {
       if (!parent?.children) return;
@@ -4808,9 +4871,7 @@
       case "file-save": $("#save-document").click(); break;
       case "file-docx": $("#export-docx").click(); break;
       case "file-html": $("#export-html").click(); break;
-      case "file-print":
-        if (editor.contentEditable === "true" && !$("#editor-card").classList.contains("landing")) window.print();
-        break;
+      case "file-print": void printDocument(); break;
       case "style-preset": runCommand("formatBlock", `<${button.dataset.stylePreset}>`); break;
       case "clipboard-copy": case "clipboard-cut": case "clipboard-paste": void runClipboardAction(action); break;
       case "format-painter": paintFormatting(); break;
