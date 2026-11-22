@@ -112,6 +112,19 @@ assert.equal(dates1904("A1"), 43889);
 assert.equal(dates1904("C3"), 0);
 assert.equal(displayCell(dates1904("A1"), "date", undefined, true), "2024-02-29");
 assert.equal(displayCell(60, "date"), "1900-02-29");
+const namedSheets = [
+  { name: "Summary", cells: { A1: "=SUM(a1_orders)", A2: "=order_count+1", A3: '=VLOOKUP("Bolt",Price_List,2,FALSE)', A4: "=A1_orders" } },
+  { name: "Jon's orders", cells: { A1: "11", A2: "9", B2: "Bolt", C2: "8", B3: "Washer", C3: "12" } },
+];
+const namedRanges = [
+  { name: "A1_Orders", sheet: "Jon's orders", range: "A1:A2" },
+  { name: "Order_Count", sheet: "Jon's orders", range: "A1" },
+  { name: "Price_List", sheet: "Jon's orders", range: "B2:C3" },
+  { name: "Last_Row", sheet: "Jon's orders", range: "A99:B100" },
+];
+assert.deepEqual(["A1", "A2", "A3", "A4"].map(calculateWorkbook(namedSheets, 0, false, namedRanges)),
+  [20, 12, 8, "#VALUE!"]);
+assert.equal(shiftCellFormula("=SUM(A1_Orders)+A1", 1, 1), "=SUM(A1_Orders)+B2");
 assert.deepEqual(parseCsv(toCsv({ A1: "2", B1: "=A1*3", A2: 'a,"b"', B2: "@external" })), [["2", "6"], ['a,"b"', "'@external"]]);
 console.log("Sheets calculations, CSV quoting, and input limits passed.");
 
@@ -120,6 +133,10 @@ vm.runInNewContext(fs.readFileSync(new URL("../assets/vendor/fflate.min.js", imp
 const zip = zipContext.fflate;
 const dom = new JSDOM();
 try {
+  const namedBytes = exportWorkbook(namedSheets, zip, false, namedRanges);
+  const namedFile = importWorkbook(namedBytes, zip, dom.window.DOMParser);
+  assert.deepEqual(namedFile.namedRanges, namedRanges);
+  assert.deepEqual(["A1", "A2", "A3"].map(calculateWorkbook(namedFile.sheets, 0, false, namedFile.namedRanges)), [20, 12, 8]);
   const textSheets = [{ name: "Text", cells: { A1: "  Case ", A2: '=UPPER(TRIM(A1))&" & notes"', A3: '="#REF!"', A4: "=missing!A1", A5: "=NOT(FALSE())" } }];
   const textBytes = exportWorkbook(textSheets, zip);
   const textXml = zip.strFromU8(zip.unzipSync(textBytes)["xl/worksheets/sheet1.xml"]);

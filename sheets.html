@@ -59,6 +59,7 @@
       <details name="sheet-commands" class="command-menu"><summary>Formulas</summary><div>
         <button type="button" id="sheet-autosum">Sum cells above</button>
         <button type="button" id="sheet-function-help">Find a function</button>
+        <button type="button" id="sheet-named-ranges">Named ranges</button>
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Page Layout</summary><div>
         <button id="sheet-print-settings" type="button">Print setup</button>
@@ -81,7 +82,7 @@
       <input id="workbook-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
     </div>
     <div class="sheet-formula-line">
-      <input id="sheet-selected" aria-label="Go to cell or range" value="A1" maxlength="9" autocomplete="off" spellcheck="false">
+      <input id="sheet-selected" aria-label="Go to cell, range, or named range" value="A1" maxlength="255" autocomplete="off" spellcheck="false">
       <input id="sheet-formula" aria-label="Selected cell value or formula" maxlength="4000" autocomplete="off">
       <select id="sheet-validation-picker" aria-label="Allowed values for the active cell" hidden></select>
     </div>
@@ -137,6 +138,21 @@
       <div class="sheets-actions">
         <button class="button button-outline" type="submit">Import as new sheet</button>
         <button class="button button-outline" type="button" data-close>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="sheet-names-dialog" class="pdf-tool-dialog" aria-labelledby="sheet-names-title">
+    <form>
+      <h2 id="sheet-names-title">Named ranges</h2>
+      <label>Saved ranges <select name="saved"></select></label>
+      <label>Name <input name="rangeName" maxlength="255" required></label>
+      <label>Worksheet <select name="worksheet"></select></label>
+      <label>Cell or range <input name="range" placeholder="A1:B12" maxlength="20" required></label>
+      <p role="status"></p>
+      <div class="slides-actions">
+        <button type="submit">Save range</button>
+        <button type="button" data-remove>Remove</button>
+        <button type="button" data-close>Close</button>
       </div>
     </form>
   </dialog>

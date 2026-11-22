@@ -42,7 +42,7 @@ export function bindSheetPrinting({ activeSheet, activeWorkbook, selection, chan
     const workbook = activeWorkbook();
     const sheet = activeSheet();
     const settings = normalizePrintSettings(sheet.print);
-    const values = calculateWorkbook(workbook.sheets, workbook.active, workbook.date1904);
+    const values = calculateWorkbook(workbook.sheets, workbook.active, workbook.date1904, workbook.namedRanges);
     const fillAt = conditionalFill(sheet.conditionalRule);
     const hidden = hiddenFilterRows(sheet.filter, values);
     const addresses = Object.keys(sheet.cells);
