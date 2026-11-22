@@ -5,22 +5,34 @@ export const numberFormats = { general: 0, number: 4, percent: 10, decimal: 2, d
 export const conditionalColors = { yellow: "FFF3B8", green: "D6F3DE", red: "FFDDE3" };
 export const spreadsheetFonts = ["Arial", "Calibri", "Georgia", "Times New Roman", "Courier New"];
 export const protectionCredentials = ["password", "algorithmName", "hashValue", "saltValue", "spinCount"];
+export const workbookProtectionCredentials = ["workbook", "revisions"].flatMap((prefix) =>
+  ["Password", "AlgorithmName", "HashValue", "SaltValue", "SpinCount"].map((suffix) => prefix + suffix));
+const workbookProtectionOptions = ["lockStructure", "lockWindows", "lockRevision"];
 const protectionOptions = ["objects", "scenarios", "formatCells", "formatColumns", "formatRows",
   "insertColumns", "insertRows", "insertHyperlinks", "deleteColumns", "deleteRows",
   "selectLockedCells", "sort", "autoFilter", "pivotTables", "selectUnlockedCells"];
 
-export function normalizeSheetProtection(input) {
+function normalizeProtection(input, credentials, options) {
   if (!input || typeof input !== "object") return null;
   const protection = {};
-  for (const name of protectionCredentials) {
+  for (const name of credentials) {
     if (typeof input[name] === "string" && input[name].length > 0 && input[name].length <= 2048) {
       protection[name] = input[name];
     }
   }
-  for (const name of protectionOptions) {
+  for (const name of options) {
     if (typeof input[name] === "boolean") protection[name] = input[name];
   }
   return protection;
+}
+
+export function normalizeSheetProtection(input) {
+  return normalizeProtection(input, protectionCredentials, protectionOptions);
+}
+
+export function normalizeWorkbookProtection(input) {
+  const protection = normalizeProtection(input, workbookProtectionCredentials, workbookProtectionOptions);
+  return protection && Object.keys(protection).length ? protection : null;
 }
 
 export function normalizePrintSettings(input) {
