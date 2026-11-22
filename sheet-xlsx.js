@@ -61,10 +61,11 @@ function makeWorksheet({ cells, formats = {}, styles = {}, freezeFirstRow, valid
     const row = Number(address.slice(1));
     if (!rows.has(row)) rows.set(row, []);
     const value = valueAt(address);
+    const missingLookup = value === "#N/A" && valueAt.isError(address);
     let markup;
-    if (raw.startsWith("=") && !valueAt.isError(address)) {
+    if (raw.startsWith("=") && (!valueAt.isError(address) || missingLookup)) {
       const logical = typeof value === "boolean";
-      const type = logical ? ' t="b"' : typeof value === "string" ? ' t="str"' : "";
+      const type = missingLookup ? ' t="e"' : logical ? ' t="b"' : typeof value === "string" ? ' t="str"' : "";
       const cached = logical ? String(Number(value)) : xml(String(value));
       markup = `<c r="${address}"${type}><f>${xml(raw.slice(1))}</f><v>${cached}</v></c>`;
     } else if (raw.trim() && Number.isFinite(Number(raw)) && String(Number(raw)) === raw) {

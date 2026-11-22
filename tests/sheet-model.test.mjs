@@ -82,6 +82,23 @@ assert.deepEqual(Array.from({ length: 9 }, (_, index) => logical("B" + (index + 
   ["Ready", "Ready", true, 4, false, true, "#ERROR!", 3, 3]);
 assert.equal(displayCell(true, "number"), "TRUE");
 assert.equal(toCsv({ A1: "=TRUE", A2: "=FALSE" }), "TRUE\r\nFALSE");
+const lookup = calculateWorkbook([
+  { name: "Orders", cells: {
+    A1: '=VLOOKUP("VALVE",\'Stock List\'!$A$1:$B$4,2,FALSE)',
+    A2: '=VLOOKUP("mo?or",\'Stock List\'!A1:B4,2,0)',
+    A3: '=VLOOKUP("tag~*",\'Stock List\'!A1:B4,2,FALSE)',
+    A4: '=VLOOKUP(13,\'Stock List\'!D1:E4,2)',
+    A5: '=VLOOKUP(2,\'Stock List\'!D1:E4,2,TRUE)',
+    A6: '=VLOOKUP("valve",\'Stock List\'!A1:B4,3,FALSE)',
+    A7: '=VLOOKUP("valve",\'Stock List\'!A1:B4,0,FALSE)',
+  } },
+  { name: "Stock List", cells: {
+    A1: "Valve", B1: "2", A2: "Motor", B2: "Drive", A3: "Tag*", B3: "Literal", A4: "Valve", B4: "4",
+    D1: "5", E1: "Five", D2: "10", E2: "First ten", D3: "10", E3: "Second ten", D4: "15", E4: "Fifteen",
+  } },
+], 0);
+assert.deepEqual(Array.from({ length: 7 }, (_, index) => lookup("A" + (index + 1))),
+  [2, "Drive", "Literal", "Second ten", "#N/A", "#REF!", "#VALUE!"]);
 assert.deepEqual(parseCsv(toCsv({ A1: "2", B1: "=A1*3", A2: 'a,"b"', B2: "@external" })), [["2", "6"], ['a,"b"', "'@external"]]);
 console.log("Sheets calculations, CSV quoting, and input limits passed.");
 
@@ -98,6 +115,12 @@ try {
   assert.match(textXml, /<c r="A4" t="inlineStr">/);
   assert.match(textXml, /<c r="A5" t="b"><f>NOT\(FALSE\(\)\)<\/f><v>1<\/v><\/c>/);
   assert.deepEqual(importWorkbook(textBytes, zip, dom.window.DOMParser)[0].cells, { ...textSheets[0].cells, A4: "'=missing!A1" });
+  const lookupCells = { A1: "Bolt", B1: "8", C1: '=VLOOKUP("bolt",A1:B1,2,FALSE)', C2: '=VLOOKUP("nut",A1:B1,2,FALSE)' };
+  const lookupBytes = exportWorkbook([{ name: "Inventory", cells: lookupCells }], zip);
+  const lookupXml = zip.strFromU8(zip.unzipSync(lookupBytes)["xl/worksheets/sheet1.xml"]);
+  assert.match(lookupXml, /<c r="C1"><f>[^<]+<\/f><v>8<\/v><\/c>/);
+  assert.match(lookupXml, /<c r="C2" t="e"><f>[^<]+<\/f><v>#N\/A<\/v><\/c>/);
+  assert.deepEqual(importWorkbook(lookupBytes, zip, dom.window.DOMParser)[0].cells, lookupCells);
   const sheets = [{ name: "Sales & costs", cells: { A1: "10", A2: "20", A3: "=SUM(A1:A2)", B1: "001", B2: "'=literal" }, formats: { A3: "number", C1: "percent" } }, { name: "Notes", cells: { A1: 'Quotes and <symbols> "work"' }, formats: {} }];
   const validation = { C4: ["Ready", "On hold"], C5: ["Ready", "On hold"] };
   const filter = { range: "A1:B3", column: "A", value: "20" };
