@@ -192,6 +192,7 @@
       [{ label: "Align left", action: "justifyLeft", icon: "☰", pressed: true }, { label: "Center", action: "justifyCenter", icon: "≡", pressed: true }, { label: "Align right", action: "justifyRight", icon: "☷", pressed: true }, { label: "Justify", action: "justifyFull", icon: "▤", pressed: true }],
     ],
     insert: [
+      [{ label: "Insert equation", action: "equation", icon: "∑ Equation" }],
       [{ label: "Add link", action: "link", icon: "↗ Link" }, { label: "Remove link", action: "unlink", icon: "↗̸" }],
       [{ label: "Insert today's date", action: "date", icon: "▦ Date" }, { label: "Insert divider", action: "divider", icon: "― Divider" }, { label: "Insert page break", action: "page-break", icon: "↧ Page break", title: "Insert page break (Ctrl+Enter or Command+Enter)", shortcut: "Control+Enter Meta+Enter" }, { label: "Insert table (first row is a header)", action: "table", icon: "▦ Table" }, { label: "Insert image from this device", action: "image", icon: "▧ Image" }, { label: "Edit selected image description and size", action: "image-properties", icon: "▧ Image properties" }],
       [{ label: "Insert row above", action: "table-row-above", icon: "▤ Row ↑" }, { label: "Insert row below", action: "table-row-below", icon: "▤ Row ↓" }, { label: "Insert column left", action: "table-column-left", icon: "▥ Col ←" }, { label: "Insert column right", action: "table-column-right", icon: "▥ Col →" }, { label: "Delete row", action: "table-row-delete", icon: "⌫ Row" }, { label: "Delete column", action: "table-column-delete", icon: "⌫ Col" }, { label: "Delete table", action: "table-delete", icon: "⌫ Table" }, { label: "Merge adjacent cells", action: "table-merge", icon: "▦ Merge" }, { label: "Merge cells vertically", action: "table-merge-vertical", icon: "▤ Merge ↓" }, { label: "Split merged cell", action: "table-split", icon: "▦ Split" }],
@@ -3310,6 +3311,76 @@
     }
   }
 
+  async function prepareWordEquations(arrayBuffer, entry) {
+    const original = { arrayBuffer, tokens: new Map() };
+    const text = await readDocxZipPartText(arrayBuffer, entry, "word/document.xml");
+    if (!text || !window.fflate || !text.includes("officeDocument/2006/math")) return original;
+    const xml = new DOMParser().parseFromString(text, "application/xml");
+    const math = "http://schemas.openxmlformats.org/officeDocument/2006/math";
+    const word = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const equations = [...xml.getElementsByTagNameNS(math, "oMath")];
+    const prefix = "ADIGUNEQ" + crypto.randomUUID().replaceAll("-", "") + "Z";
+    const plain = (element) => {
+      if (!element?.children.length || [...element.children].some((run) => run.localName !== "r" || run.namespaceURI !== math)) return "";
+      const content = [...element.getElementsByTagNameNS(math, "t")].map((part) => part.textContent).join("").trim();
+      return content.length <= 200 ? content : "";
+    };
+    for (const equation of equations) {
+      const object = equation.children.length === 1 ? equation.firstElementChild : null;
+      const type = object?.namespaceURI === math ? object.localName : "";
+      const kind = type === "f" ? "fraction" : type === "sSup" ? "power" : "text";
+      const find = (tag) => [...(object?.children ?? [])].find((part) => part.namespaceURI === math && part.localName === tag);
+      const fractionType = find("fPr")?.getElementsByTagNameNS(math, "type")[0]?.getAttributeNS(math, "val");
+      if (kind === "fraction" && fractionType && fractionType !== "bar") continue;
+      const first = plain(kind === "fraction" ? find("num") : kind === "power" ? find("e") : equation);
+      const second = kind === "text" ? "" : plain(find(kind === "fraction" ? "den" : "sup"));
+      if (!first || (kind !== "text" && !second)) continue;
+      const token = prefix + original.tokens.size + "END";
+      original.tokens.set(token, { kind, first, second });
+      const run = xml.createElementNS(word, "w:r");
+      const value = xml.createElementNS(word, "w:t");
+      value.textContent = token;
+      run.append(value);
+      equation.replaceWith(run);
+    }
+    if (!original.tokens.size) return original;
+    for (const wrapper of [...xml.getElementsByTagNameNS(math, "oMathPara")]) {
+      const content = [...wrapper.children].filter((node) => node.localName !== "oMathParaPr");
+      if (content.every((node) => node.namespaceURI === math)) continue;
+      if (wrapper.parentElement?.localName === "p") wrapper.replaceWith(...content);
+      else {
+        const paragraph = xml.createElementNS(word, "w:p");
+        paragraph.append(...content);
+        wrapper.replaceWith(paragraph);
+      }
+    }
+    const files = window.fflate.unzipSync(new Uint8Array(arrayBuffer));
+    files["word/document.xml"] = window.fflate.strToU8(new XMLSerializer().serializeToString(xml));
+    return { arrayBuffer: window.fflate.zipSync(files, { level: 0 }).buffer, tokens: original.tokens };
+  }
+
+  function recoverWordEquations(source, tokens) {
+    if (!tokens.size) return source;
+    const parsed = new DOMParser().parseFromString(source, "text/html");
+    const walker = parsed.createTreeWalker(parsed.body, NodeFilter.SHOW_TEXT);
+    const textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+    for (const node of textNodes) {
+      const parts = node.data.split(/(ADIGUNEQ[\da-f]{32}Z\d+END)/g);
+      if (parts.length === 1) continue;
+      node.replaceWith(...parts.map((part) => {
+        const equation = tokens.get(part);
+        if (!equation) return part;
+        const marker = parsed.createElement("span");
+        marker.dataset.equationKind = equation.kind;
+        marker.dataset.equationFirst = equation.first;
+        marker.dataset.equationSecond = equation.second;
+        return marker;
+      }));
+    }
+    return parsed.body.innerHTML;
+  }
+
   function recoverWordNotes(source) {
     const parsed = new DOMParser().parseFromString(source, "text/html");
     const notes = new Map([...parsed.querySelectorAll('li[id^="footnote-"], li[id^="endnote-"]')].map((item) => [item.id, item]));
@@ -3364,6 +3435,11 @@
         return image;
       }
       const footnote = tag === "span" && node.getAttribute("data-footnote-text");
+      if (tag === "span" && ["text", "fraction", "power"].includes(node.dataset.equationKind)) {
+        const equation = document.createElement("span");
+        for (const key of ["equationKind", "equationFirst", "equationSecond"]) equation.dataset[key] = node.dataset[key]?.slice(0, 200) || "";
+        return equation;
+      }
       if (!allowedTags.has(tag) && !footnote) { removed++; const fragment = document.createDocumentFragment(); for (const child of [...node.childNodes]) { const safeChild = copy(child); if (safeChild) fragment.append(safeChild); } return fragment; }
       const element = document.createElement(tag);
       if (footnote) {
@@ -3544,13 +3620,14 @@
         const arrayBuffer = await file.arrayBuffer();
         const archiveEntry = inspectDocxArchive(arrayBuffer);
         const revisionCounts = await readDocxRevisionCounts(arrayBuffer, archiveEntry);
-        const converted = await window.mammoth.convertToHtml({ arrayBuffer }, {
+        const equations = await prepareWordEquations(arrayBuffer, archiveEntry);
+        const converted = await window.mammoth.convertToHtml({ arrayBuffer: equations.arrayBuffer }, {
           styleMap: [
             "br[type='page'] => hr.adigun-imported-page-break:fresh",
             ...Array.from({ length: 9 }, (_, index) => "p.TOC" + (index + 1) + " => ol.adigun-imported-contents > li:fresh"),
           ],
         });
-        const sanitized = sanitizeDocxHtml(recoverWordNotes(converted.value));
+        const sanitized = sanitizeDocxHtml(recoverWordEquations(recoverWordNotes(converted.value), equations.tokens));
         const revisionMapping = mapDocxRevisionsToHtml(sanitized.html, revisionCounts?.paragraphs);
         const commentTargetText = new DOMParser().parseFromString("<main>" + revisionMapping.html + "</main>", "text/html").querySelector("main")?.textContent || "";
         const importedCommentData = await readDocxReviewComments(arrayBuffer, archiveEntry, commentTargetText);
@@ -4226,6 +4303,73 @@
     notify("Table of contents refreshed.");
   }
 
+  const equationDialog = $("#equation-dialog");
+  const equationForm = equationDialog.querySelector("form");
+  const equationFields = equationForm.elements;
+  const removeEquation = equationForm.querySelector("[data-remove]");
+  let equationEditor;
+  let equationPosition;
+
+  function updateEquationFields() {
+    const kind = equationFields.kind.value;
+    equationForm.querySelector("[data-first-label]").textContent = { text: "Expression", fraction: "Numerator", power: "Base" }[kind];
+    equationForm.querySelector("[data-second-label]").textContent = kind === "power" ? "Exponent" : "Denominator";
+    equationFields.second.closest("label").hidden = kind === "text";
+    equationFields.second.required = kind !== "text";
+  }
+
+  function openEquation(marker) {
+    if (!liveEditor) return;
+    equationEditor = liveEditor;
+    equationPosition = undefined;
+    if (marker) {
+      const position = liveEditor.view.posAtDOM(marker, 0);
+      equationPosition = [position, position - 1].find((index) => index >= 0 &&
+        liveEditor.state.doc.nodeAt(index)?.type.name === "equation");
+      if (equationPosition === undefined) return;
+    }
+    equationFields.kind.value = marker?.dataset.equationKind || "text";
+    equationFields.first.value = marker?.dataset.equationFirst || "";
+    equationFields.second.value = marker?.dataset.equationSecond || "";
+    removeEquation.hidden = !marker;
+    updateEquationFields();
+    equationDialog.showModal();
+  }
+
+  for (const eventName of ["click", "keydown"]) editorContainer.addEventListener(eventName, (event) => {
+    const marker = event.target.closest?.("[data-equation-kind]");
+    if (!marker || (event.type === "keydown" && !["Enter", " "].includes(event.key))) return;
+    event.preventDefault();
+    openEquation(marker);
+  });
+  equationFields.kind.addEventListener("change", updateEquationFields);
+  equationForm.querySelector("[data-close]").addEventListener("click", () => equationDialog.close());
+  removeEquation.addEventListener("click", () => {
+    if (liveEditor !== equationEditor || equationPosition === undefined) return;
+    const { doc, tr } = liveEditor.state;
+    const node = doc.nodeAt(equationPosition);
+    if (node?.type.name !== "equation") return;
+    liveEditor.view.dispatch(tr.delete(equationPosition, equationPosition + node.nodeSize));
+    equationDialog.close();
+  });
+  equationForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!liveEditor || liveEditor !== equationEditor) return;
+    const kind = equationFields.kind.value;
+    const first = equationFields.first.value.trim();
+    const second = kind === "text" ? "" : equationFields.second.value.trim();
+    if (!first || (kind !== "text" && !second)) return;
+    const attrs = { kind, first, second };
+    if (equationPosition === undefined) {
+      if (!liveEditor.chain().focus().insertContentAt(liveEditor.state.selection.to, { type: "equation", attrs }).run()) return;
+    } else {
+      const { doc, tr } = liveEditor.state;
+      if (doc.nodeAt(equationPosition)?.type.name !== "equation") return;
+      liveEditor.view.dispatch(tr.setNodeMarkup(equationPosition, undefined, attrs));
+    }
+    equationDialog.close();
+  });
+
   const footnoteDialog = $("#footnote-dialog");
   const footnoteForm = footnoteDialog.querySelector("form");
   let footnotePosition;
@@ -4586,6 +4730,7 @@
       case "contents": updateTableOfContents(); break;
       case "footnote": openFootnote(); break;
       case "endnote": openFootnote(undefined, "endnote"); break;
+      case "equation": openEquation(); break;
       case "quick-overview": toggleAssistant(true); buildOverview(); break;
       case "track-changes":
         trackChangesEnabled = !trackChangesEnabled;
@@ -4912,6 +5057,15 @@
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return "";
       const tag = node.tagName.toLowerCase();
+      const equation = tag === "span" && node.getAttribute("data-equation-kind");
+      if (equation) {
+        const run = (value) => `<m:r><m:t xml:space="preserve">${wordXmlText(value || "")}</m:t></m:r>`;
+        const first = run(node.getAttribute("data-equation-first"));
+        const second = run(node.getAttribute("data-equation-second"));
+        const expression = equation === "fraction" ? `<m:f><m:num>${first}</m:num><m:den>${second}</m:den></m:f>`
+          : equation === "power" ? `<m:sSup><m:e>${first}</m:e><m:sup>${second}</m:sup></m:sSup>` : first;
+        return `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">${expression}</m:oMath>`;
+      }
       const footnote = tag === "span" && node.getAttribute("data-footnote-text");
       if (footnote) {
         const kind = node.getAttribute("data-footnote-kind") === "endnote" ? "endnote" : "footnote";
@@ -5365,7 +5519,14 @@
 
   function exportHTML() {
     if (activePdfFile) { download(activePdfFile, activePdfFile.name); return; }
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHTML(title())}</title></head><body>${documentModel.toHTML(documentModel.fromDOM(editor))}</body></html>`;
+    const content = document.createElement("div");
+    content.innerHTML = documentModel.toHTML(documentModel.fromDOM(editor));
+    for (const equation of content.querySelectorAll("[data-equation-kind]")) {
+      const { equationKind, equationFirst, equationSecond } = equation.dataset;
+      equation.textContent = equationKind === "fraction" ? `(${equationFirst}) / (${equationSecond})`
+        : equationKind === "power" ? `(${equationFirst})^(${equationSecond})` : equationFirst;
+    }
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHTML(title())}</title></head><body>${content.innerHTML}</body></html>`;
     download(new Blob([html], { type: "text/html;charset=utf-8" }), `${safeFilename(title())}.html`);
     notify("HTML document exported.");
   }

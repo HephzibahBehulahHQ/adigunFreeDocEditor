@@ -70,6 +70,14 @@
       }
     }
     if (tag === "span") {
+      const equationKind = attributes["data-equation-kind"];
+      const equationFirst = String(attributes["data-equation-first"] ?? "").trim().slice(0, 200);
+      const equationSecond = String(attributes["data-equation-second"] ?? "").trim().slice(0, 200);
+      if (["text", "fraction", "power"].includes(equationKind) && equationFirst && (equationKind === "text" || equationSecond)) {
+        result["data-equation-kind"] = equationKind;
+        result["data-equation-first"] = equationFirst;
+        if (equationKind !== "text") result["data-equation-second"] = equationSecond;
+      }
       if (typeof attributes["data-footnote-text"] === "string" && attributes["data-footnote-text"].trim()) {
         result["data-footnote-text"] = attributes["data-footnote-text"].trim().slice(0, 2000);
         if (attributes["data-footnote-kind"] === "endnote") result["data-footnote-kind"] = "endnote";
@@ -145,6 +153,10 @@
       if (value !== null) attrs[name] = value;
     }
     if (tag === "span") {
+      for (const name of ["data-equation-kind", "data-equation-first", "data-equation-second"]) {
+        const value = node.getAttribute(name);
+        if (value !== null) attrs[name] = value;
+      }
       const family = supportedFontFamily(sourceTag === "font" ? node.getAttribute("face") : node.getAttribute("data-font-family") || node.style?.fontFamily);
       if (family) attrs["data-font-family"] = family;
       const fontSize = String(node.getAttribute("data-font-size") || node.style?.fontSize || "");
