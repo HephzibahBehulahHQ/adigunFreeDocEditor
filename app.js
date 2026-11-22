@@ -198,6 +198,7 @@
       [{ label: "Insert row above", action: "table-row-above", icon: "▤ Row ↑" }, { label: "Insert row below", action: "table-row-below", icon: "▤ Row ↓" }, { label: "Insert column left", action: "table-column-left", icon: "▥ Col ←" }, { label: "Insert column right", action: "table-column-right", icon: "▥ Col →" }, { label: "Delete row", action: "table-row-delete", icon: "⌫ Row" }, { label: "Delete column", action: "table-column-delete", icon: "⌫ Col" }, { label: "Delete table", action: "table-delete", icon: "⌫ Table" }, { label: "Merge adjacent cells", action: "table-merge", icon: "▦ Merge" }, { label: "Merge cells vertically", action: "table-merge-vertical", icon: "▤ Merge ↓" }, { label: "Split merged cell", action: "table-split", icon: "▦ Split" }],
     ],
     layout: [
+      [{ label: "Insert next-page section break", action: "section-break", icon: "↧ Section break" }],
       [{ label: "Page size", select: "paper", options: [["a4", "A4"], ["letter", "US Letter"]] }, { label: "Margins", select: "margins", options: [["normal", "Normal"], ["narrow", "Narrow"], ["wide", "Wide"], ["custom", "Custom"]] }, { label: "Custom margins", action: "custom-margins", icon: "↔ Custom margins" }, { label: "Orientation", action: "orientation", icon: "▯ Portrait" }, { label: "Header & footer", action: "page-header-footer", icon: "↕ Header / footer" }, { label: "Page numbers", action: "page-numbers", icon: "＃ Pages" }],
     ],
     references: [
@@ -3311,15 +3312,24 @@
     }
   }
 
-  async function prepareWordEquations(arrayBuffer, entry) {
-    const original = { arrayBuffer, tokens: new Map() };
+  async function prepareWordStructures(arrayBuffer, entry) {
+    const original = { arrayBuffer, tokens: new Map(), omittedSections: 0 };
     const text = await readDocxZipPartText(arrayBuffer, entry, "word/document.xml");
-    if (!text || !window.fflate || !text.includes("officeDocument/2006/math")) return original;
+    if (!text || !window.fflate || !/officeDocument\/2006\/math|sectPr/.test(text)) return original;
     const xml = new DOMParser().parseFromString(text, "application/xml");
     const math = "http://schemas.openxmlformats.org/officeDocument/2006/math";
     const word = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     const equations = [...xml.getElementsByTagNameNS(math, "oMath")];
-    const prefix = "ADIGUNEQ" + crypto.randomUUID().replaceAll("-", "") + "Z";
+    const prefix = "ADIGUNSTRUCT" + crypto.randomUUID().replaceAll("-", "") + "Z";
+    function tokenRun(structure) {
+      const token = prefix + original.tokens.size + "END";
+      original.tokens.set(token, structure);
+      const run = xml.createElementNS(word, "w:r");
+      const value = xml.createElementNS(word, "w:t");
+      value.textContent = token;
+      run.append(value);
+      return run;
+    }
     const plain = (element) => {
       if (!element?.children.length || [...element.children].some((run) => run.localName !== "r" || run.namespaceURI !== math)) return "";
       const content = [...element.getElementsByTagNameNS(math, "t")].map((part) => part.textContent).join("").trim();
@@ -3335,13 +3345,20 @@
       const first = plain(kind === "fraction" ? find("num") : kind === "power" ? find("e") : equation);
       const second = kind === "text" ? "" : plain(find(kind === "fraction" ? "den" : "sup"));
       if (!first || (kind !== "text" && !second)) continue;
-      const token = prefix + original.tokens.size + "END";
-      original.tokens.set(token, { kind, first, second });
-      const run = xml.createElementNS(word, "w:r");
-      const value = xml.createElementNS(word, "w:t");
-      value.textContent = token;
-      run.append(value);
-      equation.replaceWith(run);
+      equation.replaceWith(tokenRun({ kind, first, second }));
+    }
+    const sections = [...xml.getElementsByTagNameNS(word, "sectPr")].filter((section) =>
+      section.parentElement?.namespaceURI === word && ["pPr", "body"].includes(section.parentElement.localName));
+    for (const [index, section] of sections.entries()) {
+      const paragraph = section.parentElement?.parentElement;
+      if (section.parentElement?.localName !== "pPr" || paragraph?.localName !== "p") continue;
+      const nextType = sections[index + 1]?.getElementsByTagNameNS(word, "type")[0]?.getAttributeNS(word, "val");
+      if (nextType && nextType !== "nextPage") { original.omittedSections++; continue; }
+      const marker = xml.createElementNS(word, "w:p");
+      marker.append(tokenRun({ kind: "section-break" }));
+      section.remove();
+      if (paragraph.children.length === 1 && !paragraph.firstElementChild.children.length) paragraph.replaceWith(marker);
+      else paragraph.after(marker);
     }
     if (!original.tokens.size) return original;
     for (const wrapper of [...xml.getElementsByTagNameNS(math, "oMathPara")]) {
@@ -3356,17 +3373,23 @@
     }
     const files = window.fflate.unzipSync(new Uint8Array(arrayBuffer));
     files["word/document.xml"] = window.fflate.strToU8(new XMLSerializer().serializeToString(xml));
-    return { arrayBuffer: window.fflate.zipSync(files, { level: 0 }).buffer, tokens: original.tokens };
+    return { ...original, arrayBuffer: window.fflate.zipSync(files, { level: 0 }).buffer };
   }
 
-  function recoverWordEquations(source, tokens) {
+  function recoverWordStructures(source, tokens) {
     if (!tokens.size) return source;
     const parsed = new DOMParser().parseFromString(source, "text/html");
     const walker = parsed.createTreeWalker(parsed.body, NodeFilter.SHOW_TEXT);
     const textNodes = [];
     while (walker.nextNode()) textNodes.push(walker.currentNode);
     for (const node of textNodes) {
-      const parts = node.data.split(/(ADIGUNEQ[\da-f]{32}Z\d+END)/g);
+      if (tokens.get(node.data)?.kind === "section-break" && node.parentElement?.tagName === "P") {
+        const marker = parsed.createElement("hr");
+        marker.dataset.sectionBreak = "nextPage";
+        node.parentElement.replaceWith(marker);
+        continue;
+      }
+      const parts = node.data.split(/(ADIGUNSTRUCT[\da-f]{32}Z\d+END)/g);
       if (parts.length === 1) continue;
       node.replaceWith(...parts.map((part) => {
         const equation = tokens.get(part);
@@ -3448,6 +3471,10 @@
       }
       if (tag === "hr" && (node.getAttribute("data-page-break") === "true" || node.classList.contains("adigun-imported-page-break"))) {
         element.setAttribute("data-page-break", "true");
+      }
+      if (tag === "hr" && node.getAttribute("data-section-break") === "nextPage") {
+        element.setAttribute("data-page-break", "true");
+        element.setAttribute("data-section-break", "nextPage");
       }
       if (tag === "a") {
         const href = node.getAttribute("href") || "";
@@ -3620,14 +3647,14 @@
         const arrayBuffer = await file.arrayBuffer();
         const archiveEntry = inspectDocxArchive(arrayBuffer);
         const revisionCounts = await readDocxRevisionCounts(arrayBuffer, archiveEntry);
-        const equations = await prepareWordEquations(arrayBuffer, archiveEntry);
-        const converted = await window.mammoth.convertToHtml({ arrayBuffer: equations.arrayBuffer }, {
+        const structures = await prepareWordStructures(arrayBuffer, archiveEntry);
+        const converted = await window.mammoth.convertToHtml({ arrayBuffer: structures.arrayBuffer }, {
           styleMap: [
             "br[type='page'] => hr.adigun-imported-page-break:fresh",
             ...Array.from({ length: 9 }, (_, index) => "p.TOC" + (index + 1) + " => ol.adigun-imported-contents > li:fresh"),
           ],
         });
-        const sanitized = sanitizeDocxHtml(recoverWordEquations(recoverWordNotes(converted.value), equations.tokens));
+        const sanitized = sanitizeDocxHtml(recoverWordStructures(recoverWordNotes(converted.value), structures.tokens));
         const revisionMapping = mapDocxRevisionsToHtml(sanitized.html, revisionCounts?.paragraphs);
         const commentTargetText = new DOMParser().parseFromString("<main>" + revisionMapping.html + "</main>", "text/html").querySelector("main")?.textContent || "";
         const importedCommentData = await readDocxReviewComments(arrayBuffer, archiveEntry, commentTargetText);
@@ -3660,6 +3687,7 @@
         saveDocument();
         const warningCount = converted.messages.filter((message) => message.type === "warning").length;
         const notes = [];
+        if (structures.omittedSections) notes.push("Only next-page section breaks can be imported");
         if (warningCount) notes.push(`${warningCount} Word compatibility warning${warningCount === 1 ? "" : "s"}`);
         if (sanitized.removed) notes.push(`${sanitized.removed} unsupported or unsafe item${sanitized.removed === 1 ? "" : "s"} omitted`);
         const revisionWarning = sourceRevisionLossWarning(revisionCounts, false, revisionMapping.preserved);
@@ -4764,6 +4792,7 @@
       case "date": runCommand("insertText", new Intl.DateTimeFormat(undefined, { dateStyle: "long" }).format(new Date())); break;
       case "divider": runCommand("insertHTML", "<hr><p><br></p>"); break;
       case "page-break": runCommand("insertHTML", '<hr data-page-break="true"><p><br></p>'); notify("Manual page break inserted."); break;
+      case "section-break": runCommand("insertHTML", '<hr data-page-break="true" data-section-break="nextPage"><p><br></p>'); notify("Next-page section break inserted."); break;
       case "table": {
         const selection = window.getSelection();
         tableInsertionRange = selection && selection.rangeCount && editor.contains(selection.anchorNode) ? selection.getRangeAt(0).cloneRange() : null;
@@ -5158,6 +5187,7 @@
     }
 
     const body = [];
+    const nextSection = Symbol("next-page section");
     const listNumberingInstances = [];
     const listNumberingIds = new WeakMap();
     function createListNumberingInstance(kind, level = 0, start = 1) {
@@ -5350,6 +5380,10 @@
           continue;
         }
         if (tag === "table") { output.push(tableXml(child)); continue; }
+        if (tag === "hr" && child.getAttribute("data-section-break") === "nextPage" && output === body) {
+          output.push(nextSection);
+          continue;
+        }
         if (tag === "hr") { output.push(child.getAttribute("data-page-break") === "true" ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="808080"/></w:pBdr></w:pPr><w:r><w:t></w:t></w:r></w:p>'); continue; }
         if (child.children.length) walkBlocks(child, listKind, listLevel, output, listNumId);
         else if (child.textContent.trim()) addParagraph(child, listKind, listLevel, output, activeListNumId);
@@ -5409,7 +5443,10 @@
     const commentsRelationshipId = exportedComments.length ? `rId${nextRelationship++}` : "";
     const commentsExtendedRelationshipId = exportedComments.length ? `rId${nextRelationship++}` : "";
     const endnoteProperties = wordNotes.endnote.length ? '<w:endnotePr><w:numFmt w:val="lowerRoman"/></w:endnotePr>' : "";
-    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join("")}<w:sectPr>${headerReference}${footerReference}${endnoteProperties}<w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="${topMarginTwips}" w:right="${rightMarginTwips}" w:bottom="${bottomMarginTwips}" w:left="${leftMarginTwips}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+    const sectionProperties = (type) => `<w:sectPr>${headerReference}${footerReference}${endnoteProperties}${type}<w:pgSz w:w="${width}" w:h="${height}"/><w:pgMar w:top="${topMarginTwips}" w:right="${rightMarginTwips}" w:bottom="${bottomMarginTwips}" w:left="${leftMarginTwips}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>`;
+    const nextPage = '<w:type w:val="nextPage"/>';
+    const blocks = body.map((block) => block === nextSection ? `<w:p><w:pPr>${sectionProperties(nextPage)}</w:pPr></w:p>` : block);
+    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${blocks.join("")}${sectionProperties(body.includes(nextSection) ? nextPage : "")}</w:body></w:document>`;
     const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="20"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/></w:pPr><w:rPr><w:b/><w:sz w:val="18"/></w:rPr></w:style></w:styles>';
     const bulletGlyphs = ["•", "○", "▪"];
     const numberingLevels = (format) => Array.from({ length: 9 }, (_, level) => `<w:lvl w:ilvl="${level}"><w:start w:val="1"/><w:numFmt w:val="${format}"/><w:lvlText w:val="${format === "bullet" ? bulletGlyphs[level % bulletGlyphs.length] : `%${level + 1}.`}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${(level + 1) * 720}" w:hanging="360"/></w:pPr></w:lvl>`).join("");

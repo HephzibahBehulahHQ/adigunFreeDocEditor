@@ -97,6 +97,10 @@
       }
     }
     if (tag === "hr" && attributes["data-page-break"] === "true") result["data-page-break"] = "true";
+    if (tag === "hr" && attributes["data-section-break"] === "nextPage") {
+      result["data-page-break"] = "true";
+      result["data-section-break"] = "nextPage";
+    }
     if (tag === "thead" && attributes["data-page-header-copy"] === "true") result["data-page-header-copy"] = "true";
     if (tag === "ol") {
       if (attributes["data-generated-toc"] === "true") result["data-generated-toc"] = "true";
@@ -166,6 +170,7 @@
       const highlightColor = supportedColor(node.getAttribute("data-highlight-color") || node.style?.backgroundColor || node.style?.background);
       if (highlightColor) attrs["data-highlight-color"] = highlightColor;
     }
+    if (tag === "hr" && node.getAttribute("data-section-break") === "nextPage") attrs["data-section-break"] = "nextPage";
     if (paragraphTags.has(tag)) attrs.align = node.style?.textAlign || "";
     if (!allowedTags.has(tag)) return [...node.childNodes].map(copyDomNode).filter(Boolean);
     const normalized = normalizeNode({ type: "element", tag, attrs, children: [...node.childNodes].map(copyDomNode).flat().filter(Boolean) });
