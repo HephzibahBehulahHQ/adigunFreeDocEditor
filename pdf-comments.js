@@ -7,8 +7,25 @@ const markTypes = {
   strike: { label: "Strikeout", subtype: "StrikeOut", color: [0.76, 0.19, 0.25] },
   box: { label: "Rectangle", subtype: "Square", color: [0.29, 0.2, 0.65] },
   ink: { label: "Freehand ink", subtype: "Ink", color: [0.15, 0.32, 0.68] },
+  stamp: { label: "Stamp", subtype: "Stamp", color: [0.18, 0.34, 0.60] },
 };
 const inkWidth = 2;
+const stampText = { Draft: "DRAFT", ForComment: "FOR COMMENT", Approved: "APPROVED", Final: "FINAL" };
+
+function stampAppearance(pdf, quad, rect, label, color) {
+  const [topLeft, , bottomLeft, bottomRight] = quad;
+  const [x, y, right, top] = rect;
+  const [leftX, leftY] = bottomLeft;
+  const matrix = [(bottomRight[0] - leftX) / 100, (bottomRight[1] - leftY) / 100,
+    (topLeft[0] - leftX) / 30, (topLeft[1] - leftY) / 30, leftX - x, leftY - y];
+  const rgb = color.join(" ");
+  const font = pdf.context.register(pdf.context.obj({ Type: "Font", Subtype: "Type1", BaseFont: "Helvetica-Bold" }));
+  const origin = 50 - label.length * 3.5;
+  const commands = `q ${matrix.map((value) => value.toFixed(5)).join(" ")} cm ${rgb} RG ${rgb} rg 2 w 2 2 96 26 re S BT /F1 11 Tf ${origin} 11 Td (${label}) Tj ET Q`;
+  return pdf.context.register(pdf.context.flateStream(commands, {
+    Type: "XObject", Subtype: "Form", BBox: [0, 0, right - x, top - y], Resources: { Font: { F1: font } },
+  }));
+}
 
 export function addPdfComments(pdf, entries, { PDFName, PDFHexString }) {
   for (const entry of entries) {
@@ -26,7 +43,7 @@ export function addPdfComments(pdf, entries, { PDFName, PDFHexString }) {
       const points = entry.kind === "ink" ? entry.path : entry.quad;
       const xs = points.map(([x]) => x);
       const ys = points.map(([, y]) => y);
-      const padding = ["box", "ink"].includes(entry.kind) ? 2 : 1;
+      const padding = entry.kind === "stamp" ? 0 : ["box", "ink"].includes(entry.kind) ? 2 : 1;
       properties.Rect = [Math.min(...xs) - padding, Math.min(...ys) - padding, Math.max(...xs) + padding, Math.max(...ys) + padding];
       if (entry.kind === "ink") {
         const [x0, y0, x1, y1] = properties.Rect;
@@ -38,6 +55,10 @@ export function addPdfComments(pdf, entries, { PDFName, PDFHexString }) {
         properties.InkList = [points.flat()];
         properties.BS = { W: inkWidth, S: "S" };
         properties.AP = { N: pdf.context.register(appearance) };
+      } else if (entry.kind === "stamp") {
+        const stamp = Object.hasOwn(stampText, entry.stamp) ? entry.stamp : "Draft";
+        properties.Name = PDFName.of(stamp);
+        properties.AP = { N: stampAppearance(pdf, entry.quad, properties.Rect, stampText[stamp], type.color) };
       } else if (entry.kind === "box") properties.BS = { W: 2, S: "S" };
       else properties.QuadPoints = entry.quad.flat();
     }
@@ -49,7 +70,7 @@ export function addPdfComments(pdf, entries, { PDFName, PDFHexString }) {
 export function bindPdfComments(sources, preview) {
   const dialog = document.querySelector("#pdf-comments-dialog");
   const form = dialog.querySelector("form");
-  const { source, page, kind, left, top, width, height, text } = form.elements;
+  const { source, page, kind, stamp, left, top, width, height, text } = form.elements;
   const canvas = dialog.querySelector("canvas");
   const list = dialog.querySelector("ol");
   const status = dialog.querySelector("[role=status]");
@@ -77,9 +98,12 @@ export function bindPdfComments(sources, preview) {
 
   function updateKind() {
     const drawing = kind.value === "ink";
+    const stamping = kind.value === "stamp";
     area.hidden = kind.value === "note" || drawing;
     form.querySelector("[data-position]").hidden = drawing;
     form.querySelector("[data-ink-help]").hidden = !drawing;
+    form.querySelector("[data-stamp-options]").hidden = !stamping;
+    stamp.disabled = busy || !stamping;
     add.hidden = drawing;
     for (const field of [left, top]) field.disabled = busy || drawing;
     for (const field of [width, height]) field.disabled = busy || area.hidden;
@@ -123,6 +147,18 @@ export function bindPdfComments(sources, preview) {
         context.stroke();
       } else if (comment.kind === "highlight") context.fillRect(x, y, w, h);
       else if (comment.kind === "box") context.strokeRect(x, y, w, h);
+      else if (comment.kind === "stamp") {
+        context.save();
+        context.translate(x, y);
+        context.scale(w / 100, h / 30);
+        context.fillStyle = `rgb(${rgb})`;
+        context.lineWidth = 2;
+        context.strokeRect(2, 2, 96, 26);
+        context.font = "bold 11px Helvetica, Arial, sans-serif";
+        context.textAlign = "center";
+        context.fillText(stampText[comment.stamp], 50, 19);
+        context.restore();
+      }
       else {
         const line = comment.kind === "underline" ? y + h : y + h / 2;
         context.beginPath();
@@ -155,7 +191,8 @@ export function bindPdfComments(sources, preview) {
       const label = document.createElement("label");
       const field = document.createElement("textarea");
       const remove = document.createElement("button");
-      label.textContent = `${markTypes[entry.kind].label} ${index + 1} · Page ${entry.pageIndex + 1}`;
+      const name = entry.kind === "stamp" ? stampText[entry.stamp] + " stamp" : markTypes[entry.kind].label;
+      label.textContent = `${name} ${index + 1} · Page ${entry.pageIndex + 1}`;
       field.rows = 2;
       field.maxLength = 1000;
       field.value = entry.text;
@@ -299,6 +336,7 @@ export function bindPdfComments(sources, preview) {
       point: pointAt(x, y),
       quad: [pointAt(x, y), pointAt(x + w, y), pointAt(x, y + h), pointAt(x + w, y + h)],
       text: text.value.trim(),
+      stamp: kind.value === "stamp" ? stamp.value : undefined,
     });
     text.value = "";
     draft = true;
