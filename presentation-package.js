@@ -15,7 +15,10 @@
   const markupCompatibility = "http://schemas.openxmlformats.org/markup-compatibility/2006";
   const slideWidth = 12192000;
   const slideHeight = 6858000;
-  const objectKinds = ["text", "rectangle", "ellipse", "image"];
+  const objectKinds = ["text", "rectangle", "ellipse", "image", "table"];
+  const tableLimit = 8;
+  const tableCellLimit = 200;
+  const tableUri = "http://schemas.openxmlformats.org/drawingml/2006/table";
   const imagePattern = /^data:image\/(png|jpeg);base64,([a-z0-9+/]+={0,2})$/i;
   const imageLimit = 550 * 1024;
   function imageData(source) {
@@ -42,6 +45,13 @@
     } catch { return ""; }
   }
 
+  function normalizeTableCells(value) {
+    const rows = Array.isArray(value) && value.length ? value.slice(0, tableLimit) : [["", ""], ["", ""]];
+    const columns = Math.max(1, ...rows.map((row) => Array.isArray(row) ? Math.min(row.length, tableLimit) : 0));
+    return rows.map((row) => Array.from({ length: columns }, (_, index) =>
+      typeof row?.[index] === "string" ? row[index].slice(0, tableCellLimit) : ""));
+  }
+
   function normalizeObjects(value) {
     if (!Array.isArray(value)) return [];
     return value.filter((object) => objectKinds.includes(object?.kind) &&
@@ -54,14 +64,15 @@
         y: objectDimension(object.y, 0, 100 - height, Math.min(65, 100 - height)),
         width,
         height,
-        rotation: objectDimension(object.rotation, -180, 180, 0),
+        rotation: object.kind === "table" ? 0 : objectDimension(object.rotation, -180, 180, 0),
         text: typeof object.text === "string" ? object.text.slice(0, 500) : "",
         fill: object.kind !== "text" && /^[a-f0-9]{6}$/i.test(object.fill ?? "") ? object.fill.toUpperCase() : "D9D1FC",
       };
       if (object.kind === "image") normalized.src = object.src;
+      if (object.kind === "table") normalized.cells = normalizeTableCells(object.cells);
       const link = normalizeObjectLink(object.link);
       if (link) normalized.link = link;
-      if (Number.isInteger(object.group) && object.group >= 1 && object.group <= 25) normalized.group = object.group;
+      if (object.kind !== "table" && Number.isInteger(object.group) && object.group >= 1 && object.group <= 25) normalized.group = object.group;
       return normalized;
     });
   }
@@ -96,6 +107,27 @@
   function imageXml(object, index, relationshipId, link) {
     const description = xmlText(object.text).replace(/"/g, "&quot;");
     return `<p:pic><p:nvPicPr><p:cNvPr id="${index + 4}" name="Adigun image ${index + 1}" descr="${description}">${link}</p:cNvPr><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${relationshipId}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${objectTransform(object)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
+  }
+
+  function tableXml(object, index, link) {
+    const width = Math.round(slideWidth * object.width / 100);
+    const height = Math.round(slideHeight * object.height / 100);
+    const grid = (count, size) => Array.from({ length: count }, (_, position) =>
+      Math.round((position + 1) * size / count) - Math.round(position * size / count));
+    const columns = grid(object.cells[0].length, width).map((size) => `<a:gridCol w="${size}"/>`).join("");
+    const heights = grid(object.cells.length, height);
+    const borders = ["L", "R", "T", "B"].map((side) =>
+      `<a:ln${side} w="12700"><a:solidFill><a:srgbClr val="B7C0D1"/></a:solidFill></a:ln${side}>`).join("");
+    const rows = object.cells.map((row, rowIndex) => {
+      const fill = rowIndex === 0 ? object.fill : "FFFFFF";
+      const cells = row.map((value) => {
+        const paragraphs = value.split(/\r?\n/).map((line) =>
+          `<a:p><a:r><a:rPr sz="1200"/><a:t xml:space="preserve">${xmlText(line)}</a:t></a:r></a:p>`).join("");
+        return `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/>${paragraphs}</a:txBody><a:tcPr>${borders}<a:solidFill><a:srgbClr val="${fill}"/></a:solidFill></a:tcPr></a:tc>`;
+      }).join("");
+      return `<a:tr h="${heights[rowIndex]}">${cells}</a:tr>`;
+    }).join("");
+    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${index + 4}" name="Adigun table ${index + 1}">${link}</p:cNvPr><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${Math.round(slideWidth * object.x / 100)}" y="${Math.round(slideHeight * object.y / 100)}"/><a:ext cx="${width}" cy="${height}"/></p:xfrm><a:graphic><a:graphicData uri="${tableUri}"><a:tbl><a:tblPr/><a:tblGrid>${columns}</a:tblGrid>${rows}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
   }
 
   function normalizeTransition(value) {
@@ -259,6 +291,7 @@
           objectRelationships.push(`<Relationship Id="${id}" Type="${rns}/hyperlink" Target="${xmlText(object.link).replace(/"/g, "&quot;")}" TargetMode="External"/>`);
           link = `<a:hlinkClick r:id="${id}"/>`;
         }
+        if (object.kind === "table") return tableXml(object, index, link);
         if (object.kind !== "image") return objectXml(object, index, slides[i].theme, link);
         const image = imageData(object.src);
         if (!image) throw new Error("A slide image is damaged or unsupported.");
@@ -393,6 +426,21 @@
         text: paragraphs(shape),
       };
     }
+    function readTable(frame) {
+      const graphic = frame.getElementsByTagNameNS("*", "graphicData")[0];
+      if (graphic?.getAttribute("uri") !== tableUri) return null;
+      const table = graphic.getElementsByTagNameNS("*", "tbl")[0];
+      const rows = table && [...table.getElementsByTagNameNS("*", "tr")];
+      if (!rows?.length || rows.length > tableLimit) return null;
+      const cells = rows.map((row) => [...row.getElementsByTagNameNS("*", "tc")]);
+      const width = cells[0].length;
+      if (!width || width > tableLimit || cells.some((row) => row.length !== width || row.some((cell) =>
+        ["gridSpan", "rowSpan"].some((attr) => Number(cell.getAttribute(attr) || 1) !== 1) ||
+        ["hMerge", "vMerge"].some((attr) => ["1", "true"].includes(cell.getAttribute(attr)))))) return null;
+      const fill = cells[0][0].getElementsByTagNameNS("*", "tcPr")[0]
+        ?.getElementsByTagNameNS("*", "solidFill")[0]?.getElementsByTagNameNS("*", "srgbClr")[0]?.getAttribute("val");
+      return { ...readObjectTransform(frame), kind: "table", cells: cells.map((row) => row.map(paragraphs)), fill };
+    }
     function pictures(slide, relationships) {
       const images = new Map(relationships.filter((part) =>
         part.getAttribute("Type")?.endsWith("/image") && part.getAttribute("TargetMode") !== "External").map((part) =>
@@ -463,6 +511,11 @@
         objects.push(object);
       }
       const shapes = [...slide.getElementsByTagName("*")].flatMap((shape) => {
+        if (shape.localName === "graphicFrame") {
+          const table = readTable(shape);
+          if (table) restoreObject(shape, table);
+          return [];
+        }
         if (shape.localName === "pic") {
           const picture = images.get(shape);
           if (picture) restoreObject(shape, picture);
@@ -508,5 +561,5 @@
     });
   }
 
-  window.AdigunPresentation = { createParts, createBlob, importTextSlides, themes, normalizeTransition, transitionFrames, normalizeObjects, normalizeObjectLink, imageLimit, imageData };
+  window.AdigunPresentation = { createParts, createBlob, importTextSlides, themes, normalizeTransition, transitionFrames, normalizeObjects, normalizeObjectLink, tableLimit, tableCellLimit, imageLimit, imageData };
 })();

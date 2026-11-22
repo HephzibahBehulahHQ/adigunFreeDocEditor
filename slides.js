@@ -11,7 +11,7 @@
   const animationList = $("slide-animation-list");
   const transitionDialog = $("slide-transition-dialog");
   const transitionForm = transitionDialog.querySelector("form");
-  const { normalizeTransition, transitionFrames, normalizeObjects, normalizeObjectLink, imageLimit, imageData } = window.AdigunPresentation;
+  const { normalizeTransition, transitionFrames, normalizeObjects, normalizeObjectLink, tableLimit, tableCellLimit, imageLimit, imageData } = window.AdigunPresentation;
   const effects = {
     fade: [{ opacity: 0 }, { opacity: 1 }],
     rise: [{ opacity: 0, transform: "translateY(24px)" }, { opacity: 1, transform: "translateY(0)" }],
@@ -205,6 +205,42 @@
   const objectPanel = $("slide-object-panel");
   const objectForm = $("slide-object-form");
   const objectLayer = $("slide-object-layer");
+  const tableFields = $("slide-table-fields");
+  const tableCells = $("slide-table-cells");
+
+  function renderTableFields(rows, columns, existing) {
+    tableCells.style.setProperty("--table-columns", columns);
+    tableCells.replaceChildren(...Array.from({ length: rows * columns }, (_, index) => {
+      const row = Math.floor(index / columns);
+      const column = index % columns;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.maxLength = tableCellLimit;
+      input.dataset.row = row;
+      input.dataset.column = column;
+      input.setAttribute("aria-label", `Row ${row + 1}, column ${column + 1}`);
+      input.value = existing[row]?.[column] ?? "";
+      return input;
+    }));
+  }
+
+  function readTableFields() {
+    const result = [];
+    for (const field of tableCells.querySelectorAll("input")) {
+      (result[field.dataset.row] ??= [])[field.dataset.column] = field.value;
+    }
+    return result;
+  }
+
+  for (const dimension of ["tableRows", "tableColumns"]) {
+    objectForm.elements[dimension].addEventListener("change", () => {
+      const rows = objectForm.elements.tableRows.valueAsNumber;
+      const columns = objectForm.elements.tableColumns.valueAsNumber;
+      if ([rows, columns].every((value) => Number.isInteger(value) && value >= 1 && value <= tableLimit)) {
+        renderTableFields(rows, columns, readTableFields());
+      }
+    });
+  }
 
   function placeObject(node, object) {
     for (const [key, value] of Object.entries({ left: object.x, top: object.y, width: object.width, height: object.height })) {
@@ -224,6 +260,17 @@
         image.alt = object.text;
         image.draggable = false;
         node.append(image);
+      } else if (object.kind === "table") {
+        node.style.setProperty("--table-columns", object.cells[0].length);
+        node.style.setProperty("--table-rows", object.cells.length);
+        for (const [rowIndex, row] of object.cells.entries()) {
+          for (const value of row) {
+            const cell = document.createElement("span");
+            if (rowIndex === 0) cell.className = "slide-table-header";
+            cell.textContent = value;
+            node.append(cell);
+          }
+        }
       } else node.textContent = object.text;
       node.style.setProperty("--object-fill", "#" + object.fill);
       placeObject(node, object);
@@ -396,7 +443,7 @@
     drawObjects(objectLayer, objects, true);
     if (multiple) {
       $("slide-object-selection-count").textContent = `${selectedObjects.size} objects selected`;
-      $("slide-group-objects").hidden = grouped;
+      $("slide-group-objects").hidden = grouped || [...selectedObjects].some((index) => objects[index]?.kind === "table");
       $("slide-ungroup-objects").hidden = !grouped;
       for (const control of document.querySelectorAll("[data-align-objects]")) {
         control.disabled = grouped || (control.dataset.alignObjects.startsWith("distribute") && selectedObjects.size < 3);
@@ -410,6 +457,15 @@
     objectForm.elements.link.setCustomValidity("");
     objectForm.elements.fill.value = "#" + object.fill;
     objectForm.elements.fill.disabled = ["text", "image"].includes(object.kind);
+    const table = object.kind === "table";
+    objectForm.elements.text.closest("label").hidden = table;
+    objectForm.elements.rotation.disabled = table;
+    tableFields.hidden = tableFields.disabled = !table;
+    if (table) {
+      objectForm.elements.tableRows.value = object.cells.length;
+      objectForm.elements.tableColumns.value = object.cells[0].length;
+      renderTableFields(object.cells.length, object.cells[0].length, object.cells);
+    }
     $("slide-object-text-label").textContent = object.kind === "image" ? "Alternative text" : "Text";
     $("slide-object-front").disabled = selectedObject === objects.length - 1;
     $("slide-object-back").disabled = selectedObject === 0;
@@ -494,7 +550,7 @@
     const slide = deck.slides[deck.active];
     const before = [...slide.objects];
     const members = before.filter((_, index) => selectedObjects.has(index));
-    if (members.some((object) => object.group)) return;
+    if (members.some((object) => object.group || object.kind === "table")) return;
     const used = new Set(before.map((object) => object.group));
     const group = Array.from({ length: 25 }, (_, index) => index + 1).find((id) => !used.has(id));
     for (const object of members) object.group = group;
@@ -536,12 +592,14 @@
       const objects = slide.objects ??= [];
       if (objects.length >= 25) { status("A slide can contain up to 25 objects."); return; }
       const kind = button.dataset.slideObject;
-      const [object] = normalizeObjects([{ kind, text: kind === "text" ? "Text box" : "" }]);
+      const [object] = normalizeObjects([{ kind, text: kind === "text" ? "Text box" : "",
+        ...(kind === "table" && { width: 48, height: 22, y: 35 }) }]);
       objects.push(object);
       save();
       selectObject(objects.length - 1);
       button.closest("details").open = false;
-      objectForm.elements.text.focus();
+      if (kind === "table") tableCells.querySelector("input")?.focus();
+      else objectForm.elements.text.focus();
     });
   }
   $("slide-image-open").addEventListener("click", () => $("slide-image-file").click());
@@ -589,7 +647,11 @@
       link.reportValidity();
       return;
     }
-    [objects[selectedObject]] = normalizeObjects([{ ...objects[selectedObject], ...changes, fill: fill.value.slice(1), text: text.value, link: address }]);
+    const object = objects[selectedObject];
+    const previousCells = object.kind === "table" ? readTableFields() : null;
+    const cells = previousCells && Array.from({ length: objectForm.elements.tableRows.valueAsNumber }, (_, row) =>
+      Array.from({ length: objectForm.elements.tableColumns.valueAsNumber }, (_, column) => previousCells[row]?.[column] ?? ""));
+    [objects[selectedObject]] = normalizeObjects([{ ...object, ...changes, fill: fill.value.slice(1), text: text.value, link: address, cells }]);
     save();
     renderObjects();
   });
