@@ -15,6 +15,7 @@ let selectedRange = null;
 const undoStack = [];
 const redoStack = [];
 let editingAddress;
+let cellCaretMode = false;
 
 try {
   const stored = JSON.parse(localStorage.getItem(storageKey));
@@ -550,6 +551,7 @@ grid.addEventListener("focusin", (event) => {
   if (!event.target.dataset.cell) return;
   selectedAddress = event.target.dataset.cell;
   selectedRange = null;
+  cellCaretMode = false;
   event.target.value = currentSheet().cells[selectedAddress] ?? "";
   refreshFormula();
   refreshSelection();
@@ -565,13 +567,18 @@ grid.addEventListener("mousedown", (event) => {
 });
 grid.addEventListener("focusout", () => {
   editingAddress = undefined;
+  cellCaretMode = false;
   setTimeout(refreshValues, 0);
 });
 grid.addEventListener("input", (event) => {
   const address = event.target.dataset.cell;
   if (!address) return;
   selectedAddress = address;
+  cellCaretMode = true;
   if (!currentSheet().validation?.[address]) updateCell(address, event.target.value, true);
+});
+grid.addEventListener("dblclick", (event) => {
+  if (event.target.dataset.cell) cellCaretMode = true;
 });
 grid.addEventListener("change", (event) => {
   const address = event.target.dataset.cell;
@@ -991,27 +998,47 @@ $("sheet-find-form").addEventListener("submit", (event) => {
   status(`Found in ${match.dataset.cell}`);
 });
 grid.addEventListener("keydown", (event) => {
-  const address = event.target.dataset.cell;
+  const field = event.target;
+  const address = field.dataset.cell;
+  if (!address || event.isComposing || event.altKey) return;
   const key = event.key.toLowerCase();
-  if (address && !event.isComposing && (event.ctrlKey || event.metaKey) && !event.altKey && ["z", "y"].includes(key)) {
+  if ((event.ctrlKey || event.metaKey) && ["z", "y"].includes(key)) {
     event.preventDefault();
     $(key === "y" || event.shiftKey ? "sheet-redo" : "sheet-undo").click();
     grid.querySelector(`[data-cell="${selectedAddress}"]`)?.focus();
     return;
   }
-  if (!["Enter", "ArrowUp", "ArrowDown"].includes(event.key) || !address || event.isComposing ||
-      event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.ctrlKey || event.metaKey) return;
+  if (key === "f2" || key === "escape") {
+    event.preventDefault();
+    cellCaretMode = key === "f2";
+    field.setSelectionRange(field.value.length, field.value.length);
+    if (!cellCaretMode) selectRange(address, address);
+    return;
+  }
+  const horizontal = key === "arrowleft" || key === "arrowright";
+  if (horizontal && cellCaretMode) return;
+  if (!horizontal && !["enter", "arrowup", "arrowdown"].includes(key)) return;
   event.preventDefault();
-  const extend = event.shiftKey && event.key !== "Enter";
+  const extend = event.shiftKey && key !== "enter";
   const edge = extend ? selectedRange?.label.split(":")[1] ?? address : address;
-  const direction = event.key === "ArrowUp" || (event.key === "Enter" && event.shiftKey) ? -1 : 1;
-  for (let row = Number(edge.slice(1)) + direction; row > 0 && row <= currentSheet().rows; row += direction) {
-    const field = grid.querySelector(`[data-cell="${edge[0]}${row}"]`);
-    if (field.closest("tr").hidden) continue;
+  const direction = key === "arrowup" || key === "arrowleft" || (key === "enter" && event.shiftKey) ? -1 : 1;
+  const sheet = currentSheet();
+  const row = Number(edge.slice(1)) - 1;
+  const column = edge.charCodeAt(0) - 65;
+  const destinationColumn = column + (horizontal ? direction : 0);
+  if (destinationColumn < 0 || destinationColumn >= sheet.columns) return;
+  const rowStep = horizontal ? 0 : direction;
+  for (let destinationRow = row + rowStep; destinationRow >= 0 && destinationRow < sheet.rows; destinationRow += rowStep) {
+    const next = grid.querySelector(`[data-cell="${cellAddress(destinationRow, destinationColumn)}"]`);
+    if (next.closest("tr").hidden) {
+      if (horizontal) break;
+      continue;
+    }
     if (extend) {
-      selectRange(address, field.dataset.cell);
-      field.scrollIntoView({ block: "nearest", inline: "nearest" });
-    } else field.focus();
+      selectRange(address, next.dataset.cell);
+      next.scrollIntoView({ block: "nearest", inline: "nearest" });
+    } else next.focus();
     break;
   }
 });
