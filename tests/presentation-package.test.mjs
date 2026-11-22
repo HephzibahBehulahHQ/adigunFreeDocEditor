@@ -43,6 +43,23 @@ try {
   ));
   const [moved] = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(groupedParts), dom.window.DOMParser);
   assert.deepEqual(Array.from(moved.objects, ({ x }) => x), [45, 20, 57]);
+  const animations = [
+    { effect: "fade", target: "both", start: "auto", duration: 0.65, delay: 0.25 },
+    { effect: "exit", target: "object:0", start: "auto", duration: 1.4, delay: 0.3 },
+    { effect: "fade", target: "object:2", start: "manual", duration: 0.8, delay: 1.2 },
+    { effect: "rise", target: "title", start: "manual", duration: 0.5, delay: 0 },
+  ];
+  const animatedParts = window.AdigunPresentation.createParts([{ title: "Sequence", lines: ["Details"], objects: grouped, animations }]);
+  const animated = new dom.window.DOMParser().parseFromString(window.fflate.strFromU8(animatedParts["ppt/slides/slide1.xml"]), "application/xml");
+  const ids = [...animated.getElementsByTagNameNS("*", "cTn")].map((part) => part.getAttribute("id"));
+  assert.equal(ids.length, new Set(ids).size);
+  assert.deepEqual([...animated.getElementsByTagNameNS("*", "animEffect")].map((node) => [
+    node.getAttribute("transition"), node.getElementsByTagNameNS("*", "spTgt")[0].getAttribute("spid"),
+  ]), [["in", "2"], ["in", "3"], ["out", "4"], ["in", "6"]]);
+  const [animatedSlide] = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(animatedParts), dom.window.DOMParser);
+  assert.deepEqual(JSON.parse(JSON.stringify(animatedSlide.animations)), [
+    animations[0], { ...animations[1], target: "object:1" }, animations[2],
+  ]);
 } finally {
   dom.window.close();
 }

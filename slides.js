@@ -903,7 +903,7 @@
     const button = event.currentTarget;
     button.disabled = true;
     try {
-      const slides = deck.slides.map((slide) => ({ title: slide.title, lines: slide.content.split("\n"), theme: slide.theme, hidden: slide.hidden, notes: slide.notes, transition: slide.transition, objects: slide.objects }));
+      const slides = deck.slides.map((slide) => ({ title: slide.title, lines: slide.content.split("\n"), theme: slide.theme, hidden: slide.hidden, notes: slide.notes, transition: slide.transition, objects: slide.objects, animations: slide.animations }));
       const blob = await window.AdigunPresentation.createBlob(slides);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -912,7 +912,8 @@
       link.download = filename + ".pptx";
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      status("PowerPoint exported");
+      const browserOnly = slides.some((slide) => slide.animations?.some(({ effect }) => !["fade", "exit"].includes(effect)));
+      status(browserOnly ? "PowerPoint exported. Rise, Pulse and Drift play in the browser only." : "PowerPoint exported");
     } catch {
       status("The PowerPoint file could not be exported.");
     } finally { button.disabled = false; }
