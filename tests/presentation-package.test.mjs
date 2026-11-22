@@ -44,6 +44,7 @@ try {
   const [moved] = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(groupedParts), dom.window.DOMParser);
   assert.deepEqual(Array.from(moved.objects, ({ x }) => x), [45, 20, 57]);
   const animations = [
+    { effect: "pulse", target: "content", start: "auto", duration: 1.4, delay: 0.2 },
     { effect: "fade", target: "both", start: "auto", duration: 0.65, delay: 0.25 },
     { effect: "exit", target: "object:0", start: "auto", duration: 1.4, delay: 0.3 },
     { effect: "fade", target: "object:2", start: "manual", duration: 0.8, delay: 1.2 },
@@ -61,9 +62,16 @@ try {
   assert.equal(rise.parentElement.parentElement.getAttribute("presetSubtype"), "4");
   assert.deepEqual([...rise.getElementsByTagNameNS("*", "strVal")].map((node) => node.getAttribute("val")),
     ["1+#ppt_h/2", "#ppt_y"]);
+  const [pulse] = animated.getElementsByTagNameNS("*", "animScale");
+  const [pulseTime] = pulse.getElementsByTagNameNS("*", "cTn");
+  const [scaleBy] = pulse.getElementsByTagNameNS("*", "by");
+  assert.equal(pulse.parentElement.parentElement.getAttribute("presetClass"), "emph");
+  assert.equal(pulseTime.getAttribute("dur"), "700");
+  assert.equal(pulseTime.getAttribute("autoRev"), "1");
+  assert.deepEqual([scaleBy.getAttribute("x"), scaleBy.getAttribute("y")], ["104000", "104000"]);
   const [animatedSlide] = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(animatedParts), dom.window.DOMParser);
   assert.deepEqual(JSON.parse(JSON.stringify(animatedSlide.animations)), [
-    animations[0], { ...animations[1], target: "object:1" }, animations[2], animations[3],
+    animations[0], animations[1], { ...animations[2], target: "object:1" }, animations[3], animations[4],
   ]);
 } finally {
   dom.window.close();
