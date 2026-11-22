@@ -38,6 +38,53 @@ function replyParents(slots, { PDFDict, PDFName }) {
     .map((annotation) => annotation.lookup(PDFName.of("IRT"))).filter(Boolean));
 }
 
+function coordinatesOf(array, { PDFArray, PDFNumber }) {
+  if (!(array instanceof PDFArray) || !array.size() || array.size() % 2) return null;
+  const values = Array.from({ length: array.size() }, (_, index) => array.lookup(index));
+  return values.every((value) => value instanceof PDFNumber && Number.isFinite(value.asNumber()))
+    ? values.map((value) => value.asNumber()) : null;
+}
+
+function markGeometry(annotation, lib) {
+  const { PDFName, PDFArray } = lib;
+  const read = (name) => annotation.lookup(PDFName.of(name));
+  const rect = coordinatesOf(read("Rect"), lib);
+  if (rect?.length !== 4 || rect[2] <= rect[0] || rect[3] <= rect[1] || annotation.has(PDFName.of("Path"))) return null;
+  const subtype = read("Subtype")?.toString();
+  if (["/Highlight", "/Underline", "/StrikeOut"].includes(subtype)) {
+    const quad = coordinatesOf(read("QuadPoints"), lib);
+    return quad?.length % 8 === 0 ? { rect, quad } : null;
+  }
+  if (subtype === "/Ink") {
+    const list = read("InkList");
+    if (!(list instanceof PDFArray) || !list.size()) return null;
+    const strokes = Array.from({ length: list.size() }, (_, index) => coordinatesOf(list.lookup(index), lib));
+    return strokes.every(Boolean) ? { rect, strokes } : null;
+  }
+  return { rect };
+}
+
+function repositionMark(page, annotation, geometry, popups, center, lib) {
+  if (!geometry || center.length !== 2 || !center.every(Number.isFinite)) throw new Error("This mark cannot be moved.");
+  const { rect, quad, strokes } = geometry;
+  const [dx, dy] = center.map((coordinate, axis) => coordinate - (rect[axis] + rect[axis + 2]) / 2);
+  const offset = (coordinates) => coordinates.map((coordinate, index) => coordinate + (index % 2 ? dy : dx));
+  const moved = offset(rect);
+  const { x, y, width, height } = page.getCropBox();
+  if (moved[0] < x - 0.001 || moved[1] < y - 0.001 || moved[2] > x + width + 0.001 || moved[3] > y + height + 0.001) {
+    throw new Error("Keep the entire mark inside the page.");
+  }
+  const { PDFName } = lib;
+  const set = (target, key, value) => target.set(PDFName.of(key), page.doc.context.obj(value));
+  set(annotation, "Rect", moved);
+  if (quad) set(annotation, "QuadPoints", offset(quad));
+  if (strokes) set(annotation, "InkList", strokes.map(offset));
+  for (const popup of popups) {
+    const popupRect = coordinatesOf(popup.lookup(PDFName.of("Rect")), lib);
+    if (popupRect?.length === 4) set(popup, "Rect", offset(popupRect));
+  }
+}
+
 function removalSlots(annotations, targets, lib) {
   const { PDFDict, PDFName } = lib;
   const slots = Array.from({ length: annotations.size() }, (_, index) => annotations.lookup(index));
@@ -72,7 +119,8 @@ export function readPdfComments(pdf, lib) {
       const contents = annotation.get(PDFName.of("Contents"));
       const text = contents instanceof PDFHexString || contents instanceof PDFString ? contents.decodeText() : "";
       const removable = !annotation.has(PDFName.of("IRT")) && !replies.has(annotation);
-      result.push({ pageIndex, kind, text, original: { index, subtype, text, removable } });
+      const movable = removable && Boolean(markGeometry(annotation, lib));
+      result.push({ pageIndex, kind, text, original: { index, subtype, text, removable, movable } });
     }
     return result;
   });
@@ -84,7 +132,7 @@ export function addPdfComments(pdf, entries, lib) {
   for (const entry of entries) {
     const page = pdf.getPage(entry.pageIndex);
     if (entry.original) {
-      if (!entry.removed && entry.text === entry.original.text) continue;
+      if (!entry.removed && !entry.center && entry.text === entry.original.text) continue;
       const annotation = page.node.Annots()?.lookup(entry.original.index);
       if (!(annotation instanceof PDFDict) || annotation.get(PDFName.of("Subtype"))?.toString() !== entry.original.subtype ||
           !editableComment(annotation, lib)) throw new Error("An original PDF comment could not be matched.");
@@ -92,7 +140,16 @@ export function addPdfComments(pdf, entries, lib) {
         const indexes = removals.get(page.node.Annots()) ?? [];
         indexes.push(entry.original.index);
         removals.set(page.node.Annots(), indexes);
-      } else annotation.set(PDFName.of("Contents"), PDFHexString.fromText(entry.text));
+      } else {
+        if (entry.center) {
+          const annotations = page.node.Annots();
+          const related = removalSlots(annotations, [entry.original.index], lib);
+          if (!related) throw new Error("A threaded annotation cannot be moved.");
+          const popups = [...related].filter((index) => index !== entry.original.index).map((index) => annotations.lookup(index));
+          repositionMark(page, annotation, markGeometry(annotation, lib), popups, entry.center, lib);
+        }
+        if (entry.text !== entry.original.text) annotation.set(PDFName.of("Contents"), PDFHexString.fromText(entry.text));
+      }
       continue;
     }
     const type = markTypes[entry.kind];
@@ -160,9 +217,9 @@ export function bindPdfComments(sources, preview) {
   const discard = () => !(draft || text.value.trim()) || window.confirm("Discard unsaved PDF comments?");
 
   function enableControls() {
-    for (const control of [...allControls, ...list.querySelectorAll("textarea, button")]) control.disabled = busy || control.hasAttribute("data-removed");
+    for (const control of [...allControls, ...list.querySelectorAll("textarea, input, button")]) control.disabled = busy || control.hasAttribute("data-removed");
     add.disabled = busy || !viewport;
-    download.disabled = busy || !entries.some((entry) => !entry.original || entry.removed || entry.text !== entry.original.text);
+    download.disabled = busy || !entries.some((entry) => !entry.original || entry.removed || entry.center || entry.text !== entry.original.text);
     updateKind();
   }
 
@@ -256,6 +313,61 @@ export function bindPdfComments(sources, preview) {
     } finally { busy = false; enableControls(); }
   }
 
+  function moveControls(entry, index) {
+    const controls = document.createElement("details");
+    controls.open = Boolean(entry.position);
+    const summary = document.createElement("summary");
+    summary.textContent = "Move mark";
+    const positions = document.createElement("div");
+    positions.className = "pdf-redact-fields";
+    const fields = ["Center from left (%)", "Center from top (%)"].map((title, axis) => {
+      const label = document.createElement("label");
+      label.textContent = title;
+      const field = document.createElement("input");
+      field.type = "number";
+      field.min = 0;
+      field.max = 100;
+      field.step = "any";
+      field.required = true;
+      if (entry.position) field.value = entry.position[axis];
+      label.append(field);
+      positions.append(label);
+      return field;
+    });
+    const apply = document.createElement("button");
+    apply.type = "button";
+    apply.className = "button button-outline";
+    apply.textContent = "Preview move";
+    apply.addEventListener("click", async () => {
+      if (busy || !raster || !fields.every((field) => field.reportValidity())) return;
+      const position = fields.map((field) => field.valueAsNumber);
+      busy = true;
+      enableControls();
+      try {
+        const view = (await raster.getPage(entry.pageIndex + 1)).getViewport({ scale: 1 });
+        const center = view.convertToPdfPoint(position[0] / 100 * view.width, position[1] / 100 * view.height);
+        await updatePreview(entry, index, { position, center });
+      } catch (error) {
+        status.textContent = error.message || "Could not read the page position.";
+      } finally {
+        busy = false;
+        enableControls();
+      }
+    });
+    controls.append(summary, positions, apply);
+    if (entry.center) {
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "button button-outline";
+      reset.textContent = "Reset position";
+      reset.addEventListener("click", () => {
+        if (!busy) void updatePreview(entry, index, { position: undefined, center: undefined });
+      });
+      controls.append(reset);
+    }
+    return controls;
+  }
+
   function renderEntries() {
     list.replaceChildren(...entries.map((entry, index) => {
       const item = document.createElement("li");
@@ -276,9 +388,12 @@ export function bindPdfComments(sources, preview) {
           remove.type = "button";
           remove.className = "button button-outline";
           remove.textContent = entry.removed ? "Restore mark" : "Remove in copy";
-          remove.addEventListener("click", () => void toggleRemoval(entry, index));
+          remove.addEventListener("click", () => {
+            if (!busy) void updatePreview(entry, index, { removed: !entry.removed });
+          });
           item.append(remove);
         }
+        if (entry.original.movable && !entry.removed) item.append(moveControls(entry, index));
         return item;
       }
       remove.type = "button";
@@ -297,19 +412,19 @@ export function bindPdfComments(sources, preview) {
     enableControls();
   }
 
-  async function toggleRemoval(entry, index) {
-    if (busy) return;
+  async function updatePreview(entry, index, changes) {
     busy = true;
-    entry.removed = !entry.removed;
-    renderEntries();
+    const previous = Object.fromEntries(Object.keys(changes).map((key) => [key, entry[key]]));
+    Object.assign(entry, changes);
+    enableControls();
     let previewTask;
     try {
       const lib = window.PDFLib;
       let bytes = new Uint8Array(await sources[source.value].file.arrayBuffer());
-      const removed = entries.filter((item) => item.removed);
-      if (removed.length) {
+      const altered = entries.filter((item) => item.removed || item.center);
+      if (altered.length) {
         const output = await lib.PDFDocument.load(bytes, { updateMetadata: false });
-        addPdfComments(output, removed, lib);
+        addPdfComments(output, altered, lib);
         bytes = await output.save({ updateFieldAppearances: false });
       }
       previewTask = openPdfRaster(bytes);
@@ -318,15 +433,18 @@ export function bindPdfComments(sources, preview) {
       task = previewTask;
       raster = rasterDocument;
       draft = true;
+      page.selectedIndex = entry.pageIndex;
       await draw();
+      renderEntries();
+      const focus = Object.hasOwn(changes, "center") ? "summary" : "button";
+      list.children[index]?.querySelector(focus)?.focus();
     } catch (error) {
       void previewTask?.destroy().catch(() => {});
-      entry.removed = !entry.removed;
+      Object.assign(entry, previous);
       status.textContent = error.message || "Could not update the annotation preview.";
     } finally {
       busy = false;
-      renderEntries();
-      list.children[index]?.querySelector("button")?.focus();
+      enableControls();
     }
   }
 
