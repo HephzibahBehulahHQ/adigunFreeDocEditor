@@ -14,10 +14,38 @@ export function bindPdfNavigation(sources, preview) {
   const reader = $("pdf-reader");
   const scroll = $("pdf-reader-scroll");
   const zoom = $("pdf-reader-zoom");
+  const hand = $("pdf-reader-hand");
   const browserPreview = $("pdf-preview");
   let session;
   let generation = 0;
   let rendering;
+  let drag;
+
+  hand.addEventListener("click", () => {
+    const enabled = scroll.classList.toggle("pdf-reader-hand");
+    hand.setAttribute("aria-pressed", String(enabled));
+  });
+  scroll.addEventListener("pointerdown", (event) => {
+    if (!scroll.classList.contains("pdf-reader-hand") || !event.isPrimary || event.button !== 0) return;
+    if (scroll.scrollHeight <= scroll.clientHeight && scroll.scrollWidth <= scroll.clientWidth) return;
+    const box = scroll.getBoundingClientRect();
+    if (event.clientX >= box.left + scroll.clientLeft + scroll.clientWidth ||
+        event.clientY >= box.top + scroll.clientTop + scroll.clientHeight) return;
+    event.preventDefault();
+    scroll.focus({ preventScroll: true });
+    scroll.setPointerCapture(event.pointerId);
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, left: scroll.scrollLeft, top: scroll.scrollTop };
+    scroll.classList.add("pdf-reader-dragging");
+  });
+  scroll.addEventListener("pointermove", (event) => {
+    if (drag?.id !== event.pointerId) return;
+    scroll.scrollTo(drag.left + drag.x - event.clientX, drag.top + drag.y - event.clientY);
+  });
+  scroll.addEventListener("lostpointercapture", (event) => {
+    if (drag?.id !== event.pointerId) return;
+    drag = undefined;
+    scroll.classList.remove("pdf-reader-dragging");
+  });
 
   function cancelPageRender() {
     rendering?.canvasTask?.cancel();
