@@ -53,6 +53,7 @@
         <button type="button" data-sheet-format="number">Number (2 decimals)</button>
         <button type="button" data-sheet-format="decimal">Number (no grouping)</button>
         <button type="button" data-sheet-format="percent">Percentage</button>
+        <button type="button" data-sheet-format="date">Date (YYYY-MM-DD)</button>
         <button id="sheet-rule-open" type="button" aria-controls="sheet-rule-panel" aria-expanded="false">Conditional formatting</button>
       </div></details>
       <details name="sheet-commands" class="command-menu"><summary>Formulas</summary><div>
@@ -160,6 +161,10 @@
         <div><dt><code>=IF(A1&gt;=10,"Ready","Hold")</code></dt><dd>Return a result based on a condition.</dd></div>
         <div><dt><code>=NOT(A1=B1)</code></dt><dd>Reverse a logical value.</dd></div>
         <div><dt><code>=VLOOKUP(A1,D1:E20,2,FALSE)</code></dt><dd>Look up an exact match in column D and return the value from E. Use TRUE for an approximate match in an ascending lookup column.</dd></div>
+        <div><dt><code>=DATE(2026,11,22)</code></dt><dd>Build a date from year, month and day. Apply the Date format to display it as a calendar date.</dd></div>
+        <div><dt><code>=YEAR(A1)</code></dt><dd>Extract the year from a date.</dd></div>
+        <div><dt><code>=MONTH(A1)</code></dt><dd>Extract the month number from a date.</dd></div>
+        <div><dt><code>=DAY(A1)</code></dt><dd>Extract the day of the month from a date.</dd></div>
       </dl>
       <p id="sheet-function-count" role="status"></p>
       <button type="button" id="sheet-function-close">Close</button>

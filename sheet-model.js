@@ -1,7 +1,7 @@
 export const maxRows = 100;
 export const maxColumns = 26;
 export const maxCellLength = 4000;
-export const numberFormats = { general: 0, number: 4, percent: 10, decimal: 2 };
+export const numberFormats = { general: 0, number: 4, percent: 10, decimal: 2, date: 14 };
 export const conditionalColors = { yellow: "FFF3B8", green: "D6F3DE", red: "FFDDE3" };
 export const spreadsheetFonts = ["Arial", "Calibri", "Georgia", "Times New Roman", "Courier New"];
 export function normalizePrintSettings(input) {
@@ -188,11 +188,15 @@ export function chartValues(chart, valueAt) {
   return values;
 }
 
-export function displayCell(value, format, locale) {
+export function displayCell(value, format, locale, date1904 = false) {
   if (typeof value === "boolean") return formulaText(value);
   if (!Object.hasOwn(numberFormats, format) || format === "general") return value;
   const numeric = typeof value === "number" || (typeof value === "string" && /^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(value.trim()));
   if (!numeric || !Number.isFinite(Number(value))) return value;
+  if (format === "date") {
+    const parts = serialDateParts(Number(value), date1904);
+    return parts ? parts.map((part, index) => String(part).padStart(index === 0 ? 4 : 2, "0")).join("-") : value;
+  }
   return new Intl.NumberFormat(locale, {
     style: format === "percent" ? "percent" : "decimal",
     minimumFractionDigits: 2,
@@ -309,7 +313,7 @@ export function calculateSheet(cells) {
 }
 
 const numericLiteral = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
-const formulaError = /^#(?:(?:CYCLE|ERROR|VALUE|REF|DIV\/0)!|N\/A)$/;
+const formulaError = /^#(?:(?:CYCLE|ERROR|VALUE|REF|DIV\/0|NUM)!|N\/A)$/;
 const emptyReference = Symbol("empty reference");
 function formulaText(value) {
   if (value === emptyReference) return "";
@@ -367,8 +371,35 @@ const textFunctions = new Map([
   ["UPPER", (text) => text.toUpperCase()],
   ["TRIM", (text) => text.replace(/^ +| +$/g, "").replace(/ +/g, " ")],
 ]);
+const millisecondsPerDay = 86400000;
+const excel1900 = Date.UTC(1899, 11, 31);
+const excel1904 = Date.UTC(1904, 0, 1);
+const dateParts = ["YEAR", "MONTH", "DAY"];
 
-export function calculateWorkbook(sheets, active) {
+function serialDateParts(value, date1904) {
+  const serial = Math.floor(value);
+  if (!Number.isFinite(serial) || serial < 0 || serial > (date1904 ? 2957003 : 2958465)) return null;
+  if (!date1904 && serial === 60) return [1900, 2, 29];
+  if (!date1904 && serial === 0) return [1900, 1, 0];
+  const days = serial - Number(!date1904 && serial > 60);
+  const date = new Date((date1904 ? excel1904 : excel1900) + days * millisecondsPerDay);
+  return [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()];
+}
+
+function dateSerial(values, date1904) {
+  const [year, month, day] = values.map(Math.trunc);
+  if (year < 0 || year >= 10000) throw new Error("#NUM!");
+  const fullYear = year < 1900 ? year + 1900 : year;
+  const monthStart = Date.UTC(fullYear, month - 1, 1);
+  const epoch = date1904 ? excel1904 : excel1900;
+  const start = (monthStart - epoch) / millisecondsPerDay;
+  const leap = Number(!date1904 && monthStart >= Date.UTC(1900, 2, 1));
+  const serial = start + leap + day - 1;
+  if (!Number.isFinite(serial) || !serialDateParts(serial, date1904)) throw new Error("#NUM!");
+  return serial;
+}
+
+export function calculateWorkbook(sheets, active, date1904 = false) {
   const computed = new Map();
   const errors = new Set();
   const visiting = new Set();
@@ -405,7 +436,7 @@ export function calculateWorkbook(sheets, active) {
         if (!source) return emptyReference;
         if (Number.isFinite(Number(source)) && String(Number(source)) === source) return Number(source);
         return result;
-      }, numeric, (cell, sheet) => valueAt(sheet === undefined ? sheetIndex : names.get(sheet.toUpperCase()), cell));
+      }, numeric, (cell, sheet) => valueAt(sheet === undefined ? sheetIndex : names.get(sheet.toUpperCase()), cell), date1904);
       if (typeof value === "number" && !Number.isFinite(value)) throw new Error("#DIV/0!");
       if (typeof value === "string" && value.length > 32767) throw new Error("#VALUE!");
     } catch (error) {
@@ -425,7 +456,7 @@ export function calculateWorkbook(sheets, active) {
   return calculate;
 }
 
-function evaluateFormula(expression, scalarAt, numeric, valueAt) {
+function evaluateFormula(expression, scalarAt, numeric, valueAt, date1904) {
   const tokens = expression.match(/"(?:[^"]|"")*"|#REF!|(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Za-z]\$?\d+|\$?[A-Za-z]\$?\d+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|[A-Za-z]+|<=|>=|<>|[^\s]/gi) ?? [];
   if (tokens.length > 200) throw new Error("Formula is too long.");
   let index = 0;
@@ -511,6 +542,18 @@ function evaluateFormula(expression, scalarAt, numeric, valueAt) {
     }
     if (!take("(")) throw new Error("Unknown formula.");
     if (token === "VLOOKUP") return readLookup();
+    if (token === "DATE" || dateParts.includes(token)) {
+      const values = [comparison()];
+      while (take(",")) values.push(comparison());
+      if (!take(")") || values.length !== (token === "DATE" ? 3 : 1)) throw new Error("#VALUE!");
+      return () => {
+        const numbers = values.map((value) => numeric(value()));
+        if (token === "DATE") return dateSerial(numbers, date1904);
+        const parts = serialDateParts(numbers[0], date1904);
+        if (!parts) throw new Error("#NUM!");
+        return parts[dateParts.indexOf(token)];
+      };
+    }
     if (token === "IF") {
       const condition = comparison();
       if (!take(",")) throw new Error("#VALUE!");

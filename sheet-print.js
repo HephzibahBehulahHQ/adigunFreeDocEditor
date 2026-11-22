@@ -42,7 +42,7 @@ export function bindSheetPrinting({ activeSheet, activeWorkbook, selection, chan
     const workbook = activeWorkbook();
     const sheet = activeSheet();
     const settings = normalizePrintSettings(sheet.print);
-    const values = calculateWorkbook(workbook.sheets, workbook.active);
+    const values = calculateWorkbook(workbook.sheets, workbook.active, workbook.date1904);
     const fillAt = conditionalFill(sheet.conditionalRule);
     const hidden = hiddenFilterRows(sheet.filter, values);
     const addresses = Object.keys(sheet.cells);
@@ -68,7 +68,7 @@ export function bindSheetPrinting({ activeSheet, activeWorkbook, selection, chan
         const address = cellAddress(row - 1, column);
         const cell = line.insertCell();
         const value = values(address);
-        cell.textContent = displayCell(value, sheet.formats?.[address]);
+        cell.textContent = displayCell(value, sheet.formats?.[address], undefined, workbook.date1904);
         const style = sheet.styles?.[address] ?? {};
         const fill = fillAt(address, value) || style.fill;
         if (fill) cell.style.background = "#" + fill;
