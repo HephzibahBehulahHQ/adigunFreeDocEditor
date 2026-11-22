@@ -9,7 +9,9 @@ const defaultWorkbookName = "Untitled workbook";
 const blankSheet = () => ({ rows: 20, columns: 8, cells: {}, formats: {} });
 
 function linkedWorksheet(link) {
-  const target = workbookLinkTarget(link);
+  const cell = workbookLinkTarget(link);
+  const target = cell ? { sheet: cell.sheet, range: cell.address } :
+    workbook.namedRanges?.find(({ name }) => name.toUpperCase() === link.slice(1).toUpperCase());
   const index = workbook.sheets.findIndex((sheet, position) => sheetName(position).toUpperCase() === target?.sheet.toUpperCase());
   return { target, index };
 }
@@ -798,28 +800,31 @@ $("sheet-open-cell-link").addEventListener("click", (event) => {
   const { index, target } = linkedWorksheet(link);
   const sheet = workbook.sheets[index];
   if (!sheet || sheet.hidden) {
-    status("The linked worksheet is missing or hidden.");
+    status("The linked worksheet or named range is missing or hidden.");
     return;
   }
-  const { address } = target;
-  expandNamedSheet(workbook.sheets, { sheet: target.sheet, range: address });
+  const [address, last = address] = target.range.split(":");
+  expandNamedSheet(workbook.sheets, target);
   workbook.active = index;
   selectedAddress = address;
   save();
   render();
   const field = revealField(address);
-  if (field) field.focus();
+  if (field) {
+    field.focus();
+    selectRange(address, last);
+  }
   else status("The linked cell is hidden by a filter.");
 });
 linkForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const url = normalizeCellLink(linkForm.elements.url.value);
   if (!url) {
-    linkStatus.textContent = "Enter an HTTP or HTTPS web address, or a workbook destination such as #Sheet 2!A1.";
+    linkStatus.textContent = "Enter a web address, a cell such as #Sheet 2!A1, or a defined name such as #Sales.";
     return;
   }
   if (url.startsWith("#") && linkedWorksheet(url).index < 0) {
-    linkStatus.textContent = "Choose a worksheet in this workbook.";
+    linkStatus.textContent = "Choose a worksheet or defined name in this workbook.";
     return;
   }
   saveCellLink(url);

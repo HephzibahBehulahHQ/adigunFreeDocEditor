@@ -166,6 +166,13 @@ try {
   const linkedParts = zip.unzipSync(workbookLinkBytes);
   assert.equal(linkedParts["xl/worksheets/_rels/sheet1.xml.rels"], undefined);
   assert.deepEqual(importWorkbook(workbookLinkBytes, zip, dom.window.DOMParser).sheets[0].links, { A1: jump });
+  const [home, data] = workbookLinks;
+  const definedLinkBytes = exportWorkbook([{ ...home, links: { A1: "#Sales" } }, data], zip, false,
+    [{ name: "Sales", sheet: data.name, range: "B44:C45" }]);
+  const definedLink = importWorkbook(definedLinkBytes, zip, dom.window.DOMParser);
+  assert.deepEqual(definedLink.sheets[0].links, { A1: "#Sales" });
+  assert.deepEqual(definedLink.namedRanges, [{ name: "Sales", sheet: data.name, range: "B44:C45" }]);
+  assert.match(zip.strFromU8(zip.unzipSync(definedLinkBytes)["xl/worksheets/sheet1.xml"]), /location="Sales"/);
   const omitted = [];
   const stale = exportWorkbook([{ ...pivotSheets[0], cells: { ...pivotCells, B2: "9" } }, pivotSheets[1]], zip, false, [], (name) => omitted.push(name));
   assert.deepEqual(omitted, ["Summary"]);
