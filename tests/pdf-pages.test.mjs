@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import * as pdf from "pdf-lib";
 import { buildPdf, parsePages } from "../pdf-pages.js";
 import { cropBoxFromMargins } from "../pdf-crop.js";
-import { addPdfComments } from "../pdf-comments.js";
+import { addPdfComments, readPdfComments } from "../pdf-comments.js";
 
 const inkDocument = await pdf.PDFDocument.create();
 inkDocument.addPage([200, 400]);
@@ -21,6 +21,16 @@ assert.equal(stamp.lookup(pdf.PDFName.of("Subtype")).asString(), "/Stamp");
 assert.equal(stamp.lookup(pdf.PDFName.of("Name")).asString(), "/Approved");
 assert.equal(stamp.lookup(pdf.PDFName.of("Rect")).toString(), "[ 20 60 40 120 ]");
 assert.ok(stamp.lookup(pdf.PDFName.of("AP"), pdf.PDFDict).lookup(pdf.PDFName.of("N"), pdf.PDFRawStream));
+stamp.set(pdf.PDFName.of("F"), pdf.PDFNumber.of(512));
+const editable = readPdfComments(reopenedInk, pdf);
+assert.equal(editable.length, 1);
+assert.equal(editable[0].text, "Review");
+editable[0].text = "Updated: résumé";
+const originalAppearance = ink.lookup(pdf.PDFName.of("AP"), pdf.PDFDict).get(pdf.PDFName.of("N"));
+addPdfComments(reopenedInk, editable, pdf);
+assert.equal(ink.lookup(pdf.PDFName.of("Contents"), pdf.PDFHexString).decodeText(), "Updated: résumé");
+assert.equal(ink.lookup(pdf.PDFName.of("AP"), pdf.PDFDict).get(pdf.PDFName.of("N")), originalAppearance);
+assert.equal(reopenedInk.getPage(0).node.Annots().size(), 2);
 
 const margins = { left: 10, top: 20, right: 30, bottom: 25 };
 assert.deepEqual(cropBoxFromMargins({

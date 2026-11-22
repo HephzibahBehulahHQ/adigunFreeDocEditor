@@ -27,9 +27,44 @@ function stampAppearance(pdf, quad, rect, label, color) {
   }));
 }
 
-export function addPdfComments(pdf, entries, { PDFName, PDFHexString }) {
+function editableComment(annotation, { PDFName, PDFNumber }) {
+  const flags = annotation.get(PDFName.of("F"));
+  return (!(flags instanceof PDFNumber) || !(flags.asNumber() & (64 | 128 | 512))) &&
+    !annotation.has(PDFName.of("RC"));
+}
+
+export function readPdfComments(pdf, lib) {
+  const { PDFName, PDFDict, PDFHexString, PDFString } = lib;
+  const kinds = new Map(Object.entries(markTypes).map(([kind, type]) => ["/" + type.subtype, kind]));
+  return pdf.getPages().flatMap((page, pageIndex) => {
+    const annotations = page.node.Annots();
+    const result = [];
+    for (let index = 0; index < (annotations?.size() ?? 0); index++) {
+      const annotation = annotations.lookup(index);
+      if (!(annotation instanceof PDFDict) || !editableComment(annotation, lib)) continue;
+      const subtype = annotation.get(PDFName.of("Subtype"))?.toString();
+      const kind = kinds.get(subtype);
+      if (!kind) continue;
+      const contents = annotation.get(PDFName.of("Contents"));
+      const text = contents instanceof PDFHexString || contents instanceof PDFString ? contents.decodeText() : "";
+      result.push({ pageIndex, kind, text, original: { index, subtype, text } });
+    }
+    return result;
+  });
+}
+
+export function addPdfComments(pdf, entries, lib) {
+  const { PDFName, PDFHexString, PDFDict } = lib;
   for (const entry of entries) {
     const page = pdf.getPage(entry.pageIndex);
+    if (entry.original) {
+      if (entry.text === entry.original.text) continue;
+      const annotation = page.node.Annots()?.lookup(entry.original.index);
+      if (!(annotation instanceof PDFDict) || annotation.get(PDFName.of("Subtype"))?.toString() !== entry.original.subtype ||
+          !editableComment(annotation, lib)) throw new Error("An original PDF comment could not be matched.");
+      annotation.set(PDFName.of("Contents"), PDFHexString.fromText(entry.text));
+      continue;
+    }
     const type = markTypes[entry.kind];
     const properties = {
       Type: "Annot", Subtype: type.subtype, P: page.ref, C: type.color, F: 4,
@@ -92,7 +127,7 @@ export function bindPdfComments(sources, preview) {
   function enableControls() {
     for (const control of [...allControls, ...list.querySelectorAll("textarea, button")]) control.disabled = busy;
     add.disabled = busy || !viewport;
-    download.disabled = busy || !entries.length;
+    download.disabled = busy || !entries.some((entry) => !entry.original || entry.text !== entry.original.text);
     updateKind();
   }
 
@@ -128,6 +163,7 @@ export function bindPdfComments(sources, preview) {
   function drawMarks() {
     const context = canvas.getContext("2d");
     for (const comment of entries.filter((entry) => entry.pageIndex === page.selectedIndex)) {
+      if (comment.original) continue;
       if (comment.kind === "ink") {
         paintStroke(context, comment.points);
         continue;
@@ -191,13 +227,17 @@ export function bindPdfComments(sources, preview) {
       const label = document.createElement("label");
       const field = document.createElement("textarea");
       const remove = document.createElement("button");
-      const name = entry.kind === "stamp" ? stampText[entry.stamp] + " stamp" : markTypes[entry.kind].label;
-      label.textContent = `${name} ${index + 1} · Page ${entry.pageIndex + 1}`;
+      const name = entry.kind === "stamp" && entry.stamp ? stampText[entry.stamp] + " stamp" : markTypes[entry.kind].label;
+      label.textContent = `${entry.original ? "Existing " : ""}${name} ${index + 1} · Page ${entry.pageIndex + 1}`;
       field.rows = 2;
       field.maxLength = 1000;
       field.value = entry.text;
-      field.addEventListener("input", () => { entry.text = field.value; draft = true; });
+      field.addEventListener("input", () => { entry.text = field.value; draft = true; enableControls(); });
       label.append(field);
+      if (entry.original) {
+        item.append(label);
+        return item;
+      }
       remove.type = "button";
       remove.className = "button button-outline";
       remove.textContent = "Remove mark";
@@ -233,6 +273,8 @@ export function bindPdfComments(sources, preview) {
       task = openPdfRaster(new Uint8Array(await sources[source.value].file.arrayBuffer()));
       raster = await task.promise;
       page.replaceChildren(...Array.from({ length: raster.numPages }, (_, index) => new Option(index + 1)));
+      for (const entry of readPdfComments(pdf, lib)) entries.push(entry);
+      renderEntries();
       await draw();
     } catch (error) {
       page.replaceChildren();
@@ -345,7 +387,7 @@ export function bindPdfComments(sources, preview) {
   });
   download.addEventListener("click", async () => {
     if (busy || !entries.length) return;
-    if (entries.some((entry) => entry.kind === "note" && !entry.text.trim())) { status.textContent = "Enter text for every sticky note or remove the empty notes."; return; }
+    if (entries.some((entry) => !entry.original && entry.kind === "note" && !entry.text.trim())) { status.textContent = "Enter text for every new sticky note or remove the empty notes."; return; }
     busy = true;
     enableControls();
     try {
