@@ -107,6 +107,82 @@
     return `<mc:AlternateContent xmlns:mc="${markupCompatibility}" xmlns:p14="${powerpoint2010}"><mc:Choice Requires="p14">${element(` p14:dur="${duration}"`)}</mc:Choice><mc:Fallback>${element()}</mc:Fallback></mc:AlternateContent>`;
   }
 
+  function fadeTimingXml(animations, objects) {
+    const effects = (Array.isArray(animations) ? animations : []).slice(0, 16).flatMap((animation) => {
+      if (!["fade", "exit"].includes(animation?.effect)) return [];
+      const { effect, target, start, duration, delay } = animation;
+      const match = /^object:(\d{1,2})$/.exec(target ?? "");
+      const shapeIds = match ? (+match[1] < objects.length ? [+match[1] + 4] : []) :
+        ({ title: [2], content: [3], both: [2, 3] })[target];
+      if (!Array.isArray(shapeIds) || !shapeIds.length) return [];
+      const milliseconds = (value, min, max, fallback) =>
+        Math.round((Number.isFinite(value) && value >= min && value <= max ? value : fallback) * 1000);
+      return [{ effect, shapeIds, start, duration: milliseconds(duration, 0.1, 5, 0.6), delay: milliseconds(delay, 0, 10, 0) }];
+    });
+    if (!effects.length) return "";
+    let id = 2;
+    const condition = (delay) => `<p:stCondLst><p:cond delay="${delay}"/></p:stCondLst>`;
+    const parallel = (attributes, delay, markup) =>
+      `<p:par><p:cTn id="${++id}" fill="hold" ${attributes}>${condition(delay)}<p:childTnLst>${markup}</p:childTnLst></p:cTn></p:par>`;
+    const target = (shapeId) => `<p:tgtEl><p:spTgt spid="${shapeId}"/></p:tgtEl>`;
+    function effectNode(effect, shapeId, start, delay) {
+      const enter = effect.effect === "fade";
+      const visibility = `<p:set><p:cBhvr><p:cTn id="${++id}" dur="1" fill="hold">${condition(enter ? 0 : effect.duration)}</p:cTn>${target(shapeId)}<p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="${enter ? "visible" : "hidden"}"/></p:to></p:set>`;
+      const fade = `<p:animEffect transition="${enter ? "in" : "out"}" filter="fade"><p:cBhvr><p:cTn id="${++id}" dur="${effect.duration}"/>${target(shapeId)}</p:cBhvr></p:animEffect>`;
+      return parallel(`presetID="10" presetClass="${enter ? "entr" : "exit"}" presetSubtype="0" grpId="0" nodeType="${start}"`, delay, visibility + fade);
+    }
+    let elapsed = 0;
+    const automatic = effects.filter(({ start }) => start !== "manual").map((effect) => {
+      const delay = elapsed + effect.delay;
+      elapsed += effect.delay + effect.duration;
+      return parallel("", delay, effect.shapeIds.map((shapeId) => effectNode(effect, shapeId, "withEffect", 0)).join(""));
+    }).join("");
+    const manual = effects.filter(({ start }) => start === "manual").map((effect) =>
+      parallel("", "indefinite", parallel("", effect.delay,
+        effect.shapeIds.map((shapeId, index) => effectNode(effect, shapeId, index ? "withEffect" : "clickEffect", 0)).join(""),
+      )),
+    ).join("");
+    const navigation = (direction) =>
+      `<p:${direction}CondLst><p:cond evt="on${direction === "prev" ? "Prev" : "Next"}" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:${direction}CondLst>`;
+    return `<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst><p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>${automatic ? parallel("", 0, automatic) : ""}${manual}</p:childTnLst></p:cTn>${navigation("prev")}${navigation("next")}</p:seq></p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>`;
+  }
+
+  function readFadeAnimations(slide, shapeTargets) {
+    const child = (node, name) => [...(node?.children ?? [])].find((part) => part.localName === name);
+    const branches = (node) => [...(child(node, "childTnLst")?.children ?? [])].map((part) => child(part, "cTn")).filter(Boolean);
+    const delay = (node) => child(child(node, "stCondLst"), "cond")?.getAttribute("delay");
+    const timing = slide.getElementsByTagNameNS("*", "timing")[0];
+    const main = [...(timing?.getElementsByTagNameNS("*", "cTn") ?? [])].find((node) => node.getAttribute("nodeType") === "mainSeq");
+    const result = [];
+    function readStep(step, start, startDelay) {
+      const effects = branches(step).flatMap((node) => {
+        const behavior = child(child(child(node, "childTnLst"), "animEffect"), "cBhvr");
+        const animation = behavior?.parentElement;
+        const target = shapeTargets.get(child(child(behavior, "tgtEl"), "spTgt")?.getAttribute("spid"));
+        const duration = Number(child(behavior, "cTn")?.getAttribute("dur")) / 1000;
+        if (animation?.getAttribute("filter") !== "fade" || !target || duration < 0.1 || duration > 5 || !Number.isFinite(duration)) return [];
+        return [{ effect: animation.getAttribute("transition") === "out" ? "exit" : "fade", target, start, duration, delay: startDelay }];
+      });
+      if (effects.length === 2 && effects[0].target === "title" && effects[1].target === "content" &&
+          effects[0].effect === effects[1].effect && effects[0].duration === effects[1].duration) {
+        result.push({ ...effects[0], target: "both" });
+      } else result.push(...effects);
+      return Math.max(0, ...effects.map((effect) => effect.duration));
+    }
+    for (const wrapper of branches(main)) {
+      if (delay(wrapper) === "indefinite") {
+        for (const step of branches(wrapper)) readStep(step, "manual", Number(delay(step) ?? 0) / 1000);
+      } else if (delay(wrapper) === "0") {
+        let elapsed = 0;
+        for (const step of branches(wrapper)) {
+          const offset = Number(delay(step) ?? 0) / 1000;
+          elapsed = offset + readStep(step, "auto", Math.max(0, Math.round((offset - elapsed) * 1000) / 1000));
+        }
+      }
+    }
+    return result.slice(0, 16);
+  }
+
   function createParts(slides) {
     if (slides.length > 80) throw new Error("PowerPoint output is limited to 80 slides.");
     const pns = "http://schemas.openxmlformats.org/presentationml/2006/main";
@@ -158,8 +234,9 @@
         if (!members || members.length < 2) return entry.markup;
         return members.at(-1) === entry ? groupXml(members, 29 + entry.object.group) : "";
       }).join("");
+      const timing = fadeTimingXml(slides[i].animations, entries);
       const markup = slideXml(slides[i]).replace("</p:spTree>", objects + "</p:spTree>")
-        .replace("</p:sld>", transitionXml(slides[i].transition) + "</p:sld>");
+        .replace("</p:sld>", transitionXml(slides[i].transition) + timing + "</p:sld>");
       files["ppt/slides/slide" + (i + 1) + ".xml"] = slides[i].hidden ? markup.replace("<p:sld ", '<p:sld show="0" ') : markup;
       files["ppt/slides/_rels/slide" + (i + 1) + ".xml.rels"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>';
       const path = "ppt/slides/_rels/slide" + (i + 1) + ".xml.rels";
@@ -311,6 +388,7 @@
       const objects = [];
       const images = pictures(slide, path);
       const groups = new Map();
+      const shapeTargets = new Map();
       function restoreObject(shape, object) {
         const group = shape.parentElement;
         if (group?.localName === "grpSp" &&
@@ -327,6 +405,7 @@
             object.y += (part("off", "y") - part("chOff", "y")) * 100 / inputHeight;
           }
         }
+        if (objects.length < 25) shapeTargets.set(shape.getElementsByTagNameNS("*", "cNvPr")[0]?.getAttribute("id"), "object:" + objects.length);
         objects.push(object);
       }
       const shapes = [...slide.getElementsByTagName("*")].flatMap((shape) => {
@@ -343,13 +422,19 @@
           restoreObject(shape, object);
           return [];
         }
-        return [{ text: paragraphs(shape), isTitle: ["title", "ctrTitle"].includes(placeholder) || name === "Title" }];
+        return [{ text: paragraphs(shape), id: shape.getElementsByTagNameNS("*", "cNvPr")[0]?.getAttribute("id"),
+          isTitle: ["title", "ctrTitle"].includes(placeholder) || name === "Title", isContent: name === "Content" }];
       });
       const titleIndex = shapes.findIndex((shape) => shape.isTitle);
       const title = titleIndex < 0 ? "" : shapes[titleIndex].text;
       const content = shapes.filter((shape, index) => index !== titleIndex && shape.text).map((shape) => shape.text).join("\n");
       if (title.length > 120 || content.length > 1500) throw new Error("A slide exceeds the title or body text limit.");
       const result = { title, content };
+      if (titleIndex >= 0) shapeTargets.set(shapes[titleIndex].id, "title");
+      const contentShape = shapes.find((shape) => shape.isContent && !shape.isTitle);
+      if (contentShape) shapeTargets.set(contentShape.id, "content");
+      const animations = readFadeAnimations(slide, shapeTargets);
+      if (animations.length) result.animations = animations;
       if (objects.length) result.objects = normalizeObjects(objects);
       const notes = slideNotes(path);
       if (notes.length > 4000) throw new Error("A slide exceeds the 4,000-character notes limit.");
