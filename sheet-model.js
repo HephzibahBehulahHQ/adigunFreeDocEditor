@@ -135,7 +135,9 @@ export function normalizeCellLink(value) {
   if (typeof value !== "string" || value.length > 4000) return "";
   if (value.trim().startsWith("#")) {
     const target = workbookLinkTarget(value.trim());
-    return target ? "#'" + target.sheet.replaceAll("'", "''") + "'!" + target.address : "";
+    if (target) return "#'" + target.sheet.replaceAll("'", "''") + "'!" + target.address;
+    const name = value.trim().slice(1);
+    return validDefinedName(name) ? "#" + name : "";
   }
   try {
     const url = new URL(value.trim());
@@ -452,18 +454,22 @@ function dateSerial(values, date1904) {
   return serial;
 }
 
+function validDefinedName(name) {
+  if (!/^[A-Za-z_][A-Za-z0-9_.]{0,254}$/.test(name) || /^_xlnm\.|^(?:R(?:\d*)C(?:\d*)|R|C|TRUE|FALSE)$/i.test(name)) return false;
+  const possibleCell = /^([A-Z]{1,3})([1-9]\d*)$/i.exec(name);
+  if (possibleCell) {
+    const column = Array.from(possibleCell[1].toUpperCase()).reduce((total, letter) => total * 26 + letter.charCodeAt(0) - 64, 0);
+    if (column <= 16384 && Number(possibleCell[2]) <= 1048576) return false;
+  }
+  return true;
+}
+
 export function normalizeNamedRange(entry) {
   const name = typeof entry?.name === "string" ? entry.name.trim() : "";
   const sheet = entry?.sheet;
   const cells = typeof entry?.range === "string" ? entry.range.toUpperCase().replaceAll("$", "").trim() : "";
   const match = /^([A-Z])([1-9]\d{0,3})(?::([A-Z])([1-9]\d{0,3}))?$/.exec(cells);
-  if (!match || !/^[A-Za-z_][A-Za-z0-9_.]{0,254}$/.test(name) || /^_xlnm\.|^(?:R(?:\d*)C(?:\d*)|R|C|TRUE|FALSE)$/i.test(name) ||
-      typeof sheet !== "string" || !sheet.length || sheet.length > 31) return null;
-  const possibleCell = /^([A-Z]{1,3})([1-9]\d*)$/i.exec(name);
-  if (possibleCell) {
-    const column = Array.from(possibleCell[1].toUpperCase()).reduce((total, letter) => total * 26 + letter.charCodeAt(0) - 64, 0);
-    if (column <= 16384 && Number(possibleCell[2]) <= 1048576) return null;
-  }
+  if (!match || !validDefinedName(name) || typeof sheet !== "string" || !sheet.length || sheet.length > 31) return null;
   const [, first, firstRow, last = first, lastRow = firstRow] = match;
   const start = cellAddress(Math.min(+firstRow, +lastRow) - 1, Math.min(first.charCodeAt(0), last.charCodeAt(0)) - 65);
   const end = cellAddress(Math.max(+firstRow, +lastRow) - 1, Math.max(first.charCodeAt(0), last.charCodeAt(0)) - 65);
