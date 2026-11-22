@@ -16,6 +16,8 @@ const unsorted = { rows: 6, columns: 3, cells: { A1: "Rank", B1: "Name", A2: "10
 const sorted = sortSheetRange(unsorted, { range: "A1:C4", column: "A", direction: "asc" }, calculateSheet(unsorted.cells));
 assert.deepEqual(sorted.cells, { A1: "Rank", B1: "Name", A2: "2", B2: "West", C2: "=A2*2", A3: "10", B3: "North", C3: "=A3*2", B4: "Blank rank" });
 assert.deepEqual(sorted.unlockedCells, { B3: true });
+assert.deepEqual(sortSheetRange({ ...unsorted, links: { B2: "https://example.com/" } },
+  { range: "A1:C4", column: "A", direction: "asc" }, calculateSheet(unsorted.cells)).links, { B3: "https://example.com/" });
 const duplicated = { rows: 6, columns: 3, cells: { A1: "Name", B1: "Region", A2: "River", B2: "North", A3: "river", B3: "NORTH", A4: "Canal", B4: "South", C3: "Keep" } };
 const cleaned = removeDuplicateRecords(duplicated, "A1:B4", calculateSheet(duplicated.cells));
 assert.equal(cleaned.duplicates, 1);
@@ -149,6 +151,15 @@ try {
   const pivotWorkbook = importWorkbook(pivotBytes, zip, dom.window.DOMParser);
   assert.deepEqual(pivotWorkbook.sheets[1].pivot, pivotDefinition);
   assert.deepEqual(pivotWorkbook.sheets[1].chart, pivotSheets[1].chart);
+  const target = "https://example.com/?a=1&b=2";
+  const linkedPivot = { ...pivotSheets[1], links: { A2: target, L24: target, B2: "javascript:alert(1)" } };
+  const reopenedPivot = importWorkbook(exportWorkbook([pivotSheets[0], linkedPivot], zip), zip, dom.window.DOMParser).sheets[1];
+  assert.deepEqual(reopenedPivot.links, { A2: target, L24: target });
+  assert.equal(reopenedPivot.cells.A2, linkedPivot.cells.A2);
+  assert.equal(reopenedPivot.rows, 24);
+  assert.equal(reopenedPivot.columns, 12);
+  assert.deepEqual(reopenedPivot.pivot, pivotDefinition);
+  assert.deepEqual(reopenedPivot.chart, linkedPivot.chart);
   const omitted = [];
   const stale = exportWorkbook([{ ...pivotSheets[0], cells: { ...pivotCells, B2: "9" } }, pivotSheets[1]], zip, false, [], (name) => omitted.push(name));
   assert.deepEqual(omitted, ["Summary"]);

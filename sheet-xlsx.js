@@ -1,4 +1,4 @@
-import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRanges, normalizePrintSettings, normalizeSheetProtection, normalizeWorkbookProtection, numberFormats, protectionCredentials, workbookProtectionCredentials, parseSheetFilter, validationOptions } from "./sheet-model.js";
+import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellLink, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRanges, normalizePrintSettings, normalizeSheetProtection, normalizeWorkbookProtection, numberFormats, protectionCredentials, workbookProtectionCredentials, parseSheetFilter, validationOptions } from "./sheet-model.js";
 import { readWorksheetChart, writeWorksheetChart } from "./sheet-chart-xlsx.js";
 import { readWorksheetPivot, writeWorksheetPivot } from "./sheet-pivot-xlsx.js";
 
@@ -69,7 +69,7 @@ function createStyleBook() {
   return { indexFor, markup, hasCellStyles: () => cellFormats.length > 1 };
 }
 
-function makeWorksheet({ cells, formats = {}, styles = {}, unlockedCells = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart, conditionalRule, print, protection }, valueAt, styleBook) {
+function makeWorksheet({ cells, formats = {}, styles = {}, unlockedCells = {}, freezeFirstRow, validation = {}, filter, chart: sheetChart, conditionalRule, print, protection }, valueAt, styleBook, links) {
   const rows = new Map();
   for (const address of new Set([...Object.keys(cells), ...Object.keys(formats), ...Object.keys(styles), ...Object.keys(unlockedCells)])) {
     const raw = cells[address] ?? "";
@@ -113,7 +113,9 @@ function makeWorksheet({ cells, formats = {}, styles = {}, unlockedCells = {}, f
     ? `<autoFilter ref="${filter.range}"><filterColumn colId="${filter.column.charCodeAt(0) - filter.range.charCodeAt(0)}"><filters><filter val="${xml(filter.value)}"/></filters></filterColumn></autoFilter>`
     : "";
   const drawing = sheetChart ? '<drawing r:id="rId1"/>' : "";
-  const relationship = sheetChart ? ` xmlns:r="${officeNs}"` : "";
+  const hyperlinks = links.length ? `<hyperlinks>${links.map(([address], index) =>
+    `<hyperlink ref="${address}" r:id="rIdLink${index + 1}"/>`).join("")}</hyperlinks>` : "";
+  const relationship = sheetChart || links.length ? ` xmlns:r="${officeNs}"` : "";
   const condition = normalizeConditionalRule(conditionalRule);
   const conditional = condition
     ? `<conditionalFormatting sqref="${condition.range}"><cfRule type="cellIs" dxfId="${conditionNames.indexOf(condition.color)}" priority="1" operator="${condition.operator}"><formula>${condition.threshold}</formula></cfRule></conditionalFormatting>`
@@ -127,7 +129,7 @@ function makeWorksheet({ cells, formats = {}, styles = {}, unlockedCells = {}, f
   const protectionMarkup = protectedSheet
     ? `<sheetProtection sheet="1"${protectionAttributes(protectedSheet)}/>`
     : "";
-  return `<worksheet xmlns="${mainNs}"${relationship}>${pageProperties}${views}<sheetData>${data}</sheetData>${protectionMarkup}${filterMarkup}${conditional}${validations}${pageOptions}${drawing}</worksheet>`;
+  return `<worksheet xmlns="${mainNs}"${relationship}>${pageProperties}${views}<sheetData>${data}</sheetData>${protectionMarkup}${filterMarkup}${conditional}${validations}${hyperlinks}${pageOptions}${drawing}</worksheet>`;
 }
 
 function readFilter(worksheet) {
@@ -204,8 +206,17 @@ export function exportWorkbook(sheets, zip, date1904 = false, namesInput, onPivo
     rels.push(`<Relationship Id="rId${id}" Type="${officeNs}/worksheet" Target="${target}"/>`);
     overrides.push(`<Override PartName="/xl/${target}" ContentType="${worksheetType}"/>`);
     const valueAt = calculateWorkbook(sheets, index, date1904, namesInput);
-    files["xl/" + target] = makeWorksheet(sheet, valueAt, styleBook);
+    const links = Object.entries(sheet.links ?? {}).map(([address, url]) => [address, normalizeCellLink(url)])
+      .filter(([address, url]) => /^[A-Z][1-9]\d{0,3}$/.test(address) && Number(address.slice(1)) <= maxRows && url);
+    files["xl/" + target] = makeWorksheet(sheet, valueAt, styleBook, links);
     if (sheet.chart) writeWorksheetChart(files, overrides, id, name, sheet.chart, valueAt, xml);
+    if (links.length) {
+      const relPath = `xl/worksheets/_rels/sheet${id}.xml.rels`;
+      const existing = files[relPath] || `<Relationships xmlns="${packageNs}"></Relationships>`;
+      const entries = links.map(([, url], index) =>
+        `<Relationship Id="rIdLink${index + 1}" Type="${officeNs}/hyperlink" Target="${xml(url)}" TargetMode="External"/>`);
+      files[relPath] = existing.replace("</Relationships>", () => entries.join("") + "</Relationships>");
+    }
   }
   const pivotCaches = [];
   for (const [index, sheet] of sheets.entries()) {
@@ -328,6 +339,22 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     let rows = 20;
     let columns = 8;
     const worksheet = parse(path);
+    const links = {};
+    const linkNodes = worksheet.getElementsByTagNameNS(mainNs, "hyperlink");
+    const relPath = path.replace(/\/([^/]+)$/, "/_rels/$1.rels");
+    if (linkNodes.length && files[relPath]) {
+      const targets = new Map([...parse(relPath).getElementsByTagNameNS(packageNs, "Relationship")]
+        .filter((node) => node.getAttribute("Type") === officeNs + "/hyperlink" && node.getAttribute("TargetMode") === "External")
+        .map((node) => [node.getAttribute("Id"), normalizeCellLink(node.getAttribute("Target"))]));
+      for (const node of linkNodes) {
+        const address = node.getAttribute("ref");
+        const url = targets.get(node.getAttributeNS(officeNs, "id"));
+        if (!url || !/^[A-Z][1-9]\d{0,3}$/.test(address) || Number(address.slice(1)) > maxRows) continue;
+        links[address] = url;
+        rows = Math.max(rows, Number(address.slice(1)));
+        columns = Math.max(columns, address.charCodeAt(0) - 64);
+      }
+    }
     const namedPrint = (key) => printNames.find((item) =>
       item.getAttribute("name") === "_xlnm." + key && Number(item.getAttribute("localSheetId")) === index)?.textContent.split("!").at(-1).replaceAll("$", "");
     const setup = worksheet.getElementsByTagNameNS(mainNs, "pageSetup")[0];
@@ -404,7 +431,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
       ? readProtection(protectionNode, protectionCredentials, normalizeSheetProtection)
       : null;
     return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles,
-      unlockedCells, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print, protection };
+      unlockedCells, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print, protection, links };
   });
   for (const [index, sheet] of sheets.entries()) {
     try {

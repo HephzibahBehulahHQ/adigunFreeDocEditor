@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRange, normalizeNamedRanges, normalizeSheetProtection, normalizeWorkbookProtection, numberFormats, protectionCredentials, parseChartRange, parseCsv, parseSheetFilter, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, spreadsheetFonts, toCsv, validationOptions, workbookProtectionCredentials } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellLink, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRange, normalizeNamedRanges, normalizeSheetProtection, normalizeWorkbookProtection, numberFormats, protectionCredentials, parseChartRange, parseCsv, parseSheetFilter, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, spreadsheetFonts, toCsv, validationOptions, workbookProtectionCredentials } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 import { bindSheetPrinting } from "./sheet-print.js";
 
@@ -47,6 +47,8 @@ try {
         .filter(([address, unlocked]) => validAddress.test(address) && unlocked === true)),
       validation: Object.fromEntries(Object.entries(item?.validation ?? {})
         .filter(([address, options]) => validAddress.test(address) && validationOptions(options).length)),
+      links: Object.fromEntries(Object.entries(item?.links ?? {}).map(([address, url]) => [address, normalizeCellLink(url)])
+        .filter(([address, url]) => validAddress.test(address) && url)),
       pivot: item?.pivot && Number.isInteger(item.pivot.source) &&
         ["range", "group", "measure", "aggregate"].every((key) => typeof item.pivot[key] === "string" && item.pivot[key].length <= 25)
         ? item.pivot : undefined,
@@ -167,6 +169,7 @@ function paintRows(valueAt) {
   const fillAt = conditionalFill(sheet.conditionalRule);
   for (const field of grid.querySelectorAll("input")) {
     const address = field.dataset.cell;
+    field.title = sheet.links?.[address] ?? "";
     const value = valueAt(address);
     if (document.activeElement !== field) field.value = displayCell(value, sheet.formats?.[address], undefined, workbook.date1904);
     const fill = fillAt(address, value);
@@ -408,6 +411,12 @@ function refreshFormula() {
   const sheet = currentSheet();
   const addresses = selectionAddresses();
   const locked = cellLocked(sheet, selectedAddress);
+  const anchor = $("sheet-open-cell-link");
+  const link = sheet.links?.[selectedAddress];
+  anchor.hidden = !link;
+  if (link) anchor.href = link;
+  else anchor.removeAttribute("href");
+  $("sheet-cell-link").disabled = locked;
   const selectionLocked = Boolean(sheet.protection) && addresses.some((address) => cellLocked(sheet, address));
   const unlock = $("sheet-unlocked-range");
   unlock.disabled = Boolean(sheet.protection);
@@ -730,6 +739,49 @@ grid.addEventListener("change", (event) => {
   if (currentSheet().validation?.[address]) updateCell(address, event.target.value);
 });
 $("sheet-validation-picker").addEventListener("change", (event) => updateCell(selectedAddress, event.target.value));
+
+const linkDialog = $("sheet-link-dialog");
+const linkForm = linkDialog.querySelector("form");
+const linkStatus = linkForm.querySelector("[role=status]");
+const removeLink = $("sheet-remove-link");
+let linkSelection;
+$("sheet-cell-link").addEventListener("click", () => {
+  const sheet = currentSheet();
+  const address = selectedAddress;
+  if (cellLocked(sheet, address)) return;
+  linkSelection = { sheet, address };
+  $("sheet-link-address").value = address;
+  linkForm.elements.url.value = sheet.links?.[address] ?? "";
+  removeLink.disabled = !linkForm.elements.url.value;
+  linkStatus.textContent = "";
+  linkDialog.showModal();
+});
+function saveCellLink(url) {
+  const { sheet, address } = linkSelection;
+  if (sheet !== currentSheet() || cellLocked(sheet, address)) {
+    linkDialog.close();
+    return;
+  }
+  recordEdit();
+  const links = sheet.links ??= {};
+  if (url) links[address] = url;
+  else delete links[address];
+  save();
+  linkDialog.close();
+  refreshValues();
+  refreshFormula();
+}
+linkDialog.querySelector("[data-close]").addEventListener("click", () => linkDialog.close());
+removeLink.addEventListener("click", () => saveCellLink(""));
+linkForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const url = normalizeCellLink(linkForm.elements.url.value);
+  if (!url) {
+    linkStatus.textContent = "Enter an HTTP or HTTPS web address without sign-in credentials.";
+    return;
+  }
+  saveCellLink(url);
+});
 
 const validationDialog = $("sheet-validation-dialog");
 const validationForm = validationDialog.querySelector("form");
