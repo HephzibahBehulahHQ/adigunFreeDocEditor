@@ -107,9 +107,11 @@
     return `<mc:AlternateContent xmlns:mc="${markupCompatibility}" xmlns:p14="${powerpoint2010}"><mc:Choice Requires="p14">${element(` p14:dur="${duration}"`)}</mc:Choice><mc:Fallback>${element()}</mc:Fallback></mc:AlternateContent>`;
   }
 
+  const driftPath = "M 0 0 L 0.025 0 L 0 0 E";
+
   function animationTimingXml(animations, objects) {
     const effects = (Array.isArray(animations) ? animations : []).slice(0, 16).flatMap((animation) => {
-      if (!["fade", "exit", "rise", "pulse"].includes(animation?.effect)) return [];
+      if (!["fade", "exit", "rise", "pulse", "drift"].includes(animation?.effect)) return [];
       const { effect, target, start, duration, delay } = animation;
       const match = /^object:(\d{1,2})$/.exec(target ?? "");
       const shapeIds = match ? (+match[1] < objects.length ? [+match[1] + 4] : []) :
@@ -131,6 +133,10 @@
       if (effect.effect === "pulse") {
         const scale = `<p:animScale><p:cBhvr><p:cTn id="${++id}" dur="${effect.duration / 2}" autoRev="1" fill="hold"/>${target(shapeId)}</p:cBhvr><p:by x="104000" y="104000"/></p:animScale>`;
         return parallel(`presetID="6" presetClass="emph" presetSubtype="0" grpId="0" nodeType="${start}"`, delay, scale);
+      }
+      if (effect.effect === "drift") {
+        const path = `<p:animMotion origin="layout" pathEditMode="relative" path="${driftPath}"><p:cBhvr><p:cTn id="${++id}" dur="${effect.duration}" fill="hold"/>${target(shapeId)}<p:attrNameLst><p:attrName>ppt_x</p:attrName><p:attrName>ppt_y</p:attrName></p:attrNameLst></p:cBhvr></p:animMotion>`;
+        return parallel(`presetID="0" presetClass="path" presetSubtype="0" grpId="0" nodeType="${start}"`, delay, path);
       }
       const enter = effect.effect !== "exit";
       const visibility = `<p:set><p:cBhvr><p:cTn id="${++id}" dur="1" fill="hold">${condition(enter ? 0 : effect.duration)}</p:cTn>${target(shapeId)}<p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="${enter ? "visible" : "hidden"}"/></p:to></p:set>`;
@@ -170,6 +176,9 @@
         const fade = child(items, "animEffect");
         const motion = child(items, "anim");
         const scale = child(items, "animScale");
+        const path = child(items, "animMotion");
+        const drift = node.getAttribute("presetClass") === "path" &&
+          path?.getAttribute("path")?.trim().replace(/\s+/g, " ") === driftPath;
         const amount = child(scale, "by");
         const scaleTiming = child(child(scale, "cBhvr"), "cTn");
         const pulse = node.getAttribute("presetID") === "6" && node.getAttribute("presetClass") === "emph" &&
@@ -177,12 +186,12 @@
           ["x", "y"].every((axis) => /^(?:104000|104(?:\.0+)?%)$/.test(amount?.getAttribute(axis) ?? ""));
         const rise = node.getAttribute("presetID") === "2" && node.getAttribute("presetClass") === "entr" &&
           node.getAttribute("presetSubtype") === "4" && motion;
-        if (!pulse && !rise && fade?.getAttribute("filter") !== "fade") return [];
-        const behavior = child(pulse ? scale : rise ? motion : fade, "cBhvr");
+        if (!drift && !pulse && !rise && fade?.getAttribute("filter") !== "fade") return [];
+        const behavior = child(drift ? path : pulse ? scale : rise ? motion : fade, "cBhvr");
         const target = shapeTargets.get(child(child(behavior, "tgtEl"), "spTgt")?.getAttribute("spid"));
         const duration = Number(child(behavior, "cTn")?.getAttribute("dur")) * (pulse ? 2 : 1) / 1000;
         if (!target || duration < 0.1 || duration > 5 || !Number.isFinite(duration)) return [];
-        const effect = pulse ? "pulse" : rise ? "rise" : fade.getAttribute("transition") === "out" ? "exit" : "fade";
+        const effect = drift ? "drift" : pulse ? "pulse" : rise ? "rise" : fade.getAttribute("transition") === "out" ? "exit" : "fade";
         return [{ effect, target, start, duration, delay: startDelay }];
       });
       if (effects.length === 2 && effects[0].target === "title" && effects[1].target === "content" &&

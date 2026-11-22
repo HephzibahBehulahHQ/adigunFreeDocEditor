@@ -49,6 +49,7 @@ try {
     { effect: "exit", target: "object:0", start: "auto", duration: 1.4, delay: 0.3 },
     { effect: "fade", target: "object:2", start: "manual", duration: 0.8, delay: 1.2 },
     { effect: "rise", target: "title", start: "manual", duration: 0.5, delay: 0 },
+    { effect: "drift", target: "both", start: "manual", duration: 2, delay: 0.4 },
   ];
   const animatedParts = window.AdigunPresentation.createParts([{ title: "Sequence", lines: ["Details"], objects: grouped, animations }]);
   const animated = new dom.window.DOMParser().parseFromString(window.fflate.strFromU8(animatedParts["ppt/slides/slide1.xml"]), "application/xml");
@@ -69,9 +70,12 @@ try {
   assert.equal(pulseTime.getAttribute("dur"), "700");
   assert.equal(pulseTime.getAttribute("autoRev"), "1");
   assert.deepEqual([scaleBy.getAttribute("x"), scaleBy.getAttribute("y")], ["104000", "104000"]);
+  const paths = [...animated.getElementsByTagNameNS("*", "animMotion")];
+  assert.deepEqual(paths.map((path) => path.getAttribute("path")), ["M 0 0 L 0.025 0 L 0 0 E", "M 0 0 L 0.025 0 L 0 0 E"]);
+  assert.deepEqual(paths.map((path) => path.getElementsByTagNameNS("*", "spTgt")[0].getAttribute("spid")), ["2", "3"]);
   const [animatedSlide] = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(animatedParts), dom.window.DOMParser);
   assert.deepEqual(JSON.parse(JSON.stringify(animatedSlide.animations)), [
-    animations[0], animations[1], { ...animations[2], target: "object:1" }, animations[3], animations[4],
+    animations[0], animations[1], { ...animations[2], target: "object:1" }, animations[3], animations[4], animations[5],
   ]);
 } finally {
   dom.window.close();
