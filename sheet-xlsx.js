@@ -1,5 +1,6 @@
 import { calculateWorkbook, cellAddress, conditionalColors, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRanges, normalizePrintSettings, numberFormats, parseSheetFilter, validationOptions } from "./sheet-model.js";
 import { readWorksheetChart, writeWorksheetChart } from "./sheet-chart-xlsx.js";
+import { readWorksheetPivot, writeWorksheetPivot } from "./sheet-pivot-xlsx.js";
 
 const mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const officeNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -148,9 +149,10 @@ function readValidation(worksheet) {
   return validation;
 }
 
-export function exportWorkbook(sheets, zip, date1904 = false, namesInput) {
+export function exportWorkbook(sheets, zip, date1904 = false, namesInput, onPivotFallback) {
   const files = {};
   const workbookSheets = [];
+  const sheetNames = [];
   const rels = [];
   const overrides = [];
   const names = new Set();
@@ -165,6 +167,7 @@ export function exportWorkbook(sheets, zip, date1904 = false, namesInput) {
       name = base.slice(0, 30 - String(suffix).length) + " " + suffix;
     }
     names.add(name.toLowerCase());
+    sheetNames.push(name);
     workbookSheets.push(`<sheet name="${xml(name)}" sheetId="${id}"${sheet.hidden ? ' state="hidden"' : ""} r:id="rId${id}"/>`);
     if (sheet.print) {
       const settings = normalizePrintSettings(sheet.print);
@@ -186,6 +189,17 @@ export function exportWorkbook(sheets, zip, date1904 = false, namesInput) {
     files["xl/" + target] = makeWorksheet(sheet, valueAt, styleBook);
     if (sheet.chart) writeWorksheetChart(files, overrides, id, name, sheet.chart, valueAt, xml);
   }
+  const pivotCaches = [];
+  for (const [index, sheet] of sheets.entries()) {
+    if (!sheet.pivot) continue;
+    const source = sheet.pivot.source;
+    const record = writeWorksheetPivot({
+      files, overrides, rels, id: index + 1, sourceName: sheetNames[source], source: sheets[source], sheet, xml,
+      valueAt: calculateWorkbook(sheets, source, date1904, namesInput),
+    });
+    if (record) pivotCaches.push(record);
+    else onPivotFallback?.(sheetNames[index]);
+  }
   const hasConditions = sheets.some((sheet) => normalizeConditionalRule(sheet.conditionalRule));
   if (hasConditions || styleBook.hasCellStyles()) {
     rels.push(`<Relationship Id="rIdStyles" Type="${officeNs}/styles" Target="styles.xml"/>`);
@@ -203,7 +217,8 @@ export function exportWorkbook(sheets, zip, date1904 = false, namesInput) {
   const definitions = [...printNames, ...namedRanges];
   const definedNames = definitions.length ? `<definedNames>${definitions.join("")}</definedNames>` : "";
   const workbookProperties = date1904 ? '<workbookPr date1904="1"/>' : "";
-  files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}">${workbookProperties}${workbookViews}<sheets>${workbookSheets.join("")}</sheets>${definedNames}</workbook>`;
+  const pivotCacheList = pivotCaches.length ? `<pivotCaches>${pivotCaches.join("")}</pivotCaches>` : "";
+  files["xl/workbook.xml"] = `<workbook xmlns="${mainNs}" xmlns:r="${officeNs}">${workbookProperties}${workbookViews}<sheets>${workbookSheets.join("")}</sheets>${definedNames}${pivotCacheList}</workbook>`;
   files["xl/_rels/workbook.xml.rels"] = `<Relationships xmlns="${packageNs}">${rels.join("")}</Relationships>`;
   files["_rels/.rels"] = `<Relationships xmlns="${packageNs}"><Relationship Id="rId1" Type="${officeNs}/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
   files["[Content_Types].xml"] = `<Types xmlns="${contentNs}"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="${workbookType}"/>${overrides.join("")}</Types>`;
@@ -214,7 +229,7 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
   let total = 0;
   const files = zip.unzipSync(bytes, {
     filter({ name, originalSize }) {
-      if (!/^xl\/(?:workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|styles\.xml|(?:worksheets|drawings|charts)\/[\w.-]+\.xml|(?:worksheets|drawings)\/_rels\/[\w.-]+\.xml\.rels)$/.test(name)) return false;
+      if (!/^xl\/(?:workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|styles\.xml|(?:worksheets|drawings|charts|pivotTables|pivotCache)\/[\w.-]+\.xml|(?:worksheets|drawings)\/_rels\/[\w.-]+\.xml\.rels)$/.test(name)) return false;
       total += originalSize;
       if (total > 12 * 1024 * 1024) throw new Error("Workbook content is too large.");
       return true;
@@ -270,11 +285,13 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
   const printNames = [...workbook.getElementsByTagNameNS(mainNs, "definedName")].filter((item) =>
     ["_xlnm.Print_Area", "_xlnm.Print_Titles"].includes(item.getAttribute("name")) && /^\d+$/.test(item.getAttribute("localSheetId") ?? ""));
   if (!definitions.length || definitions.length > 12) throw new Error("A workbook must contain between 1 and 12 sheets.");
+  const worksheetPaths = [];
   const sheets = definitions.map((definition, index) => {
     const relationship = [...definition.attributes].find((attribute) => attribute.localName === "id" && attribute.namespaceURI);
     const target = relationships.get(relationship?.value) || "";
     const path = target.startsWith("/") ? target.slice(1) : "xl/" + target;
     if (!/^xl\/worksheets\/[\w.-]+\.xml$/.test(path)) throw new Error("The workbook uses an unsupported worksheet location.");
+    worksheetPaths.push(path);
     const cells = {};
     const formats = {};
     const cellStyles = {};
@@ -352,6 +369,12 @@ export function importWorkbook(bytes, zip, Parser = DOMParser) {
     const hidden = ["hidden", "veryHidden"].includes(definition.getAttribute("state"));
     return { name, rows: Math.min(rows, maxRows), columns: Math.min(columns, maxColumns), cells, formats, styles: cellStyles, freezeFirstRow, validation, filter, chart, hidden, conditionalRule, print };
   });
+  for (const [index, sheet] of sheets.entries()) {
+    try {
+      const pivot = readWorksheetPivot(files, parse, worksheetPaths[index], sheets, index, workbook);
+      if (pivot) sheet.pivot = pivot;
+    } catch { /* Keep the worksheet cells when the optional PivotTable cannot be read. */ }
+  }
   const sheetNames = new Map(sheets.map(({ name }, index) => [(name || `Sheet ${index + 1}`).toUpperCase(), name || `Sheet ${index + 1}`]));
   const namedRanges = normalizeNamedRanges([...workbook.getElementsByTagNameNS(mainNs, "definedName")].flatMap((item) => {
     if (item.hasAttribute("localSheetId") || ["1", "true"].includes(item.getAttribute("hidden"))) return [];

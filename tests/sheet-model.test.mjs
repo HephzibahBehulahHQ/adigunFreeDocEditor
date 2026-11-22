@@ -133,6 +133,24 @@ vm.runInNewContext(fs.readFileSync(new URL("../assets/vendor/fflate.min.js", imp
 const zip = zipContext.fflate;
 const dom = new JSDOM();
 try {
+  const pivotDefinition = { source: 0, range: "A1:B4", group: "A", measure: "B", aggregate: "sum" };
+  const pivotCells = { A1: "Region", B1: "Units", A2: "North", B2: "4", A3: "South", B3: "7", A4: "North", B4: "2" };
+  const pivotSheets = [
+    { name: "Source", cells: pivotCells },
+    { name: "Summary", ...buildPivot(pivotCells, pivotDefinition), pivot: pivotDefinition, chart: parseChartRange("A1:B3") },
+  ];
+  const pivotBytes = exportWorkbook(pivotSheets, zip);
+  const pivotParts = zip.unzipSync(pivotBytes);
+  assert.match(zip.strFromU8(pivotParts["xl/workbook.xml"]), /<pivotCache cacheId="2" r:id="rIdPivotCache2"/);
+  assert.match(zip.strFromU8(pivotParts["xl/pivotCache/pivotCacheRecords2.xml"]), /<r><x v="0"\/><n v="4"\/><\/r>/);
+  const pivotWorkbook = importWorkbook(pivotBytes, zip, dom.window.DOMParser);
+  assert.deepEqual(pivotWorkbook.sheets[1].pivot, pivotDefinition);
+  assert.deepEqual(pivotWorkbook.sheets[1].chart, pivotSheets[1].chart);
+  const omitted = [];
+  const stale = exportWorkbook([{ ...pivotSheets[0], cells: { ...pivotCells, B2: "9" } }, pivotSheets[1]], zip, false, [], (name) => omitted.push(name));
+  assert.deepEqual(omitted, ["Summary"]);
+  assert.equal(importWorkbook(stale, zip, dom.window.DOMParser).sheets[1].cells.B2, "6");
+  assert.equal(importWorkbook(stale, zip, dom.window.DOMParser).sheets[1].pivot, undefined);
   const namedBytes = exportWorkbook(namedSheets, zip, false, namedRanges);
   const namedFile = importWorkbook(namedBytes, zip, dom.window.DOMParser);
   assert.deepEqual(namedFile.namedRanges, namedRanges);

@@ -1065,6 +1065,7 @@ $("workbook-file").addEventListener("change", async (event) => {
     recordEdit();
     const firstVisible = sheets.findIndex((sheet) => !sheet.hidden);
     if (firstVisible < 0) sheets[0].hidden = false;
+    for (const sheet of sheets) if (sheet.pivot) sheet.pivot.source += existing.length;
     workbook = {
       name: existing.length ? workbook.name : file.name.replace(/\.xlsx$/i, "").slice(0, 100),
       active: existing.length + Math.max(0, firstVisible), sheets: [...existing, ...sheets], date1904,
@@ -1093,7 +1094,10 @@ $("sheet-export").addEventListener("click", () => {
 $("workbook-export").addEventListener("click", () => {
   try {
     const name = workbook.name.trim().replace(/[\\/:*?"<>|]/g, "-") || defaultWorkbookName;
-    download(exportWorkbook(workbook.sheets, window.fflate, workbook.date1904, workbook.namedRanges), xlsxMime, name + ".xlsx");
+    const staticPivots = [];
+    const bytes = exportWorkbook(workbook.sheets, window.fflate, workbook.date1904, workbook.namedRanges, (name) => staticPivots.push(name));
+    download(bytes, xlsxMime, name + ".xlsx");
+    if (staticPivots.length) status(`Exported. Static pivot summaries: ${staticPivots.join(", ")}. Refresh the summaries and check the source headers before exporting again.`);
   } catch {
     status("The Excel workbook could not be exported.");
   }
