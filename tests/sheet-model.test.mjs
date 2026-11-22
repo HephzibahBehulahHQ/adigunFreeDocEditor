@@ -160,6 +160,12 @@ try {
   assert.equal(reopenedPivot.columns, 12);
   assert.deepEqual(reopenedPivot.pivot, pivotDefinition);
   assert.deepEqual(reopenedPivot.chart, linkedPivot.chart);
+  const jump = "#'Owner''s data'!B44";
+  const workbookLinks = [{ name: "Home", cells: { A1: "Open data" }, links: { A1: jump } }, { name: "Owner's data", cells: { B44: "Target" } }];
+  const workbookLinkBytes = exportWorkbook(workbookLinks, zip);
+  const linkedParts = zip.unzipSync(workbookLinkBytes);
+  assert.equal(linkedParts["xl/worksheets/_rels/sheet1.xml.rels"], undefined);
+  assert.deepEqual(importWorkbook(workbookLinkBytes, zip, dom.window.DOMParser).sheets[0].links, { A1: jump });
   const omitted = [];
   const stale = exportWorkbook([{ ...pivotSheets[0], cells: { ...pivotCells, B2: "9" } }, pivotSheets[1]], zip, false, [], (name) => omitted.push(name));
   assert.deepEqual(omitted, ["Summary"]);

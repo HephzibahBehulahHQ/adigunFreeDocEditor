@@ -123,8 +123,20 @@ function recordBounds(sheet, range, column) {
   return { left, right, rows: Array.from({ length: last - first }, (_, index) => first + index + 1), column: target.column };
 }
 
+export function workbookLinkTarget(value) {
+  const match = /^#(?:'((?:[^']|'')+)'|([^'!]+))!\$?([A-Z])\$?([1-9]\d{0,3})$/i.exec(value);
+  if (!match || Number(match[4]) > maxRows) return null;
+  const sheet = match[1]?.replaceAll("''", "'") ?? match[2];
+  if (sheet.length > 31 || /[\\/:?*\[\]\u0000-\u001f]/.test(sheet)) return null;
+  return { sheet, address: match[3].toUpperCase() + match[4] };
+}
+
 export function normalizeCellLink(value) {
   if (typeof value !== "string" || value.length > 4000) return "";
+  if (value.trim().startsWith("#")) {
+    const target = workbookLinkTarget(value.trim());
+    return target ? "#'" + target.sheet.replaceAll("'", "''") + "'!" + target.address : "";
+  }
   try {
     const url = new URL(value.trim());
     return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password ? url.href : "";

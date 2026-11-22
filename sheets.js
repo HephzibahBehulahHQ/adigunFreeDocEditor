@@ -1,4 +1,4 @@
-import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellLink, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRange, normalizeNamedRanges, normalizeSheetProtection, normalizeWorkbookProtection, numberFormats, protectionCredentials, parseChartRange, parseCsv, parseSheetFilter, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, spreadsheetFonts, toCsv, validationOptions, workbookProtectionCredentials } from "./sheet-model.js";
+import { buildPivot, calculateWorkbook, cellAddress, chartValues, conditionalFill, displayCell, hiddenFilterRows, maxCellLength, maxColumns, maxRows, normalizeCellLink, normalizeCellStyle, normalizeConditionalRule, normalizeNamedRange, normalizeNamedRanges, normalizeSheetProtection, normalizeWorkbookProtection, numberFormats, protectionCredentials, parseChartRange, parseCsv, parseSheetFilter, removeDuplicateRecords, renameSheetReferences, shiftCellFormula, sortSheetRange, splitColumnText, spreadsheetFonts, toCsv, validationOptions, workbookLinkTarget, workbookProtectionCredentials } from "./sheet-model.js";
 import { exportWorkbook, importWorkbook, xlsxMime } from "./sheet-xlsx.js";
 import { bindSheetPrinting } from "./sheet-print.js";
 
@@ -7,6 +7,20 @@ const storageKey = "adigun-sheets-v1";
 const maxSheets = 12;
 const defaultWorkbookName = "Untitled workbook";
 const blankSheet = () => ({ rows: 20, columns: 8, cells: {}, formats: {} });
+
+function linkedWorksheet(link) {
+  const target = workbookLinkTarget(link);
+  const index = workbook.sheets.findIndex((sheet, position) => sheetName(position).toUpperCase() === target?.sheet.toUpperCase());
+  return { target, index };
+}
+
+function retargetSheetLinks(sheet, names) {
+  for (const [address, link] of Object.entries(sheet.links ?? {})) {
+    const target = workbookLinkTarget(link);
+    const name = target && names.get(target.sheet.toUpperCase());
+    if (name) sheet.links[address] = normalizeCellLink("#'" + name.replaceAll("'", "''") + "'!" + target.address);
+  }
+}
 const validAddress = /^[A-Z](?:[1-9]\d{0,3})$/;
 const grid = $("sheet-grid");
 const gridViewport = grid.parentElement;
@@ -414,7 +428,10 @@ function refreshFormula() {
   const anchor = $("sheet-open-cell-link");
   const link = sheet.links?.[selectedAddress];
   anchor.hidden = !link;
-  if (link) anchor.href = link;
+  if (link) {
+    anchor.href = link;
+    anchor.target = link.startsWith("#") ? "_self" : "_blank";
+  }
   else anchor.removeAttribute("href");
   $("sheet-cell-link").disabled = locked;
   const selectionLocked = Boolean(sheet.protection) && addresses.some((address) => cellLocked(sheet, address));
@@ -676,6 +693,7 @@ function revealField(address) {
 }
 
 function renderSheetTabs(sheet) {
+  const protectedSheet = Boolean(sheet.protection);
   $("sheet-tabs").replaceChildren(...workbook.sheets.map((_sheet, index) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -773,11 +791,35 @@ function saveCellLink(url) {
 }
 linkDialog.querySelector("[data-close]").addEventListener("click", () => linkDialog.close());
 removeLink.addEventListener("click", () => saveCellLink(""));
+$("sheet-open-cell-link").addEventListener("click", (event) => {
+  const link = currentSheet().links?.[selectedAddress];
+  if (!link?.startsWith("#")) return;
+  event.preventDefault();
+  const { index, target } = linkedWorksheet(link);
+  const sheet = workbook.sheets[index];
+  if (!sheet || sheet.hidden) {
+    status("The linked worksheet is missing or hidden.");
+    return;
+  }
+  const { address } = target;
+  expandNamedSheet(workbook.sheets, { sheet: target.sheet, range: address });
+  workbook.active = index;
+  selectedAddress = address;
+  save();
+  render();
+  const field = revealField(address);
+  if (field) field.focus();
+  else status("The linked cell is hidden by a filter.");
+});
 linkForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const url = normalizeCellLink(linkForm.elements.url.value);
   if (!url) {
-    linkStatus.textContent = "Enter an HTTP or HTTPS web address without sign-in credentials.";
+    linkStatus.textContent = "Enter an HTTP or HTTPS web address, or a workbook destination such as #Sheet 2!A1.";
+    return;
+  }
+  if (url.startsWith("#") && linkedWorksheet(url).index < 0) {
+    linkStatus.textContent = "Choose a worksheet in this workbook.";
     return;
   }
   saveCellLink(url);
@@ -1381,6 +1423,7 @@ $("workbook-file").addEventListener("change", async (event) => {
     }
     if (renamed.size) for (const sheet of sheets) {
       for (const address of Object.keys(sheet.cells)) sheet.cells[address] = renameSheetReferences(sheet.cells[address], renamed);
+      retargetSheetLinks(sheet, renamed);
     }
     const importedNames = namedRanges.map((entry) => ({ ...entry, sheet: renamed.get(entry.sheet.toUpperCase()) ?? entry.sheet }));
     for (const entry of importedNames) expandNamedSheet(sheets, entry);
@@ -1503,6 +1546,7 @@ manageForm.addEventListener("submit", (event) => {
   }
   for (const sheet of workbook.sheets) {
     for (const address of Object.keys(sheet.cells)) sheet.cells[address] = renameSheetReferences(sheet.cells[address], names);
+    retargetSheetLinks(sheet, names);
   }
   manageStatus.textContent = "Sheet renamed.";
   finishManagement(index);
