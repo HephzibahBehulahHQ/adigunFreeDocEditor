@@ -208,17 +208,18 @@
   const tableFields = $("slide-table-fields");
   const tableCells = $("slide-table-cells");
 
-  function renderTableFields(rows, columns, existing) {
+  function renderTableFields(rows, columns, existing, chart = false) {
     tableCells.style.setProperty("--table-columns", columns);
     tableCells.replaceChildren(...Array.from({ length: rows * columns }, (_, index) => {
       const row = Math.floor(index / columns);
       const column = index % columns;
       const input = document.createElement("input");
-      input.type = "text";
+      input.type = chart && column === 1 ? "number" : "text";
+      if (input.type === "number") input.step = "any";
       input.maxLength = tableCellLimit;
       input.dataset.row = row;
       input.dataset.column = column;
-      input.setAttribute("aria-label", `Row ${row + 1}, column ${column + 1}`);
+      input.setAttribute("aria-label", chart ? `${column ? "Value" : "Category"} ${row + 1}` : `Row ${row + 1}, column ${column + 1}`);
       input.value = existing[row]?.[column] ?? "";
       return input;
     }));
@@ -237,7 +238,7 @@
       const rows = objectForm.elements.tableRows.valueAsNumber;
       const columns = objectForm.elements.tableColumns.valueAsNumber;
       if ([rows, columns].every((value) => Number.isInteger(value) && value >= 1 && value <= tableLimit)) {
-        renderTableFields(rows, columns, readTableFields());
+        renderTableFields(rows, columns, readTableFields(), objectForm.elements.tableColumns.disabled);
       }
     });
   }
@@ -247,6 +248,36 @@
       node.style[key] = value + "%";
     }
     node.style.transform = `rotate(${object.rotation}deg)`;
+  }
+
+  function drawColumnChart(node, cells) {
+    const values = cells.map(([, value]) => Number(value) || 0);
+    const maximum = Math.max(0, ...values);
+    const minimum = Math.min(0, ...values);
+    const scale = Math.max(Math.abs(maximum), Math.abs(minimum)) || 1;
+    const range = maximum / scale - minimum / scale || 1;
+    const zero = -minimum / scale / range * 100;
+    node.style.setProperty("--chart-columns", cells.length);
+    node.style.setProperty("--chart-zero", `${zero}%`);
+    for (const [index, [label, value]] of cells.entries()) {
+      const column = document.createElement("span");
+      column.className = "slide-chart-column";
+      column.title = `${label}: ${value}`;
+      const plot = document.createElement("span");
+      plot.className = "slide-chart-plot";
+      const bar = document.createElement("span");
+      bar.className = "slide-chart-bar";
+      const number = values[index];
+      const height = Math.abs(number / scale) / range * 100;
+      bar.style.height = `${height}%`;
+      bar.style.bottom = `${number < 0 ? zero - height : zero}%`;
+      plot.append(bar);
+      const caption = document.createElement("span");
+      caption.className = "slide-chart-caption";
+      caption.textContent = label;
+      column.append(plot, caption);
+      node.append(column);
+    }
   }
 
   function drawObjects(layer, objects = [], editable = false) {
@@ -271,7 +302,8 @@
             node.append(cell);
           }
         }
-      } else node.textContent = object.text;
+      } else if (object.kind === "chart") drawColumnChart(node, object.cells);
+      else node.textContent = object.text;
       node.style.setProperty("--object-fill", "#" + object.fill);
       placeObject(node, object);
       if (link) {
@@ -443,7 +475,7 @@
     drawObjects(objectLayer, objects, true);
     if (multiple) {
       $("slide-object-selection-count").textContent = `${selectedObjects.size} objects selected`;
-      $("slide-group-objects").hidden = grouped || [...selectedObjects].some((index) => objects[index]?.kind === "table");
+      $("slide-group-objects").hidden = grouped || [...selectedObjects].some((index) => ["table", "chart"].includes(objects[index]?.kind));
       $("slide-ungroup-objects").hidden = !grouped;
       for (const control of document.querySelectorAll("[data-align-objects]")) {
         control.disabled = grouped || (control.dataset.alignObjects.startsWith("distribute") && selectedObjects.size < 3);
@@ -457,14 +489,18 @@
     objectForm.elements.link.setCustomValidity("");
     objectForm.elements.fill.value = "#" + object.fill;
     objectForm.elements.fill.disabled = ["text", "image"].includes(object.kind);
-    const table = object.kind === "table";
-    objectForm.elements.text.closest("label").hidden = table;
-    objectForm.elements.rotation.disabled = table;
-    tableFields.hidden = tableFields.disabled = !table;
-    if (table) {
+    const chart = object.kind === "chart";
+    const hasCells = chart || object.kind === "table";
+    objectForm.elements.text.closest("label").hidden = hasCells;
+    objectForm.elements.rotation.disabled = hasCells;
+    tableFields.hidden = tableFields.disabled = !hasCells;
+    objectForm.elements.tableColumns.closest("label").hidden = chart;
+    objectForm.elements.tableColumns.disabled = chart;
+    if (hasCells) {
+      $("slide-data-legend").textContent = chart ? "Chart data" : "Table cells";
       objectForm.elements.tableRows.value = object.cells.length;
       objectForm.elements.tableColumns.value = object.cells[0].length;
-      renderTableFields(object.cells.length, object.cells[0].length, object.cells);
+      renderTableFields(object.cells.length, object.cells[0].length, object.cells, chart);
     }
     $("slide-object-text-label").textContent = object.kind === "image" ? "Alternative text" : "Text";
     $("slide-object-front").disabled = selectedObject === objects.length - 1;
@@ -550,7 +586,7 @@
     const slide = deck.slides[deck.active];
     const before = [...slide.objects];
     const members = before.filter((_, index) => selectedObjects.has(index));
-    if (members.some((object) => object.group || object.kind === "table")) return;
+    if (members.some((object) => object.group || ["table", "chart"].includes(object.kind))) return;
     const used = new Set(before.map((object) => object.group));
     const group = Array.from({ length: 25 }, (_, index) => index + 1).find((id) => !used.has(id));
     for (const object of members) object.group = group;
@@ -593,12 +629,13 @@
       if (objects.length >= 25) { status("A slide can contain up to 25 objects."); return; }
       const kind = button.dataset.slideObject;
       const [object] = normalizeObjects([{ kind, text: kind === "text" ? "Text box" : "",
-        ...(kind === "table" && { width: 48, height: 22, y: 35 }) }]);
+        ...(kind === "table" && { width: 48, height: 22, y: 35 }),
+        ...(kind === "chart" && { width: 50, height: 40, y: 35, fill: "6450C8" }) }]);
       objects.push(object);
       save();
       selectObject(objects.length - 1);
       button.closest("details").open = false;
-      if (kind === "table") tableCells.querySelector("input")?.focus();
+      if (kind === "table" || kind === "chart") tableCells.querySelector("input")?.focus();
       else objectForm.elements.text.focus();
     });
   }
@@ -648,7 +685,7 @@
       return;
     }
     const object = objects[selectedObject];
-    const previousCells = object.kind === "table" ? readTableFields() : null;
+    const previousCells = ["table", "chart"].includes(object.kind) ? readTableFields() : null;
     const cells = previousCells && Array.from({ length: objectForm.elements.tableRows.valueAsNumber }, (_, row) =>
       Array.from({ length: objectForm.elements.tableColumns.valueAsNumber }, (_, column) => previousCells[row]?.[column] ?? ""));
     [objects[selectedObject]] = normalizeObjects([{ ...object, ...changes, fill: fill.value.slice(1), text: text.value, link: address, cells }]);

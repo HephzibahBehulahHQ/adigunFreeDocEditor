@@ -15,10 +15,13 @@
   const markupCompatibility = "http://schemas.openxmlformats.org/markup-compatibility/2006";
   const slideWidth = 12192000;
   const slideHeight = 6858000;
-  const objectKinds = ["text", "rectangle", "ellipse", "image", "table"];
+  const objectKinds = ["text", "rectangle", "ellipse", "image", "table", "chart"];
   const tableLimit = 8;
   const tableCellLimit = 200;
   const tableUri = "http://schemas.openxmlformats.org/drawingml/2006/table";
+  const chartUri = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+  const officeRelationships = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const packageRelationships = "http://schemas.openxmlformats.org/package/2006/relationships";
   const imagePattern = /^data:image\/(png|jpeg);base64,([a-z0-9+/]+={0,2})$/i;
   const imageLimit = 550 * 1024;
   function imageData(source) {
@@ -51,6 +54,14 @@
     return rows.map((row) => Array.from({ length: columns }, (_, index) =>
       typeof row?.[index] === "string" ? row[index].slice(0, tableCellLimit) : ""));
   }
+  function normalizeChartCells(value) {
+    const rows = Array.isArray(value) && value.length ? value.slice(0, tableLimit) : [["A", "4"], ["B", "7"], ["C", "5"]];
+    return rows.map((row) => {
+      const label = typeof row?.[0] === "string" ? row[0].slice(0, 60) : "";
+      const input = String(row?.[1] ?? "").trim();
+      return [label, input && Number.isFinite(Number(input)) ? String(Number(input)) : ""];
+    });
+  }
 
   function normalizeObjects(value) {
     if (!Array.isArray(value)) return [];
@@ -64,15 +75,16 @@
         y: objectDimension(object.y, 0, 100 - height, Math.min(65, 100 - height)),
         width,
         height,
-        rotation: object.kind === "table" ? 0 : objectDimension(object.rotation, -180, 180, 0),
+        rotation: ["table", "chart"].includes(object.kind) ? 0 : objectDimension(object.rotation, -180, 180, 0),
         text: typeof object.text === "string" ? object.text.slice(0, 500) : "",
         fill: object.kind !== "text" && /^[a-f0-9]{6}$/i.test(object.fill ?? "") ? object.fill.toUpperCase() : "D9D1FC",
       };
       if (object.kind === "image") normalized.src = object.src;
       if (object.kind === "table") normalized.cells = normalizeTableCells(object.cells);
+      if (object.kind === "chart") normalized.cells = normalizeChartCells(object.cells);
       const link = normalizeObjectLink(object.link);
       if (link) normalized.link = link;
-      if (object.kind !== "table" && Number.isInteger(object.group) && object.group >= 1 && object.group <= 25) normalized.group = object.group;
+      if (!["table", "chart"].includes(object.kind) && Number.isInteger(object.group) && object.group >= 1 && object.group <= 25) normalized.group = object.group;
       return normalized;
     });
   }
@@ -127,7 +139,36 @@
       }).join("");
       return `<a:tr h="${heights[rowIndex]}">${cells}</a:tr>`;
     }).join("");
-    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${index + 4}" name="Adigun table ${index + 1}">${link}</p:cNvPr><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${Math.round(slideWidth * object.x / 100)}" y="${Math.round(slideHeight * object.y / 100)}"/><a:ext cx="${width}" cy="${height}"/></p:xfrm><a:graphic><a:graphicData uri="${tableUri}"><a:tbl><a:tblPr/><a:tblGrid>${columns}</a:tblGrid>${rows}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
+    return graphicFrameXml(object, index, link, tableUri, `<a:tbl><a:tblPr/><a:tblGrid>${columns}</a:tblGrid>${rows}</a:tbl>`);
+  }
+
+  function graphicFrameXml(object, index, link, uri, contents) {
+    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${index + 4}" name="Adigun ${object.kind} ${index + 1}">${link}</p:cNvPr><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${Math.round(slideWidth * object.x / 100)}" y="${Math.round(slideHeight * object.y / 100)}"/><a:ext cx="${Math.round(slideWidth * object.width / 100)}" cy="${Math.round(slideHeight * object.height / 100)}"/></p:xfrm><a:graphic><a:graphicData uri="${uri}">${contents}</a:graphicData></a:graphic></p:graphicFrame>`;
+  }
+
+  function chartWorkbook(cells) {
+    const ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+    const rows = [["Category", "Value"], ...cells].map(([category, value], index) => {
+      const row = index + 1;
+      const cell = (col, text) => `<c r="${col}${row}" t="inlineStr"><is><t xml:space="preserve">${xmlText(text)}</t></is></c>`;
+      const second = index === 0 ? cell("B", value) : value ? `<c r="B${row}"><v>${value}</v></c>` : "";
+      return `<row r="${row}">${cell("A", category)}${second}</row>`;
+    }).join("");
+    const files = {
+      "[Content_Types].xml": '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+      "_rels/.rels": `<Relationships xmlns="${packageRelationships}"><Relationship Id="rId1" Type="${officeRelationships}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+      "xl/workbook.xml": `<workbook xmlns="${ns}" xmlns:r="${officeRelationships}"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+      "xl/_rels/workbook.xml.rels": `<Relationships xmlns="${packageRelationships}"><Relationship Id="rId1" Type="${officeRelationships}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+      "xl/worksheets/sheet1.xml": `<worksheet xmlns="${ns}"><sheetData>${rows}</sheetData></worksheet>`,
+    };
+    return window.fflate.zipSync(Object.fromEntries(Object.entries(files).map(([name, value]) => [name, window.fflate.strToU8(value)])));
+  }
+
+  function chartXml(object) {
+    const last = object.cells.length + 1;
+    const cache = (index) => `<c:ptCount val="${object.cells.length}"/>` + object.cells.map((row, position) =>
+      row[index] === "" ? "" : `<c:pt idx="${position}"><c:v>${xmlText(row[index])}</c:v></c:pt>`).join("");
+    return `<c:chartSpace xmlns:c="${chartUri}" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${officeRelationships}"><c:chart><c:plotArea><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:strRef><c:f>Data!$B$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Value</c:v></c:pt></c:strCache></c:strRef></c:tx><c:spPr><a:solidFill><a:srgbClr val="${object.fill}"/></a:solidFill></c:spPr><c:cat><c:strRef><c:f>Data!$A$2:$A$${last}</c:f><c:strCache>${cache(0)}</c:strCache></c:strRef></c:cat><c:val><c:numRef><c:f>Data!$B$2:$B$${last}</c:f><c:numCache><c:formatCode>General</c:formatCode>${cache(1)}</c:numCache></c:numRef></c:val></c:ser><c:gapWidth val="65"/><c:axId val="10"/><c:axId val="20"/></c:barChart><c:catAx><c:axId val="10"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="b"/><c:crossAx val="20"/><c:crosses val="autoZero"/><c:lblOffset val="100"/></c:catAx><c:valAx><c:axId val="20"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="10"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx></c:plotArea><c:dispBlanksAs val="gap"/></c:chart><c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`;
   }
 
   function normalizeTransition(value) {
@@ -279,6 +320,7 @@
     files["ppt/_rels/slideLayouts/slideLayout1.xml.rels"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>';
     files["ppt/theme/theme1.xml"] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="' + ans + '" name="Adigun"><a:themeElements><a:clrScheme name="Adigun"><a:dk1><a:srgbClr val="17233A"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="26334D"/></a:dk2><a:lt2><a:srgbClr val="F4F6FA"/></a:lt2><a:accent1><a:srgbClr val="4F6BED"/></a:accent1><a:accent2><a:srgbClr val="697386"/></a:accent2><a:accent3><a:srgbClr val="6B8E23"/></a:accent3><a:accent4><a:srgbClr val="C0504D"/></a:accent4><a:accent5><a:srgbClr val="8064A2"/></a:accent5><a:accent6><a:srgbClr val="4BACC6"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fontScheme name="Adigun"><a:majorFont><a:latin typeface="Aptos Display"/></a:majorFont><a:minorFont><a:latin typeface="Aptos"/></a:minorFont></a:fontScheme><a:fmtScheme name="Adigun"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>';
     const media = new Set();
+    const chartParts = [];
     for (let i = 0; i < slides.length; i++) {
       const objectRelationships = [];
       const entries = normalizeObjects(slides[i].objects).map((object, index) => ({
@@ -290,6 +332,19 @@
           const id = "rIdLink" + (index + 1);
           objectRelationships.push(`<Relationship Id="${id}" Type="${rns}/hyperlink" Target="${xmlText(object.link).replace(/"/g, "&quot;")}" TargetMode="External"/>`);
           link = `<a:hlinkClick r:id="${id}"/>`;
+        }
+        if (object.kind === "chart") {
+          const id = "rIdChart" + (index + 1);
+          const name = `slide${i + 1}-chart${index + 1}`;
+          const chartPath = `ppt/charts/${name}.xml`;
+          const bookPath = `ppt/embeddings/${name}.xlsx`;
+          files[chartPath] = chartXml(object);
+          files[bookPath] = chartWorkbook(object.cells);
+          files[`ppt/charts/_rels/${name}.xml.rels`] = `<Relationships xmlns="${packageRelationships}"><Relationship Id="rId1" Type="${rns}/package" Target="../embeddings/${name}.xlsx"/></Relationships>`;
+          chartParts.push(`<Override PartName="/${chartPath}" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`,
+            `<Override PartName="/${bookPath}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>`);
+          objectRelationships.push(`<Relationship Id="${id}" Type="${rns}/chart" Target="../charts/${name}.xml"/>`);
+          return graphicFrameXml(object, index, link, chartUri, `<c:chart xmlns:c="${chartUri}" r:id="${id}"/>`);
         }
         if (object.kind === "table") return tableXml(object, index, link);
         if (object.kind !== "image") return objectXml(object, index, slides[i].theme, link);
@@ -323,6 +378,7 @@
       files[path] = files[path].replace("</Relationships>", objectRelationships.join("") + "</Relationships>");
     }
     const overrides = [
+      ...chartParts,
       '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>',
       '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>',
       '<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>',
@@ -379,7 +435,7 @@
     let total = 0;
     const parts = window.fflate.unzipSync(bytes, {
       filter({ name, originalSize }) {
-        if (!/^ppt\/(?:presentation\.xml|_rels\/presentation\.xml\.rels|slides\/(?:[\w.-]+\.xml|_rels\/[\w.-]+\.xml\.rels)|notesSlides\/[\w.-]+\.xml|media\/[\w.-]+\.(?:png|jpe?g))$/i.test(name)) return false;
+        if (!/^ppt\/(?:presentation\.xml|_rels\/presentation\.xml\.rels|slides\/(?:[\w.-]+\.xml|_rels\/[\w.-]+\.xml\.rels)|(?:notesSlides|charts)\/[\w.-]+\.xml|media\/[\w.-]+\.(?:png|jpe?g))$/i.test(name)) return false;
         if (name.startsWith("ppt/media/") && originalSize > imageLimit) return false;
         total += originalSize;
         if (total > 12 * 1024 * 1024) throw new Error("PowerPoint text parts are too large.");
@@ -441,6 +497,37 @@
       const paint = [...(properties?.children ?? [])].find((part) => part.localName === "solidFill");
       const fill = paint?.getElementsByTagNameNS("*", "srgbClr")[0]?.getAttribute("val");
       return { ...readObjectTransform(frame), kind: "table", cells: cells.map((row) => row.map(paragraphs)), fill };
+    }
+    function readChart(frame, relationships) {
+      const graphic = frame.getElementsByTagNameNS("*", "graphicData")[0];
+      if (graphic?.getAttribute("uri") !== chartUri) return null;
+      const id = graphic.getElementsByTagNameNS(chartUri, "chart")[0]?.getAttributeNS(officeNs, "id");
+      const part = relationships.find((item) => item.getAttribute("Id") === id &&
+        item.getAttribute("Type")?.endsWith("/chart") && item.getAttribute("TargetMode") !== "External");
+      const match = /^(?:\.\.\/|\/ppt\/)charts\/([\w.-]+\.xml)$/.exec(part?.getAttribute("Target") ?? "");
+      const path = match && `ppt/charts/${match[1]}`;
+      if (!path || !Object.hasOwn(parts, path)) return null;
+      const chart = parse(path).getElementsByTagNameNS(chartUri, "barChart")[0];
+      const series = chart?.getElementsByTagNameNS(chartUri, "ser");
+      if (series?.length !== 1 || chart.getElementsByTagNameNS(chartUri, "barDir")[0]?.getAttribute("val") !== "col") return null;
+      const cache = (node, kinds) => {
+        const reference = series[0].getElementsByTagNameNS(chartUri, node)[0];
+        const data = kinds.map((kind) => reference?.getElementsByTagNameNS(chartUri, kind)[0]).find(Boolean);
+        const count = Number(data?.getElementsByTagNameNS(chartUri, "ptCount")[0]?.getAttribute("val"));
+        if (!Number.isInteger(count) || count < 1 || count > tableLimit) return null;
+        const values = Array(count).fill("");
+        for (const point of data.getElementsByTagNameNS(chartUri, "pt")) {
+          const index = Number(point.getAttribute("idx"));
+          if (Number.isInteger(index) && index >= 0 && index < count) values[index] = point.getElementsByTagNameNS(chartUri, "v")[0]?.textContent ?? "";
+        }
+        return values;
+      };
+      const labels = cache("cat", ["strCache", "strLit", "numCache", "numLit"]);
+      const values = cache("val", ["numCache", "numLit"]);
+      if (!labels || !values || labels.length !== values.length) return null;
+      const fill = series[0].getElementsByTagNameNS(chartUri, "spPr")[0]?.getElementsByTagNameNS("*", "solidFill")[0]
+        ?.getElementsByTagNameNS("*", "srgbClr")[0]?.getAttribute("val");
+      return { ...readObjectTransform(frame), kind: "chart", cells: labels.map((label, index) => [label, values[index]]), fill };
     }
     function pictures(slide, relationships) {
       const images = new Map(relationships.filter((part) =>
@@ -513,8 +600,8 @@
       }
       const shapes = [...slide.getElementsByTagName("*")].flatMap((shape) => {
         if (shape.localName === "graphicFrame") {
-          const table = readTable(shape);
-          if (table) restoreObject(shape, table);
+          const graphic = readTable(shape) || readChart(shape, slideRelationships);
+          if (graphic) restoreObject(shape, graphic);
           return [];
         }
         if (shape.localName === "pic") {

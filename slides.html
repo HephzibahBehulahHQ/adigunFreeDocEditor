@@ -42,6 +42,7 @@
         <button type="button" data-slide-object="rectangle">Rectangle</button>
         <button type="button" data-slide-object="ellipse">Ellipse</button>
         <button type="button" data-slide-object="table">Table</button>
+        <button type="button" data-slide-object="chart">Column chart</button>
         <button id="slide-image-open" type="button">Picture from device</button>
       </div></details>
       <details name="slide-commands" class="command-menu"><summary>Slide Show</summary><div>
@@ -86,7 +87,7 @@
           <p>Shift-click or Shift+Enter to select multiple objects.</p>
           <label><span id="slide-object-text-label">Text</span><textarea name="text" rows="3" maxlength="500"></textarea></label>
           <fieldset id="slide-table-fields" hidden>
-            <legend>Table cells</legend>
+            <legend id="slide-data-legend">Table cells</legend>
             <label>Rows <input name="tableRows" type="number" min="1" max="8" required></label>
             <label>Columns <input name="tableColumns" type="number" min="1" max="8" required></label>
             <div id="slide-table-cells"></div>

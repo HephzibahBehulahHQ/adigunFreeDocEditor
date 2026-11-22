@@ -550,6 +550,12 @@ a.slide-object:hover,a.slide-object:focus-visible{outline:2px solid var(--blue);
 .slide-object-table{grid-template-columns:repeat(var(--table-columns),minmax(0,1fr));grid-template-rows:repeat(var(--table-rows),minmax(0,1fr));place-items:stretch;padding:0;gap:1px;background:#b7c0d1;border:1px solid #b7c0d1}
 .slide-object-table>span{display:grid;place-items:center;padding:2px;overflow:hidden;background:#fff;font-size:clamp(9px,1vw,15px)}
 .slide-object-table>.slide-table-header{background:var(--object-fill)}
+.slide-object-chart{grid-template-columns:repeat(var(--chart-columns),minmax(0,1fr));place-items:stretch;gap:4px;background:#fff;border:1px solid #b7c0d1;padding:7px}
+.slide-chart-column{min-width:0;display:grid;grid-template-rows:minmax(0,1fr) auto}
+.slide-chart-plot{position:relative;display:block;border-bottom:1px solid #d9dfeb}
+.slide-chart-plot::after{content:"";position:absolute;inset:auto 0 var(--chart-zero);border-top:1px solid #8c98ae}
+.slide-chart-bar{position:absolute;left:18%;right:18%;background:var(--object-fill)}
+.slide-chart-caption{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:clamp(9px,1.1vw,14px)}
 #slide-table-fields{min-width:0;margin:0 0 8px;padding:8px;border:1px solid var(--line)}
 #slide-table-cells{display:grid;grid-template-columns:repeat(var(--table-columns),minmax(64px,1fr));gap:4px;overflow:auto}
 #slide-table-cells input{width:100%;min-width:0}
