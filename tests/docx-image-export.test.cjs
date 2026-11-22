@@ -109,10 +109,21 @@ const { makeWordPackage, makeStoredZip, setPageNumbers, setHeaderFooter } = fact
 const result = makeWordPackage(root);
 assert.deepEqual(result.unsupported, []);
 const footnote = exportElement("SPAN", [], { "data-footnote-text": "Check A & B" });
-const notePackage = makeWordPackage(exportElement("DIV", [paragraph(footnote)])).files;
+const endnote = exportElement("SPAN", [], { "data-footnote-text": "See appendix\nSecond line", "data-footnote-kind": "endnote" });
+const notePackage = makeWordPackage(exportElement("DIV", [paragraph(footnote), paragraph(endnote)])).files;
 assert.match(notePackage["word/document.xml"], /<w:footnoteReference w:id="1"\/>/);
 assert.match(notePackage["word/footnotes.xml"], /Check A &amp; B/);
 assert.match(notePackage["word/_rels/document.xml.rels"], /relationships\/footnotes" Target="footnotes.xml"/);
+assert.match(notePackage["word/document.xml"], /<w:endnoteReference w:id="1"\/>/);
+assert.match(notePackage["word/document.xml"], /<w:endnotePr><w:numFmt w:val="lowerRoman"\/><\/w:endnotePr>/);
+assert.match(notePackage["word/endnotes.xml"], /See appendix<\/w:t><w:br\/><w:t xml:space="preserve">Second line/);
+assert.match(notePackage["word/_rels/document.xml.rels"], /relationships\/endnotes" Target="endnotes.xml"/);
+assert.match(notePackage["[Content_Types].xml"], /footnotes\.xml[\s\S]+endnotes\.xml/);
+const recoverNotes = new Function("DOMParser", source.slice(source.indexOf("  function recoverWordNotes("), sanitizerStart) +
+  "\nreturn recoverWordNotes;")(importDom.window.DOMParser);
+const importedNote = sanitizeDocxHtml(recoverNotes('<p>Reference<sup><a href="#endnote-1">[1]</a></sup></p>' +
+  '<ol><li id="endnote-1"><p>See appendix<br>Second line<a href="#endnote-ref-1">↑</a></p></li></ol>')).html;
+assert.match(importedNote, /data-footnote-text="See appendix\nSecond line" data-footnote-kind="endnote"/);
 const headingDocumentXml = result.files["word/document.xml"];
 const headingStylesXml = result.files["word/styles.xml"];
 for (const level of [4, 5, 6]) {

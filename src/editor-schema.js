@@ -240,13 +240,18 @@ const Footnote = Node.create({
   group: "inline",
   atom: true,
   addAttributes() {
-    return { text: { default: "", rendered: false } };
+    return { text: { default: "", rendered: false }, kind: { default: "footnote", rendered: false } };
   },
   parseHTML() {
-    return [{ tag: "span[data-footnote-text]", getAttrs: (element) => ({ text: element.getAttribute("data-footnote-text").trim().slice(0, 2000) }) }];
+    return [{ tag: "span[data-footnote-text]", getAttrs: (element) => ({
+      text: element.getAttribute("data-footnote-text").trim().slice(0, 2000),
+      kind: element.dataset.footnoteKind === "endnote" ? "endnote" : "footnote",
+    }) }];
   },
   renderHTML({ node }) {
-    return ["span", { "data-footnote-text": node.attrs.text, title: node.attrs.text, "aria-label": "Edit footnote", role: "button", tabindex: "0" }];
+    const endnote = node.attrs.kind === "endnote";
+    return ["span", { "data-footnote-text": node.attrs.text, ...(endnote && { "data-footnote-kind": "endnote" }),
+      title: node.attrs.text, "aria-label": endnote ? "Edit endnote" : "Edit footnote", role: "button", tabindex: "0" }];
   },
 });
 
@@ -352,7 +357,7 @@ function modelNodeToEditor(node, marks = []) {
   if (node?.type !== "element") return [];
   const { tag, attrs = {}, children = [] } = node;
   if (tag === "span" && attrs["data-footnote-text"]) {
-    return [{ type: "footnote", attrs: { text: attrs["data-footnote-text"] } }];
+    return [{ type: "footnote", attrs: { text: attrs["data-footnote-text"], kind: attrs["data-footnote-kind"] } }];
   }
   const inlineMark = inlineMarkForTag(tag, attrs);
   if (inlineMark) return childrenToEditor(children, mergeMark(marks, inlineMark));
@@ -453,7 +458,9 @@ function editorNodeToModel(node) {
     ["src", node.attrs.src], ["alt", node.attrs.alt], ["width", node.attrs.width], ["height", node.attrs.height],
   ].filter(([, value]) => value !== null && value !== undefined && value !== "")), children: [] };
   if (node.type === "hardBreak") return { type: "element", tag: "br", attrs: {}, children: [] };
-  if (node.type === "footnote") return { type: "element", tag: "span", attrs: { "data-footnote-text": node.attrs.text }, children: [] };
+  if (node.type === "footnote") return { type: "element", tag: "span", attrs: {
+    "data-footnote-text": node.attrs.text, ...(node.attrs.kind === "endnote" && { "data-footnote-kind": "endnote" }),
+  }, children: [] };
   if (node.type === "horizontalRule") return { type: "element", tag: "hr", attrs: node.attrs.pageBreak ? { "data-page-break": "true" } : {}, children: [] };
 
   const children = (node.content || []).map(editorNodeToModel);

@@ -113,6 +113,7 @@
               </div>
               <article class="document-page" id="document" contenteditable="true" role="textbox" aria-label="Document content" aria-multiline="true" spellcheck="true"><p><br /></p></article>
               <section id="print-footnotes" class="print-footnotes" aria-labelledby="print-footnote-title" hidden><h2 id="print-footnote-title">Footnotes</h2><ol></ol></section>
+              <section id="print-endnotes" class="print-footnotes" aria-labelledby="print-endnote-title" hidden><h2 id="print-endnote-title">Endnotes</h2><ol type="i"></ol></section>
               <footer class="page-footer"><span class="document-stats" aria-label="Document statistics"><span id="current-page-indicator" hidden></span><span id="word-count">0 words</span><span id="selection-word-count" title="Selected words" hidden></span><span id="character-count">0 characters</span></span><span class="page-footer-right"><button class="language-indicator" id="spellcheck-language-indicator" type="button" title="Spellcheck language: English" aria-label="Spellcheck language: English. Open settings.">English</button><span class="footer-divider"></span><button class="zoom-button zoom-fit" id="zoom-fit" type="button" aria-label="Fit document to width" title="Fit document to width">Fit</button><button class="zoom-button" id="zoom-out" type="button" aria-label="Zoom out">−</button><output id="zoom-value" aria-live="polite" aria-atomic="true">100%</output><button class="zoom-button" id="zoom-in" type="button" aria-label="Zoom in">＋</button></span></footer>
               <section class="conversion-workspace" id="conversion-workspace" aria-labelledby="conversion-title" hidden>
                 <header class="conversion-heading"><span class="eyebrow">FILE TOOLS</span><h2 id="conversion-title">Convert File</h2><p>Select a source document and choose a compatible output format. Unsupported formats remain disabled until their converters are ready.</p></header>
@@ -362,7 +363,7 @@
       <form>
         <label>Note text <textarea name="text" maxlength="2000" rows="5" required></textarea></label>
         <div class="slides-actions">
-          <button class="button button-outline" type="submit">Save footnote</button>
+          <button id="footnote-save" class="button button-outline" type="submit">Save footnote</button>
           <button id="footnote-remove" class="button button-outline" type="button" hidden>Remove footnote</button>
           <button id="footnote-cancel" class="button button-outline" type="button">Cancel</button>
         </div>
