@@ -92,6 +92,16 @@ try {
   const [tableSlide] = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(tableParts), dom.window.DOMParser);
   assert.deepEqual(JSON.parse(JSON.stringify(tableSlide.objects[0].cells)), tableCells);
   assert.equal(tableSlide.objects[0].fill, "D9D1FC");
+  const chartCells = [["North & West", "12"], ["South", "-4"], ["East", ""]];
+  const chartParts = window.AdigunPresentation.createParts([{ title: "Chart", lines: [], objects: [
+    { kind: "chart", cells: chartCells },
+  ] }]);
+  const chart = window.fflate.strFromU8(chartParts["ppt/charts/slide1-chart1.xml"]);
+  assert.match(chart, /<c:barDir val="col"\/>/);
+  assert.match(chart, /<c:externalData r:id="rId1">/);
+  assert.ok(chartParts["ppt/embeddings/slide1-chart1.xlsx"]);
+  const [chartSlide] = window.AdigunPresentation.importTextSlides(window.fflate.zipSync(chartParts), dom.window.DOMParser);
+  assert.deepEqual(JSON.parse(JSON.stringify(chartSlide.objects[0].cells)), chartCells);
 } finally {
   dom.window.close();
 }
