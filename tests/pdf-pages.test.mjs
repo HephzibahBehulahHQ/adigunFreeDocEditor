@@ -31,6 +31,21 @@ addPdfComments(reopenedInk, editable, pdf);
 assert.equal(ink.lookup(pdf.PDFName.of("Contents"), pdf.PDFHexString).decodeText(), "Updated: résumé");
 assert.equal(ink.lookup(pdf.PDFName.of("AP"), pdf.PDFDict).get(pdf.PDFName.of("N")), originalAppearance);
 assert.equal(reopenedInk.getPage(0).node.Annots().size(), 2);
+const pageWithReplies = reopenedInk.getPage(0);
+const inkReference = pageWithReplies.node.Annots().get(0);
+const popup = reopenedInk.context.register(reopenedInk.context.obj({ Subtype: "Popup", Parent: inkReference }));
+pageWithReplies.node.addAnnot(popup);
+const threaded = reopenedInk.context.register(reopenedInk.context.obj({ Subtype: "Text", Contents: pdf.PDFHexString.fromText("Parent") }));
+pageWithReplies.node.addAnnot(threaded);
+const reply = reopenedInk.context.register(reopenedInk.context.obj({ Subtype: "Text", IRT: threaded }));
+pageWithReplies.node.addAnnot(reply);
+const currentComments = readPdfComments(reopenedInk, pdf);
+assert.deepEqual(currentComments.map((comment) => comment.original.removable), [true, false, false]);
+assert.throws(() => addPdfComments(reopenedInk, [{ ...currentComments[1], removed: true }], pdf), /threaded/);
+addPdfComments(reopenedInk, [{ ...currentComments[0], removed: true }], pdf);
+assert.deepEqual(Array.from({ length: pageWithReplies.node.Annots().size() }, (_, index) => pageWithReplies.node.Annots().get(index)),
+  [pageWithReplies.node.Annots().get(0), threaded, reply]);
+assert.equal(pageWithReplies.node.Annots().lookup(0), stamp);
 
 const margins = { left: 10, top: 20, right: 30, bottom: 25 };
 assert.deepEqual(cropBoxFromMargins({

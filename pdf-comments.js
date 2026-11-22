@@ -33,21 +33,46 @@ function editableComment(annotation, { PDFName, PDFNumber }) {
     !annotation.has(PDFName.of("RC"));
 }
 
+function replyParents(slots, { PDFDict, PDFName }) {
+  return new Set(slots.filter((annotation) => annotation instanceof PDFDict)
+    .map((annotation) => annotation.lookup(PDFName.of("IRT"))).filter(Boolean));
+}
+
+function removalSlots(annotations, targets, lib) {
+  const { PDFDict, PDFName } = lib;
+  const slots = Array.from({ length: annotations.size() }, (_, index) => annotations.lookup(index));
+  const replies = replyParents(slots, lib);
+  const removals = new Set();
+  for (const index of targets) {
+    const mark = slots[index];
+    if (mark.has(PDFName.of("IRT")) || replies.has(mark)) return null;
+    removals.add(index);
+    const popup = mark.lookup(PDFName.of("Popup"));
+    for (const [position, annotation] of slots.entries()) {
+      if (!(annotation instanceof PDFDict) || annotation.get(PDFName.of("Subtype"))?.toString() !== "/Popup") continue;
+      if (annotation === popup || annotation.lookup(PDFName.of("Parent")) === mark) removals.add(position);
+    }
+  }
+  return removals;
+}
+
 export function readPdfComments(pdf, lib) {
   const { PDFName, PDFDict, PDFHexString, PDFString } = lib;
   const kinds = new Map(Object.entries(markTypes).map(([kind, type]) => ["/" + type.subtype, kind]));
   return pdf.getPages().flatMap((page, pageIndex) => {
     const annotations = page.node.Annots();
+    const slots = Array.from({ length: annotations?.size() ?? 0 }, (_, index) => annotations.lookup(index));
+    const replies = replyParents(slots, lib);
     const result = [];
-    for (let index = 0; index < (annotations?.size() ?? 0); index++) {
-      const annotation = annotations.lookup(index);
+    for (const [index, annotation] of slots.entries()) {
       if (!(annotation instanceof PDFDict) || !editableComment(annotation, lib)) continue;
       const subtype = annotation.get(PDFName.of("Subtype"))?.toString();
       const kind = kinds.get(subtype);
       if (!kind) continue;
       const contents = annotation.get(PDFName.of("Contents"));
       const text = contents instanceof PDFHexString || contents instanceof PDFString ? contents.decodeText() : "";
-      result.push({ pageIndex, kind, text, original: { index, subtype, text } });
+      const removable = !annotation.has(PDFName.of("IRT")) && !replies.has(annotation);
+      result.push({ pageIndex, kind, text, original: { index, subtype, text, removable } });
     }
     return result;
   });
@@ -55,14 +80,19 @@ export function readPdfComments(pdf, lib) {
 
 export function addPdfComments(pdf, entries, lib) {
   const { PDFName, PDFHexString, PDFDict } = lib;
+  const removals = new Map();
   for (const entry of entries) {
     const page = pdf.getPage(entry.pageIndex);
     if (entry.original) {
-      if (entry.text === entry.original.text) continue;
+      if (!entry.removed && entry.text === entry.original.text) continue;
       const annotation = page.node.Annots()?.lookup(entry.original.index);
       if (!(annotation instanceof PDFDict) || annotation.get(PDFName.of("Subtype"))?.toString() !== entry.original.subtype ||
           !editableComment(annotation, lib)) throw new Error("An original PDF comment could not be matched.");
-      annotation.set(PDFName.of("Contents"), PDFHexString.fromText(entry.text));
+      if (entry.removed) {
+        const indexes = removals.get(page.node.Annots()) ?? [];
+        indexes.push(entry.original.index);
+        removals.set(page.node.Annots(), indexes);
+      } else annotation.set(PDFName.of("Contents"), PDFHexString.fromText(entry.text));
       continue;
     }
     const type = markTypes[entry.kind];
@@ -100,6 +130,11 @@ export function addPdfComments(pdf, entries, lib) {
     const annotation = pdf.context.obj(properties);
     page.node.addAnnot(pdf.context.register(annotation));
   }
+  for (const [annotations, indexes] of removals) {
+    const slots = removalSlots(annotations, indexes, lib);
+    if (!slots) throw new Error("A threaded annotation cannot be removed.");
+    for (const index of [...slots].sort((left, right) => right - left)) annotations.remove(index);
+  }
 }
 
 export function bindPdfComments(sources, preview) {
@@ -125,9 +160,9 @@ export function bindPdfComments(sources, preview) {
   const discard = () => !(draft || text.value.trim()) || window.confirm("Discard unsaved PDF comments?");
 
   function enableControls() {
-    for (const control of [...allControls, ...list.querySelectorAll("textarea, button")]) control.disabled = busy;
+    for (const control of [...allControls, ...list.querySelectorAll("textarea, button")]) control.disabled = busy || control.hasAttribute("data-removed");
     add.disabled = busy || !viewport;
-    download.disabled = busy || !entries.some((entry) => !entry.original || entry.text !== entry.original.text);
+    download.disabled = busy || !entries.some((entry) => !entry.original || entry.removed || entry.text !== entry.original.text);
     updateKind();
   }
 
@@ -236,6 +271,14 @@ export function bindPdfComments(sources, preview) {
       label.append(field);
       if (entry.original) {
         item.append(label);
+        if (entry.original.removable) {
+          field.toggleAttribute("data-removed", Boolean(entry.removed));
+          remove.type = "button";
+          remove.className = "button button-outline";
+          remove.textContent = entry.removed ? "Restore mark" : "Remove in copy";
+          remove.addEventListener("click", () => void toggleRemoval(entry, index));
+          item.append(remove);
+        }
         return item;
       }
       remove.type = "button";
@@ -252,6 +295,39 @@ export function bindPdfComments(sources, preview) {
       return item;
     }));
     enableControls();
+  }
+
+  async function toggleRemoval(entry, index) {
+    if (busy) return;
+    busy = true;
+    entry.removed = !entry.removed;
+    renderEntries();
+    let previewTask;
+    try {
+      const lib = window.PDFLib;
+      let bytes = new Uint8Array(await sources[source.value].file.arrayBuffer());
+      const removed = entries.filter((item) => item.removed);
+      if (removed.length) {
+        const output = await lib.PDFDocument.load(bytes, { updateMetadata: false });
+        addPdfComments(output, removed, lib);
+        bytes = await output.save({ updateFieldAppearances: false });
+      }
+      previewTask = openPdfRaster(bytes);
+      const rasterDocument = await previewTask.promise;
+      void task?.destroy().catch(() => {});
+      task = previewTask;
+      raster = rasterDocument;
+      draft = true;
+      await draw();
+    } catch (error) {
+      void previewTask?.destroy().catch(() => {});
+      entry.removed = !entry.removed;
+      status.textContent = error.message || "Could not update the annotation preview.";
+    } finally {
+      busy = false;
+      renderEntries();
+      list.children[index]?.querySelector("button")?.focus();
+    }
   }
 
   async function load() {
