@@ -1096,6 +1096,8 @@ $("sheet-selected").addEventListener("keydown", (event) => {
     status("Enter a visible cell, range, or named range.");
     return;
   }
+  selectedAddress = first;
+  cellCaretMode = false;
   revealField(first)?.focus();
   selectRange(first, last);
 });
