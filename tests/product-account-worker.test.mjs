@@ -42,6 +42,7 @@ test("product registration and every sign-in require email OTP before releasing 
     if (url.pathname === "/auth/v1/otp") {
       assert.equal(payload.email, email);
       assert.equal(payload.create_user, !account);
+      assert.equal(url.searchParams.get("redirect_to"), origin);
       sent++;
       return Response.json({});
     }
@@ -177,3 +178,4 @@ test("guest cookies retain one immutable four-minute deadline without Supabase",
     clock.mock.restore();
   }
 });
+
