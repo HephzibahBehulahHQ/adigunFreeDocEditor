@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { draftUrl, validateDraft } from "../ai-draft-model.js";
+import { draftUrl, validateAssistantAnswer, validateDraft } from "../ai-draft-model.js";
 import { createRelay } from "../scripts/ai-relay.mjs";
 
 const origin = "https://example.test";
@@ -12,11 +12,12 @@ const relay = createRelay({
   model: "test-model",
   accessToken: token,
   providerKey: "test-provider-key",
-  limitPerMinute: 3,
+  limitPerMinute: 4,
   async fetchProvider(url, options) {
     upstreamRequests.push({ url: url.href, body: JSON.parse(options.body), headers: options.headers });
+    const assistant = JSON.parse(options.body).messages[0].content.includes("You are Adigun BOT");
     return new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({ title: "Review draft", slides: [{ title: "Overview", content: "Editable text" }] }) } }],
+      choices: [{ message: { content: JSON.stringify(assistant ? { answer: "Use the File menu to start." } : { title: "Review draft", slides: [{ title: "Overview", content: "Editable text" }] }) } }],
     }), { headers: { "Content-Type": "application/json" } });
   },
 });
@@ -41,9 +42,19 @@ try {
   assert.equal(upstreamRequests[0].body.messages.at(-1).content, input.prompt);
   assert.equal(upstreamRequests[0].headers.Authorization, "Bearer test-provider-key");
   assert.equal((await send({ ...input, kind: "document" })).status, 502, "an invalid provider draft cannot enter the editor workflow");
+  const chatText = "Where do I create a document?";
+  const chat = await send({ kind: "assistant", consent: true, messages: [{ role: "user", content: chatText }] });
+  assert.equal(chat.status, 200);
+  assert.deepEqual(await chat.json(), { answer: "Use the File menu to start." });
+  const chatMessages = upstreamRequests.at(-1).body.messages;
+  assert.match(chatMessages[0].content, /Adigun FreeDocEditor/);
+  assert.match(chatMessages[0].content, /cannot see browser tabs, open documents, local files/);
+  assert.equal(chatMessages.at(-1).content, chatText);
+  assert.equal(upstreamRequests.at(-1).body.max_completion_tokens, 1200);
   assert.equal((await send(input)).status, 429, "the relay bounds provider requests");
   assert.throws(() => draftUrl("http://untrusted.example/draft"), /HTTPS/);
   assert.throws(() => validateDraft("slides", { title: "", slides: [] }), /valid draft/);
+  assert.deepEqual(validateAssistantAnswer({ answer: "A concise response." }), { answer: "A concise response." });
 } finally {
   await new Promise((resolve, reject) => relay.close((error) => error ? reject(error) : resolve()));
 }

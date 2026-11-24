@@ -36,6 +36,8 @@ jobs:
       - name: Verify product account Worker and preview assets
         run: |
           node --test tests/product-account-worker.test.mjs
+          node --test tests/product-bot.test.mjs tests/assistant-chat.test.mjs
+          node --check cloudflare/product-bot.mjs
           npm run build:pdf
           npm run build:ocr
           node scripts/stage-account-preview.mjs

@@ -4,7 +4,7 @@ const root = new URL("../", import.meta.url);
 const output = new URL("../.wrangler/account-assets/", import.meta.url);
 const pages = ["index.html", "sheets.html", "slides.html", "pdf.html", "ai.html"];
 const assets = [
-  ...pages, "styles.css", "app.js", "document-model.js", "editor-runtime.js",
+  ...pages, "styles.css", "app.js", "assistant-chat.js", "assistant-chat.css", "document-model.js", "editor-runtime.js",
   "sheets.js", "sheet-model.js", "sheet-xlsx.js", "sheet-chart-xlsx.js",
   "sheet-print.js", "sheet-pivot-xlsx.js", "sheet-notes-xlsx.js", "slides.js",
   "presentation-package.js", "ai-draft.js", "ai-draft-model.js", "pdf-workspace.js",
@@ -37,8 +37,8 @@ for (const page of pages) {
     throw new Error("Cannot attach account controls to " + page);
   }
   await writeFile(target, html
-    .replace("</head>", '<link rel="stylesheet" href="./product-account-ui.css">\n</head>')
-    .replace("</body>", '<script type="module" src="./product-account-ui.mjs"></script>\n</body>'));
+    .replace("</head>", '<link rel="stylesheet" href="./product-account-ui.css">\n<link rel="stylesheet" href="./assistant-chat.css">\n</head>')
+    .replace("</body>", '<script type="module" src="./product-account-ui.mjs"></script>\n<script type="module" src="./assistant-chat.js"></script>\n</body>'));
 }
 for (const asset of ["product-account-ui.mjs", "product-account-ui.css"]) {
   await copyFile(new URL("cloudflare/" + asset, root), new URL(asset, output));

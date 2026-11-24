@@ -1,0 +1,40 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { JSDOM } from "jsdom";
+
+const html = "<!doctype html><body><main>PRIVATE OPEN DOCUMENT CONTENT</main></body>";
+const dom = new JSDOM(html, { url: "https://freedoc.example.test/", runScripts: "outside-only" });
+const { window } = dom;
+let request;
+window.fetch = async (url, options) => {
+  request = { url, options, body: JSON.parse(options.body) };
+  return { ok: true, json: async () => ({ answer: "Use File → New document." }) };
+};
+window.eval(await readFile(new URL("../assistant-chat.js", import.meta.url), "utf8"));
+
+const launcher = window.document.querySelector(".fd-bot-launcher");
+const panel = window.document.querySelector(".fd-bot-panel");
+assert.equal(launcher.textContent, "Open Adigun BOT");
+assert.equal(panel.hidden, true);
+launcher.click();
+assert.equal(panel.hidden, false);
+assert.equal(panel.querySelectorAll("input[type=url], input[type=password]").length, 0, "public users do not configure relay endpoints or credentials");
+const consent = panel.querySelector("input[type=checkbox]:not(.fd-bot-save input)");
+const question = panel.querySelector("textarea");
+const form = panel.querySelector("form");
+question.value = "How do I start a document?";
+form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(request, undefined, "the assistant sends nothing without per-send consent");
+consent.checked = true;
+form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(request.url.href, "https://freedoc.example.test/api/bot");
+assert.equal(request.body.consent, true);
+assert.equal(request.body.language, "en");
+assert.deepEqual(request.body.messages, [{ role: "user", content: "How do I start a document?" }]);
+assert.equal(JSON.stringify(request.body).includes("PRIVATE OPEN DOCUMENT CONTENT"), false);
+assert.equal(consent.checked, false, "consent resets after each send");
+assert.equal(panel.querySelector(".fd-bot-reply").textContent, "Use File → New document.");
+window.close();
+console.log("Floating bot requires per-message consent and sends only explicitly typed chat text.");
