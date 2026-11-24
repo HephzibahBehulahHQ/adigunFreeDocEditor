@@ -128,7 +128,7 @@ async function begin(body, env, origin) {
   const sent = await provider(env, "/auth/v1/otp", {
     email,
     create_user: mode === "register",
-  });
+  }, { redirectTo: origin });
   if (sent.status === 429) return reply(429, { error: "wait-and-retry" });
   if (!sent.ok) {
     const detail = await sent.json().catch(() => null);
@@ -222,14 +222,16 @@ async function verify(body, request, env, origin) {
   ]);
 }
 
-function provider(env, path, data, token, schema) {
+function provider(env, path, data, { token, schema, redirectTo } = {}) {
+  const url = new URL(path, env.SUPABASE_URL);
+  if (redirectTo) url.searchParams.set("redirect_to", redirectTo);
   const headers = {
     apikey: env.SUPABASE_PUBLISHABLE_KEY,
     "Content-Type": "application/json",
   };
   if (token) headers.Authorization = "Bearer " + token;
   if (schema) headers["Content-Profile"] = schema;
-  return fetch(new URL(path, env.SUPABASE_URL), {
+  return fetch(url, {
     method: "POST",
     headers,
     body: JSON.stringify(data),
@@ -245,8 +247,7 @@ async function rpc(env, name, data, token) {
     env,
     "/rest/v1/rpc/" + name.replace(/^adigunfreedoceditor/, prefix),
     { ...data, worker_proof: env.ACCOUNT_RPC_PROOF },
-    token,
-    "public",
+    { token, schema: "public" },
   );
   if (!response.ok) throw new Error("Account authorization unavailable");
   const allowed = await response.json();
@@ -326,3 +327,4 @@ async function open(env, value) {
     return null;
   }
 }
+
