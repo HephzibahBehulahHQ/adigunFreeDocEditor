@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { draftUrl, validateDraft } from "../ai-draft-model.js";
+import { draftUrl, validateAssistantAnswer, validateDraft } from "../ai-draft-model.js";
 
 async function readJson(stream, limit) {
   const chunks = [];
@@ -54,28 +54,59 @@ export function createRelay({ origin, upstream, model, accessToken, providerKey,
       let input;
       try { input = await readJson(request, 12_000); }
       catch { send(400, { error: "The draft request is invalid or too large." }); return; }
-      if (!["document", "slides"].includes(input?.kind) || typeof input.prompt !== "string" || !input.prompt.trim() || input.prompt.length > 2000 || input.consent !== true) {
-        send(400, { error: "Provide an approved document or slide prompt of up to 2,000 characters." });
+      if (!["document", "slides", "assistant"].includes(input?.kind) || input.consent !== true) {
+        send(400, { error: "Provide an approved document, slide, or assistant request." });
         return;
       }
-      const system = input.kind === "slides"
-        ? 'Draft a concise presentation from the user request. Return JSON only in the form {"title":"…","slides":[{"title":"…","content":"…"}]}. Use 1–8 slides, titles up to 100 characters, and body text up to 1,500 characters per slide.'
-        : 'Draft a useful editable document from the user request. Return JSON only in the form {"title":"…","content":"…"}. Use a title up to 100 characters and content up to 8,000 characters.';
+      let messages;
+      let maxCompletionTokens = 3200;
+      if (input.kind === "assistant") {
+        if (!Array.isArray(input.messages) || !input.messages.length || input.messages.length > 8) {
+          send(400, { error: "Provide up to eight approved assistant messages." });
+          return;
+        }
+        messages = input.messages
+          .filter((item) => ["user", "assistant"].includes(item?.role) && typeof item.content === "string")
+          .map((item) => ({ role: item.role, content: item.content.trim().slice(0, 1_500) }))
+          .filter((item) => item.content);
+        const total = messages.reduce((size, item) => size + item.content.length, 0);
+        if (!messages.length || messages.at(-1).role !== "user" || total > 8_000 || messages.length !== input.messages.length) {
+          send(400, { error: "The approved assistant conversation is invalid or too large." });
+          return;
+        }
+        maxCompletionTokens = 1200;
+      } else {
+        if (typeof input.prompt !== "string" || !input.prompt.trim() || input.prompt.length > 2000) {
+          send(400, { error: "Provide an approved document or slide prompt of up to 2,000 characters." });
+          return;
+        }
+        messages = [{ role: "user", content: input.prompt.trim() }];
+      }
+      const system = input.kind === "assistant"
+        ? 'You are Adigun BOT, the copilot for Adigun FreeDocEditor. Answer concise questions about using this product, document and slide workflows, and general writing tasks. You only receive the messages explicitly submitted by the user; you cannot see browser tabs, open documents, local files, account data, or saved work unless the user includes text in a submitted message. Never claim to have read, edited, saved, or verified a document. Do not execute actions. Return JSON only in the form {"answer":"…"}, with an answer up to 4,000 characters.'
+        : input.kind === "slides"
+          ? 'Draft a concise presentation from the user request. Return JSON only in the form {"title":"…","slides":[{"title":"…","content":"…"}]}. Use 1–8 slides, titles up to 100 characters, and body text up to 1,500 characters per slide.'
+          : 'Draft a useful editable document from the user request. Return JSON only in the form {"title":"…","content":"…"}. Use a title up to 100 characters and content up to 8,000 characters.';
       const upstreamResponse = await fetchProvider(providerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(providerKey ? { Authorization: "Bearer " + providerKey } : {}) },
         body: JSON.stringify({
           model,
-          messages: [{ role: "system", content: system }, { role: "user", content: input.prompt.trim() }],
-          max_completion_tokens: 3200,
+          messages: [{ role: "system", content: system }, ...messages],
+          max_completion_tokens: maxCompletionTokens,
         }),
         redirect: "error",
         signal: AbortSignal.timeout(35_000),
       });
       if (!upstreamResponse.ok) throw new Error("Provider rejected the request.");
       const result = await readJson(upstreamResponse.body, 100_000);
-      const draft = validateDraft(input.kind, JSON.parse(result.choices[0].message.content));
-      send(200, { draft });
+      const output = JSON.parse(result.choices[0].message.content);
+      if (input.kind === "assistant") {
+        send(200, validateAssistantAnswer(output));
+      } else {
+        const draft = validateDraft(input.kind, output);
+        send(200, { draft });
+      }
     } catch {
       send(502, { error: "The configured provider did not return a valid draft." });
     } finally {

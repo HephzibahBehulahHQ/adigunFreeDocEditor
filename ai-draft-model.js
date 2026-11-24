@@ -25,3 +25,8 @@ export function validateDraft(kind, value) {
   }));
   return { title, slides };
 }
+
+export function validateAssistantAnswer(value) {
+  const answer = boundedText(value?.answer, 4_000);
+  return { answer };
+}

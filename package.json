@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --test --test-concurrency=1",
     "build:editor": "esbuild src/live-editor-runtime.js --bundle --format=iife --global-name=AdigunEditorBundle --target=es2022 --outfile=editor-runtime.js",
     "build:pdf": "node scripts/prepare_pdf_lib.mjs",
     "build:ocr": "node scripts/prepare_ocr.mjs",

@@ -10,7 +10,7 @@ const end = source.indexOf("  function buildOverview(", start);
 assert.ok(start >= 0 && end > start);
 assert.match(markup, /id="assistant-find"[^>]*>.*?Find and replace/s);
 assert.match(markup, /id="assistant-review"[^>]*>.*?Comments and changes/s);
-assert.match(markup, /No AI provider is connected\./);
+assert.match(markup, /Adigun BOT receives only messages you submit after consent\./);
 assert.match(styles, /\.adigun-body\{flex:1;min-height:0;overflow:auto\}/);
 assert.match(styles, /\.assistant-quick-tools h3\{[^}]*font-size:13px/);
 assert.match(styles, /\.assistant-tool strong\{font-size:12px/);

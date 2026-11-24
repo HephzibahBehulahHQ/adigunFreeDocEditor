@@ -58,6 +58,12 @@ Open `http://localhost:4173`. The DOCX converter is vendored locally; the app do
 
 Browser-local saving keeps editable Docs, Sheets and Slides on the device. Download PDF copies and exported office files to retain them outside the current workspace. Format support varies by operation.
 
+## Adigun BOT
+
+The floating Adigun BOT sends only chat messages a user types and explicitly consents to submit. Its request goes to the product's same-origin `/api/bot` Worker route; no relay URL or provider credential is entered or stored in the browser. The Worker rejects oversized or cross-origin requests, applies the product rate limit, and cannot access open documents, local files, account data, or saved work. It does not edit documents or issue file actions.
+
+The Worker AI and `BOT_LIMITER` bindings are declared in `wrangler.toml`. Production account plan, bindings, route deployment, and real model response are not verified here. Cloudflare documents 10,000 free Neurons/day; usage beyond that is chargeable on Workers Paid, so check the account plan and usage before deployment: [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/). No model request or deployment was made for this change.
+
 ## Configure the private AI relay
 
 Set the following environment variables before running `npm run start:ai` on your computer. The relay binds to loopback and serves `http://127.0.0.1:8787/draft` by default.
