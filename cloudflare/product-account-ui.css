@@ -16,3 +16,5 @@
 .product-account button { margin: .25rem .25rem .25rem 0; }
 .product-account [role="status"] { min-height: 1.5em; }
 .powerlab-account-launch { position: fixed; inset: auto 1rem 1rem auto; z-index: 20; padding: .65rem 1rem; background: #13283a; color: #e9f4fb; border: 1px solid #55cade; border-radius: .5rem; }
+.product-account-indicator { position: absolute; inset: .25rem .25rem auto auto; width: .5rem; height: .5rem; border-radius: 50%; background: #94a3b8; }
+.powerlab-account-launch[data-online="true"] .product-account-indicator { background: #22c55e; }
