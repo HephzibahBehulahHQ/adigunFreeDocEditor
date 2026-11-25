@@ -1,0 +1,65 @@
+name: Deploy product Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cloudflare/**"
+      - "wrangler.toml"
+      - "scripts/stage-account-preview.mjs"
+      - "scripts/assemble_pdfjs.py"
+      - "scripts/prepare_pdf_lib.mjs"
+      - "scripts/prepare_ocr.mjs"
+      - "assets/**"
+      - "*.html"
+      - "*.js"
+      - "*.css"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adigunfreedoceditor-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: cloudflare-production
+    steps:
+      - name: Checkout product source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Assemble PDF.js runtime assets
+        run: python scripts/assemble_pdfjs.py
+      - name: Build editor and document assets
+        run: |
+          npm run build:editor
+          npm run build:pdf
+          npm run build:ocr
+      - name: Stage the product Worker assets
+        run: node scripts/stage-account-preview.mjs
+      - name: Validate account and BOT routes
+        run: node --test tests/product-account-worker.test.mjs tests/product-bot.test.mjs tests/assistant-chat.test.mjs
+      - name: Deploy production Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.136.3"
+          command: deploy --env production
+      - name: Verify the deployed BOT route
+        run: |
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://adigunfreedoceditor.hephzibahbehulah.com/api/bot)"
+          test "$status" = "405"
+
