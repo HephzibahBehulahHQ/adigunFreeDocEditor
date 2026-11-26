@@ -7,7 +7,7 @@
   <title>Adigun Slides</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
-<body class="slides-page">
+<body class="suite-page slides-page">
   <header class="sheets-header">
     <h1>Adigun <span class="suite-product">Slides</span></h1>
     <nav class="suite-switcher" aria-label="Office editors">
@@ -17,6 +17,7 @@
         <a href="./pdf.html" target="_blank" rel="noopener" aria-label="PDF (opens in a new tab)">PDF</a>
       </nav>
     <span id="slides-save" role="status">Stored on this device</span>
+    <button class="suite-theme-toggle" id="suite-theme-toggle" type="button" aria-label="Switch to dark theme" aria-pressed="false" title="Switch to dark theme">◐</button>
   </header>
   <main class="slides-workspace">
     <div class="slides-actions suite-ribbon" aria-label="Presentation actions">
@@ -199,6 +200,7 @@
   <script src="./assets/vendor/fflate.min.js" defer></script>
   <script src="./presentation-package.js" defer></script>
   <script src="./slides.js" defer></script>
+  <script type="module" src="./suite-preferences.js"></script>
   <script type="module" src="./company-footer.js"></script>
 </body>
 </html>
