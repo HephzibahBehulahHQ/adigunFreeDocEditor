@@ -65,4 +65,7 @@ jobs:
           footer_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://adigunfreedoceditor.hephzibahbehulah.com/company-footer.js)"
           test "$footer_status" = "200"
           curl --fail --silent --show-error https://adigunfreedoceditor.hephzibahbehulah.com/company-footer.js | grep --quiet "hb-company-footer"
+          theme_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://adigunfreedoceditor.hephzibahbehulah.com/suite-preferences.js)"
+          test "$theme_status" = "200"
+          curl --fail --silent --show-error https://adigunfreedoceditor.hephzibahbehulah.com/suite-preferences.js | grep --quiet "suite-theme-toggle"
 

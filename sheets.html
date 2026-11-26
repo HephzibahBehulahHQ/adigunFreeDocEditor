@@ -7,7 +7,7 @@
   <title>Adigun Sheets</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
-<body class="sheets-page">
+<body class="suite-page sheets-page">
   <header class="sheets-header">
     <h1>Adigun <span class="suite-product">Sheets</span></h1>
     <nav class="suite-switcher" aria-label="Office editors">
@@ -18,6 +18,7 @@
       </nav>
     <input id="workbook-title" class="suite-file-name" aria-label="Workbook name" maxlength="100" spellcheck="false" value="Untitled workbook">
     <span id="sheet-save" role="status">Stored on this device</span>
+    <button class="suite-theme-toggle" id="suite-theme-toggle" type="button" aria-label="Switch to dark theme" aria-pressed="false" title="Switch to dark theme">◐</button>
   </header>
   <main class="sheets-workspace">
     <div class="sheets-actions suite-ribbon" aria-label="Workbook actions">
@@ -359,6 +360,7 @@
   </dialog>
   <script src="./assets/vendor/fflate.min.js" defer></script>
   <script type="module" src="./sheets.js"></script>
+  <script type="module" src="./suite-preferences.js"></script>
   <script type="module" src="./company-footer.js"></script>
 </body>
 </html>
