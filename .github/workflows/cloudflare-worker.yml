@@ -50,7 +50,7 @@ jobs:
       - name: Stage the product Worker assets
         run: node scripts/stage-account-preview.mjs
       - name: Validate account and BOT routes
-        run: node --test tests/product-account-worker.test.mjs tests/product-bot.test.mjs tests/assistant-chat.test.mjs
+        run: node --test tests/product-account-worker.test.mjs tests/product-bot.test.mjs tests/assistant-chat.test.mjs tests/product-staged-assets.test.mjs
       - name: Deploy production Worker
         uses: cloudflare/wrangler-action@v4
         with:
@@ -62,4 +62,7 @@ jobs:
         run: |
           status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://adigunfreedoceditor.hephzibahbehulah.com/api/bot)"
           test "$status" = "405"
+          footer_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://adigunfreedoceditor.hephzibahbehulah.com/company-footer.js)"
+          test "$footer_status" = "200"
+          curl --fail --silent --show-error https://adigunfreedoceditor.hephzibahbehulah.com/company-footer.js | grep --quiet "hb-company-footer"
 

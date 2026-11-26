@@ -4,7 +4,7 @@ const root = new URL("../", import.meta.url);
 const output = new URL("../.wrangler/account-assets/", import.meta.url);
 const pages = ["index.html", "sheets.html", "slides.html", "pdf.html", "ai.html"];
 const assets = [
-  ...pages, "styles.css", "app.js", "assistant-chat.js", "assistant-chat.css", "document-model.js", "editor-runtime.js",
+  ...pages, "styles.css", "app.js", "assistant-chat.js", "assistant-chat.css", "company-footer.js", "document-model.js", "editor-runtime.js",
   "sheets.js", "sheet-model.js", "sheet-xlsx.js", "sheet-chart-xlsx.js",
   "sheet-print.js", "sheet-pivot-xlsx.js", "sheet-notes-xlsx.js", "slides.js",
   "presentation-package.js", "ai-draft.js", "ai-draft-model.js", "pdf-workspace.js",
